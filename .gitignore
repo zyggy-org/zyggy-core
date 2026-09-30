@@ -3,3 +3,4 @@ memory/
 *.log
 node.json
 .claude/zyggy.lock
+evolution/

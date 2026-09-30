@@ -2,15 +2,17 @@
 
 ## Where you run
 
-- The working directory is the `zyggy-core` checkout on this machine. `AGENTS.md`, `.claude/`, `PROTOCOL.md`,
-  `README.md` and `tests/` come from that repository; its remote is read-only from here and it is changed only
-  from the owner's laptop.
+- The working directory is an instance checkout (template files from `zyggy-core`, instance files alongside);
+  its remote is read-only from here; template files change in the template, instance files in the instance,
+  both on the owner's workstation, and are pulled here with `git pull --ff-only`.
+- `.claude/rules/instance.md`, when present, adds or tightens rules for this machine and never relaxes these.
 - `memory/` is a separate, nested repository (`zyggy-memory`), ignored by the checkout. `git status` in the
   working directory never shows memory changes; use `git -C memory status` for those.
 - Always start Claude Code in the working directory itself. In a subdirectory such as `memory/`, the hooks do not
   run and the digest is missing.
 - `ZYGGY_MEMORY_ROOT`, `ZYGGY_TENANT`, `ZYGGY_USER` and `ZYGGY_TIMEZONE` come from
-  `.claude/settings.local.json`, which is machine-local and never committed. `autoMemoryDirectory` in the same
+  `.claude/settings.local.json`, installed from the instance's `instance/settings.local.json`; the live file stays
+  untracked because Claude Code writes permission approvals into it. `autoMemoryDirectory` in the same
   file points Claude Code's auto memory at `memory/<tenant>/<user>/auto`.
 - `ZYGGY_HOOKS=off` disables the three scripts (the dream pass will use it). `ZYGGY_NOW` is for tests only;
   it must never be set on this machine.
@@ -39,7 +41,8 @@ Exit codes of every script: `0` ok, `2` refused (secret pattern, `remember` only
 ## When something reports an error
 
 - Exit 3 from a hook or from `remember`: memory is not configured. Tell the owner, and point to the runbook
-  `runbooks/central-claude-config.md` in the `zyggy` repository, entry "Hooks report configuration error".
+  named in `.claude/rules/instance.md` (or the template README when there is none), entry "Hooks report
+  configuration error".
   Do not edit settings files to repair it.
 - A `[digest truncated: …]` line: the section was over its cap. Read the file directly if you need the rest, and
   mention it to the owner when it keeps happening (runbook entry "Digest truncated").

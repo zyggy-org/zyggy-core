@@ -1,14 +1,15 @@
 # zyggy-core
 
-Claude Code configuration for the Zyggy machines. Central's configuration lives at the root of this repository:
-**the root is Central's working directory**. On Central the checkout is `/srv/agent/central`, and every Claude
-Code session there (remote control or `claude -p`) is started in that directory.
+The Zyggy template: the Claude Code configuration of a Zyggy machine — identity (`AGENTS.md`), rules, memory
+hooks and skills. Nobody runs the template directly. Each owner creates an **instance** from it (see
+[Create an instance](#create-an-instance)); **the root of an instance checkout is the working directory of that
+instance's Claude Code sessions** (remote control or `claude -p` are started there).
 
 ## Layout
 
 | Path | What it is |
 |------|-----------|
-| `AGENTS.md` | Central's identity and rules (≤ 200 lines); the only instruction file |
+| `AGENTS.md` | The assistant's identity and rules (≤ 200 lines); the only instruction file |
 | `.claude/rules/memory.md`, `security.md`, `operations.md` | The detailed rules `AGENTS.md` summarises |
 | `.claude/settings.json` | Hook wiring (`SessionStart` × 3, `Stop`) and `enabledPlugins` (project scope) |
 | `.claude/hooks/session-start.sh` | Prints one memory digest section: `identity`, `index` or `daily` |
@@ -21,20 +22,105 @@ Code session there (remote control or `claude -p`) is started in that directory.
 | `tests/` | `bats-core` tests, fixtures (tenant `acme`, user `alice`) and hand-derived expected outputs |
 | `.github/workflows/ci.yml` | bats, shellcheck, `jq`, LF check on `ubuntu-latest` |
 
-Machine-local, never committed (`.gitignore`): `memory/` (the nested `zyggy-memory` clone),
-`.claude/settings.local.json` (the principal `ZYGGY_*` and `autoMemoryDirectory`), `*.log`, `node.json`,
-`.claude/zyggy.lock`.
+Machine-local, never committed (`.gitignore`): `memory/` (the nested memory repository),
+`.claude/settings.local.json` (the principal `ZYGGY_*` and `autoMemoryDirectory`, installed from the instance's
+`instance/settings.local.json`), `*.log`, `node.json`, `.claude/zyggy.lock`, `evolution/`.
 
 ## Rules for this repository
 
+- No tenant, user or machine path in **any** template file: the principal comes from env
+  (`ZYGGY_MEMORY_ROOT`, `ZYGGY_TENANT`, `ZYGGY_USER`, `ZYGGY_TIMEZONE`), machine facts live in the instance.
+  The hygiene tests in `tests/repo.bats` enforce it.
 - No `CLAUDE.md`, `.claude/CLAUDE.md` or `CLAUDE.local.md`, ever: Claude Code would load it instead of
   `AGENTS.md`. A test enforces it.
-- No `AGENTS.md` in any subdirectory: Central would load it when reading files there. Node-side material
+- No `AGENTS.md` in any subdirectory: the assistant would load it when reading files there. Node-side material
   (deliverables 12/15) goes under `node/`, with instruction templates under another file name.
-- Scripts take the principal from env (`ZYGGY_MEMORY_ROOT`, `ZYGGY_TENANT`, `ZYGGY_USER`, `ZYGGY_TIMEZONE`);
-  no tenant, user or machine path appears in a script or a test. Scripts never run git.
-- Every script starts with `#!/usr/bin/env bash` and `set -euo pipefail`, is LF-terminated and mode `100755`
-  in the index. On Windows: `git update-index --chmod=+x <script>`.
+- Scripts never run git. Every script starts with `#!/usr/bin/env bash` and `set -euo pipefail`, is
+  LF-terminated and mode `100755` in the index. On Windows: `git update-index --chmod=+x <script>`.
+
+## Instance-owned paths
+
+An instance adds files **only** under these paths; the template never ships anything there, so updating an
+instance from the template never conflicts:
+
+- `instance/**` — e.g. `instance/settings.local.json`, the committed copy of the machine's settings
+- `.claude/rules/instance.md` — machine-specific facts and rules (paths, the runbook to follow); loaded like the
+  other rules
+- `.claude/rules/instance/**`
+- `.claude/skills/instance-*/**` — instance-only skills
+
+Never edit a template-owned file in an instance: change it in the template and pull it. An instance declares no
+hooks (hook lists merge across settings files, so an instance hook would run in addition to the template's).
+An instance-only plugin goes into `instance/settings.local.json` under `enabledPlugins`; `false` there switches
+off a template plugin.
+
+## Create an instance
+
+On your workstation, with placeholders `<template URL>`, `<instance URL>`, `<memory URL>`, `<memory root>`,
+`<tenant>`, `<user>`, `<time zone>`:
+
+1. Create an empty private repository for the instance (no README, no licence).
+2. Clone the template and turn it into the instance:
+
+   ```bash
+   git clone <template URL> <instance>
+   cd <instance>
+   git remote rename origin upstream
+   git remote add origin <instance URL>
+   ```
+
+3. Add `.claude/rules/instance.md` (which machine this is, the working directory, where its runbook is) and
+   `instance/settings.local.json`:
+
+   ```json
+   {
+     "env": {
+       "ZYGGY_MEMORY_ROOT": "<memory root>",
+       "ZYGGY_TENANT": "<tenant>",
+       "ZYGGY_USER": "<user>",
+       "ZYGGY_TIMEZONE": "<time zone>"
+     },
+     "autoMemoryDirectory": "<memory root>/<tenant>/<user>/auto"
+   }
+   ```
+
+   `<memory root>` is the absolute path of `memory/` in the checkout on the machine. No secret goes in this file.
+4. Commit and publish: `git add -A && git commit -m "Create instance" && git push -u origin main`.
+5. Create the memory repository (a separate private repository, never inside the instance):
+
+   ```bash
+   git init <memory>
+   cd <memory>
+   mkdir -p <tenant>/<user>/{areas,people,topics,daily,inbox,auto}
+   for d in <tenant>/<user>/*/; do touch "$d.gitkeep"; done
+   printf '%s\n' '# Memory' 'Layout: <tenant>/<user>/…; written by the hooks, the seeding session and the dream pass.' > README.md
+   git add -A && git commit -m "Memory layout" && git remote add origin <memory URL> && git push -u origin main
+   ```
+
+On the machine, in the instance checkout (the working directory):
+
+```bash
+git clone <memory URL> memory
+install -m 600 instance/settings.local.json .claude/settings.local.json
+claude plugin install playwright@claude-plugins-official --scope project
+claude                      # accept workspace trust once, then run /seed-memory
+```
+
+The live `.claude/settings.local.json` stays untracked: Claude Code writes permission approvals into it.
+
+## Update an instance from the template
+
+On the workstation, in the instance checkout:
+
+```bash
+git pull upstream main      # merge the template; never conflicts when the instance kept to its own paths
+bats tests/                 # the template tests run in every instance
+git push origin main
+```
+
+On the machine: `git pull --ff-only`. The machine never merges, commits or holds an `upstream` remote. When
+`instance/settings.local.json` changed, re-run the `install -m 600` line above. `/clear` in a running session
+reloads the instructions and re-runs the digest.
 
 ## Script interface
 
@@ -57,6 +143,10 @@ shellcheck -S style .claude/hooks/*.sh .claude/skills/*/*.sh tests/*.bash
 jq . .claude/settings.json > /dev/null
 git ls-files --eol | grep -v 'i/lf\|i/-text'      # must print nothing
 ```
+
+`ZYGGY_HYGIENE_FORBIDDEN` — a comma-separated list of words (the owner's tenant and user names, for example)
+that must not occur in any template-owned file, matched case-insensitively. Set it as a GitHub Actions
+repository variable; CI passes it to `bats`. Unset or empty → that one test is reported as skipped.
 
 Fixtures use tenant `acme`, user `alice`. Files under `tests/expected/` are **hand-derived** from the
 contracts and never pasted from script output; see `tests/README.md`.

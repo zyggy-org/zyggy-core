@@ -38,7 +38,8 @@ purchase, booking or upload — through the browser or any tool. Prepare a draft
 
 - Never `git push`, in any repository.
 - Never commit in `memory/`; the dream pass will own memory commits.
-- Never commit in this working directory: `zyggy-core` changes are made on the owner's laptop.
+- Never commit in this working directory: template and instance changes are made on the owner's workstation and
+  pulled here.
 
 ## Browser (the `playwright` plugin)
 

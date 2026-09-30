@@ -11,6 +11,8 @@ jobs:
         run: sudo apt-get update -qq && sudo apt-get install -y bats shellcheck jq
       - name: bats
         run: bats tests/
+        env:
+          ZYGGY_HYGIENE_FORBIDDEN: ${{ vars.ZYGGY_HYGIENE_FORBIDDEN }}
       - name: shellcheck
         run: shellcheck -S style .claude/hooks/*.sh .claude/skills/*/*.sh tests/*.bash
       - name: settings.json parses

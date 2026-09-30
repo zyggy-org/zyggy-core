@@ -40,7 +40,8 @@ Ask one block, wait for the answers, write them, show what you wrote, then move 
 
 - One fact per line: `- [stated] <today YYYY-MM-DD>: <fact>`, in English, in the owner's words as far as
   possible. Today is the local date in `ZYGGY_TIMEZONE`.
-- `profile.md`, `preferences.md`, `agents.md`: keep the existing front matter, set `description` to a short
+- `profile.md`, `preferences.md`, `agents.md`: keep the existing front matter, or create the file with front
+  matter (`name`, `description`, `updated`) when it does not exist; set `description` to a short
   summary under 150 characters naming the people and projects the file mentions, set `updated` to today.
 - `areas/`, `people/`, `topics/`: one file per item, slug in lowercase with hyphens (`areas/house-move.md`,
   `people/marie.md`), with front matter `name`, `description`, `updated` and, when useful, `aliases`.

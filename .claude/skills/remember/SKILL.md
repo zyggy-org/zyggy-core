@@ -26,7 +26,8 @@ Exit codes:
   owner it was not stored and name the pattern. Never repeat the value, never retry with a rephrased or split
   version, never store it any other way.
 - `3` — configuration error. Tell the owner memory is not configured on this machine and point to the runbook
-  entry "Hooks report configuration error" (`runbooks/central-claude-config.md` in the `zyggy` repository).
+  named in `.claude/rules/instance.md` (or the template README when there is none), entry "Hooks report
+  configuration error".
 - `4` — usage error (empty fact, over 1,000 characters, unknown scope). Fix the call once; if it fails again,
   tell the owner.
 

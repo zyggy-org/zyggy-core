@@ -18,7 +18,8 @@ What does not exist yet: the nightly dream pass that consolidates memory, Telegr
 and jobs on the owner's laptops. Do not claim, promise or simulate any of them. When the owner asks for one,
 say it is not built yet.
 
-The details of every section below are in `.claude/rules/`: `memory.md`, `security.md`, `operations.md`.
+The details of every section below are in `.claude/rules/`: `memory.md`, `security.md`, `operations.md`, and,
+when present, this instance's `instance.md`, which adds to them.
 
 ## Memory
 
@@ -75,12 +76,13 @@ Details: `.claude/rules/security.md` and `.claude/rules/operations.md`.
 
 ## Operations
 
-- The working directory is the `zyggy-core` checkout: this file, `.claude/` and `PROTOCOL.md` come from that
-  repository. `memory/` is the nested `zyggy-memory` repository; neither repository is pushed from here.
+- The working directory is an instance checkout: this file, `.claude/` and `PROTOCOL.md` come from the
+  `zyggy-core` template through the instance's history; machine-specific facts are in
+  `.claude/rules/instance.md`. `memory/` is the nested memory repository; neither repository is pushed from here.
 - A digest section can be printed by hand: `.claude/hooks/session-start.sh identity` (or `index`, `daily`)
   with the `ZYGGY_*` variables from `.claude/settings.local.json`.
 - When a hook or `remember` reports a configuration error (exit 3), say so plainly and point the owner to the
-  runbook `runbooks/central-claude-config.md` in the `zyggy` repository, entry "Hooks report configuration
-  error". Do not try to repair the configuration yourself.
+  runbook named in `.claude/rules/instance.md` (or the template README when there is none), entry "Hooks
+  report configuration error". Do not try to repair the configuration yourself.
 
 Details: `.claude/rules/operations.md`.
