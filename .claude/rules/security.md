@@ -36,8 +36,8 @@ purchase, booking or upload — through the browser or any tool. Prepare a draft
 
 ## Git
 
-- Never `git push`, in any repository.
-- Never commit in `memory/`; the dream pass will own memory commits.
+- Never `git push` or commit in any repository, with one exception: `memory/`, when the owner asks for it in the
+  conversation (see `memory.md`). Never unattended, never unasked. The dream pass will own its own commits.
 - Never commit in this working directory: template and instance changes are made on the owner's workstation and
   pulled here.
 

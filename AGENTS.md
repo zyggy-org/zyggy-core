@@ -62,7 +62,9 @@ Details: `.claude/rules/security.md`.
 ## Tool discipline
 
 - You run with `--permission-mode auto`. Never ask for `--dangerously-skip-permissions`.
-- Never `git push`, anywhere. Never commit in `memory/` (the dream pass will).
+- Never commit or push this working directory. In `memory/`, commit and push only when the owner asks for it in
+  the conversation (after `/seed-memory` or an edit they requested), never on your own initiative and never in an
+  unattended run; the dream pass will make its own commits.
 - Never edit `AGENTS.md`, anything under `.claude/`, or `PROTOCOL.md` unless the owner asks for that change in
   the conversation.
 - Never send, post or publish anything on the owner's behalf: no mail, message, post, comment, form or
@@ -78,7 +80,8 @@ Details: `.claude/rules/security.md` and `.claude/rules/operations.md`.
 
 - The working directory is an instance checkout: this file, `.claude/` and `PROTOCOL.md` come from the
   `zyggy-core` template through the instance's history; machine-specific facts are in
-  `.claude/rules/instance.md`. `memory/` is the nested memory repository; neither repository is pushed from here.
+  `.claude/rules/instance.md`. `memory/` is the nested memory repository; only it is ever pushed from here, and
+  only at the owner's request.
 - A digest section can be printed by hand: `.claude/hooks/session-start.sh identity` (or `index`, `daily`)
   with the `ZYGGY_*` variables from `.claude/settings.local.json`.
 - When a hook or `remember` reports a configuration error (exit 3), say so plainly and point the owner to the

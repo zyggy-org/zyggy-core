@@ -52,5 +52,8 @@ Ask one block, wait for the answers, write them, show what you wrote, then move 
 
 ## Finish
 
-Run `git -C "$ZYGGY_MEMORY_ROOT" status` and `git -C "$ZYGGY_MEMORY_ROOT" diff --stat` and show the output.
-Tell the owner to review the files and commit and push them themselves. You never commit or push.
+Run `git -C "$ZYGGY_MEMORY_ROOT" status` and `git -C "$ZYGGY_MEMORY_ROOT" diff --stat` and show the output, and
+ask the owner whether to commit the seed. On a yes: stage only the seeded durable files (`profile.md`,
+`preferences.md`, `agents.md`, `areas/`, `people/`, `topics/` — not `daily/`, not `inbox/`),
+`git -C "$ZYGGY_MEMORY_ROOT" commit -m "seed <today>"`, `git -C "$ZYGGY_MEMORY_ROOT" push`, and show the result.
+Without a yes, nothing is committed.
