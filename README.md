@@ -11,7 +11,7 @@ instance's Claude Code sessions** (remote control or `claude -p` are started the
 |------|-----------|
 | `AGENTS.md` | The assistant's identity and rules (≤ 200 lines); the only instruction file |
 | `.claude/rules/memory.md`, `security.md`, `operations.md` | The detailed rules `AGENTS.md` summarises |
-| `.claude/settings.json` | Hook wiring (`SessionStart` × 3, `Stop`) and `enabledPlugins` (project scope) |
+| `.claude/settings.json` | Hook wiring (`SessionStart` × 3, `Stop`), `enabledPlugins` (project scope) and `env` for the browser plugin (headless, Chromium, in-memory profile); stored as `jq --indent 2` writes it, so Claude Code's own rewrites leave the tree clean |
 | `.claude/hooks/session-start.sh` | Prints one memory digest section: `identity`, `index` or `daily` |
 | `.claude/hooks/stop.sh` | Appends one `[observed]` line per turn to `daily/<date>.md` |
 | `.claude/hooks/lib.sh` | Shared shell functions: configuration check, front matter, secret check, atomic append |

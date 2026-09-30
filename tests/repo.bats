@@ -12,7 +12,9 @@ load helpers
 @test "repo: .claude/settings.json parses and holds exactly the contract wiring" {
   local s="$REPO_ROOT/.claude/settings.json"
   jq -e . "$s" > /dev/null
-  jq -e 'keys == ["enabledPlugins","hooks"]' "$s"
+  jq -e 'keys == ["enabledPlugins","env","hooks"]' "$s"
+  # the browser plugin's server is headed by default; every instance runs it headless with an in-memory profile
+  jq -e '.env == {"PLAYWRIGHT_MCP_HEADLESS":"true","PLAYWRIGHT_MCP_BROWSER":"chromium","PLAYWRIGHT_MCP_ISOLATED":"true"}' "$s"
   jq -e '.hooks | keys == ["SessionStart","Stop"]' "$s"
   jq -e '.hooks.SessionStart | length == 1' "$s"
   jq -e '.hooks.SessionStart[0].matcher == "startup|resume|clear|compact"' "$s"
@@ -38,6 +40,11 @@ scripts() { # every shell script under .claude/, relative to the repo root
   for f in "$REPO_ROOT/AGENTS.md" "$REPO_ROOT"/.claude/rules/*.md; do
     [ "$(wc -l < "$f")" -le 200 ] || { echo "$f has more than 200 lines"; return 1; }
   done
+}
+
+@test "repo: .claude/settings.json is stored in the layout Claude Code writes back (jq --indent 2), so a plugin install leaves the tree clean" {
+  local s="$REPO_ROOT/.claude/settings.json"
+  cmp "$s" <(jq --indent 2 . "$s")
 }
 
 @test "repo: .gitignore ignores only the root memory/ clone, never a test fixture" {
