@@ -40,6 +40,13 @@ scripts() { # every shell script under .claude/, relative to the repo root
   done
 }
 
+@test "repo: .gitignore ignores only the root memory/ clone, never a test fixture" {
+  cd "$REPO_ROOT"
+  git check-ignore -q memory/acme/alice/profile.md
+  run git ls-files --others --ignored --exclude-standard -- tests/
+  [ -z "$output" ] || { echo "ignored under tests/: $output"; return 1; }
+}
+
 @test "repo: no AGENTS.md exists in any subdirectory" {
   [ "$(cd "$REPO_ROOT" && find . -path ./.git -prune -o -name AGENTS.md -print)" = "./AGENTS.md" ]
 }

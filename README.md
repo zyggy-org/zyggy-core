@@ -141,7 +141,7 @@ shellcheck jq`; the CI image is `ubuntu-latest`):
 bats tests/
 shellcheck -S style .claude/hooks/*.sh .claude/skills/*/*.sh tests/*.bash
 jq . .claude/settings.json > /dev/null
-git ls-files --eol | grep -v 'i/lf\|i/-text'      # must print nothing
+git ls-files --eol | grep -v 'i/lf\|i/-text\|i/none'      # must print nothing (LF, binary or empty only)
 ```
 
 `ZYGGY_HYGIENE_FORBIDDEN` — a comma-separated list of words (the owner's tenant and user names, for example)

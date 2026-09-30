@@ -1,4 +1,4 @@
-memory/
+/memory/
 .claude/settings.local.json
 *.log
 node.json

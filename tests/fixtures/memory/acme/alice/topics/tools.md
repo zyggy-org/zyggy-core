@@ -1,0 +1,1 @@
+- [stated] 2026-09-19: Uses vim and tmux every day.
