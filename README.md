@@ -126,7 +126,7 @@ reloads the instructions and re-runs the digest.
 
 | Script | Exit codes | Output |
 |--------|-----------|--------|
-| `session-start.sh identity\|index\|daily` | 0 ok, 3 configuration error, 4 unknown section | One section on stdout, capped (6,000 / 4,000 / 8,000 bytes; `ZYGGY_DIGEST_BYTES_*` override, clamped to 9,500) |
+| `session-start.sh identity\|index\|daily` | 0 ok, 3 configuration error, 4 unknown section | One section on stdout, capped (6,000 / 6,000 / 8,000 bytes; `ZYGGY_DIGEST_BYTES_*` override, clamped to 9,500) |
 | `stop.sh` | 0 always, 3 configuration error | Nothing on stdout; one stderr line on a refusal or the daily cap |
 | `remember.sh [--scope …] [--tag …] [--source …] -- "<fact>"` | 0 kept, 2 refused (secret), 3 configuration, 4 usage | `remembered: <path>` and the line |
 

@@ -48,7 +48,7 @@ section, wrapped in `<zyggy-memory-digest section="…" tenant="…" user="…" 
 
 - `identity` — `profile.md` and `preferences.md` (bodies, without front matter); at most 6,000 bytes.
 - `index` — `agents.md`, then one line `- <path> — <description>` per file under `areas/`, `people/`,
-  `topics/`; at most 4,000 bytes.
+  `topics/`; at most 6,000 bytes.
 - `daily` — the seven most recent `daily/YYYY-MM-DD.md` files, oldest first; at most 8,000 bytes.
 
 A section that would be larger is cut at a line boundary and ends with a line

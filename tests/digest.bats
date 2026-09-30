@@ -313,13 +313,13 @@ nth_last() { # nth_last <n> <file>
   done
 }
 
-@test "caps: index with 300 files -> output <= 4000, marker names N index lines" {
+@test "caps: index with 300 files -> output <= 6000, marker names N index lines" {
   setup_oversize_memory
   run_capped index
   local out="$BATS_TEST_TMPDIR/index.out"
-  [ "$(bytes "$out")" -le 4000 ]
+  [ "$(bytes "$out")" -le 6000 ]
   [ "$(nth_last 1 "$out")" = '</zyggy-memory-digest>' ]
-  [[ "$(nth_last 2 "$out")" =~ ^\[digest\ truncated:\ ([0-9]+)\ index\ lines\ —\ [0-9]+\ bytes\ over\ cap\ 4000\]$ ]]
+  [[ "$(nth_last 2 "$out")" =~ ^\[digest\ truncated:\ ([0-9]+)\ index\ lines\ —\ [0-9]+\ bytes\ over\ cap\ 6000\]$ ]]
   local dropped="${BASH_REMATCH[1]}" kept
   kept="$(grep -c '^- areas/gen-' "$out")"
   [ "$kept" -gt 0 ]

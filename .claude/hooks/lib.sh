@@ -58,13 +58,13 @@ zy_now_utc() { zy_date UTC +%Y-%m-%dT%H:%M:%SZ; }
 zy_local_date() { zy_date "$ZYGGY_TIMEZONE" +%F; }
 zy_local_hhmm() { zy_date "$ZYGGY_TIMEZONE" +%H:%M; }
 
-# Byte cap of a digest section: default 6000/4000/8000, ZYGGY_DIGEST_BYTES_<SECTION> overrides, clamped
+# Byte cap of a digest section: default 6000/6000/8000, ZYGGY_DIGEST_BYTES_<SECTION> overrides, clamped
 # to 9500 so a section never reaches Claude Code's 10,000-character hook-output limit.
 zy_cap_bytes() { # zy_cap_bytes <identity|index|daily>
   local default var value
   case "$1" in
     identity) default=6000 ;;
-    index) default=4000 ;;
+    index) default=6000 ;;
     *) default=8000 ;;
   esac
   var="ZYGGY_DIGEST_BYTES_${1^^}"
