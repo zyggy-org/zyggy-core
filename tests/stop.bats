@@ -186,8 +186,12 @@ snapshot() {
   local before f
   before="$(snapshot)"
   mkdir -p "$BATS_TEST_TMPDIR/nojq"
+  # every executable except jq; only regular files (e.g. /usr/bin/X11 is a directory link on some runners),
+  # and -n so a link already made from /usr/bin is replaced, never followed, when /bin is the same directory
   for f in /usr/bin/* /bin/*; do
-    [ "$(basename "$f")" = jq ] || ln -sf "$f" "$BATS_TEST_TMPDIR/nojq/$(basename "$f")"
+    if [ -f "$f" ] && [ -x "$f" ] && [ "$(basename "$f")" != jq ]; then
+      ln -sfn "$f" "$BATS_TEST_TMPDIR/nojq/$(basename "$f")"
+    fi
   done
   PATH="$BATS_TEST_TMPDIR/nojq" run --separate-stderr "$HOOKS/stop.sh" < "$FIXTURES/stop-input.json"
   [ "$status" -eq 3 ]
