@@ -1,0 +1,23 @@
+name: ci
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install test tools
+        run: sudo apt-get update -qq && sudo apt-get install -y bats shellcheck jq
+      - name: bats
+        run: bats tests/
+      - name: shellcheck
+        run: shellcheck -S style .claude/hooks/*.sh .claude/skills/*/*.sh tests/*.bash
+      - name: settings.json parses
+        run: jq . .claude/settings.json > /dev/null
+      - name: LF endings only
+        run: |
+          if git ls-files --eol | grep -v 'i/lf\|i/-text'; then
+            echo "files above are not LF" >&2
+            exit 1
+          fi

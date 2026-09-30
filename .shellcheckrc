@@ -1,0 +1,3 @@
+# Resolve `source` directives relative to the script, so `shellcheck -S style <files>` follows lib.sh.
+source-path=SCRIPTDIR
+external-sources=true

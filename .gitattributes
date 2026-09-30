@@ -1,0 +1,6 @@
+* text=auto eol=lf
+*.sh text eol=lf
+*.bats text eol=lf
+*.bash text eol=lf
+tests/expected/** -text
+tests/fixtures/** -text
