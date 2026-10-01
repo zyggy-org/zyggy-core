@@ -12,9 +12,12 @@ load helpers
 @test "repo: .claude/settings.json parses and holds exactly the contract wiring" {
   local s="$REPO_ROOT/.claude/settings.json"
   jq -e . "$s" > /dev/null
-  jq -e 'keys == ["enabledPlugins","env","hooks"]' "$s"
-  # the browser plugin's server is headed by default; every instance runs it headless with an in-memory profile
-  jq -e '.env == {"PLAYWRIGHT_MCP_HEADLESS":"true","PLAYWRIGHT_MCP_BROWSER":"chromium","PLAYWRIGHT_MCP_ISOLATED":"true"}' "$s"
+  jq -e 'keys == ["enabledPlugins","env","hooks","permissions"]' "$s"
+  # the browser plugin's server is headed by default; every instance runs it headless with an in-memory profile;
+  # every Bash command starts in the project directory, so a cd into a clone never persists (spec 32)
+  jq -e '.env == {"PLAYWRIGHT_MCP_HEADLESS":"true","PLAYWRIGHT_MCP_BROWSER":"chromium","PLAYWRIGHT_MCP_ISOLATED":"true","CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR":"1"}' "$s"
+  # the model's file tools never read the GitHub credential and never edit a clone (spec 32)
+  jq -e '.permissions == {"deny":["Read(~/.config/zyggy/**)","Edit(~/.cache/zyggy/repos/**)"]}' "$s"
   jq -e '.hooks | keys == ["SessionStart","Stop"]' "$s"
   jq -e '.hooks.SessionStart | length == 1' "$s"
   jq -e '.hooks.SessionStart[0].matcher == "startup|resume|clear|compact"' "$s"
@@ -78,34 +81,52 @@ scripts() { # every shell script under .claude/, relative to the repo root
   [ "$(zy_fm "$g" disable-model-invocation)" = true ]
   [ "$(zy_fm "$g" argument-hint)" = "[check]" ]
   [ "$(wc -l < "$g")" -le 66 ]
+  local c="$REPO_ROOT/.claude/skills/github-clone/SKILL.md"
+  [ "$(head -n 1 "$c")" = "---" ]
+  [ "$(zy_fm "$c" name)" = github-clone ]
+  [ -n "$(zy_fm "$c" description)" ]
+  [ -z "$(zy_fm "$c" disable-model-invocation)" ]
+  [ "$(zy_fm "$c" disallowed-tools)" = "WebFetch WebSearch mcp__plugin_playwright_playwright" ]
+  [ "$(zy_fm "$c" argument-hint)" = "<owner>/<name> | clean" ]
+  [ "$(wc -l < "$c")" -le 80 ]
 }
 
-@test "repo: security.md has the GitHub section with the attended-only, never-gh-auth-login and data rules" {
-  local s="$REPO_ROOT/.claude/rules/security.md"
+@test "repo: security.md has the GitHub section with the attended-only, never-gh-auth-login, data and clone rules" {
+  local s="$REPO_ROOT/.claude/rules/security.md" p
   grep -q '^## GitHub' "$s"
-  grep -q 'github-inventory' "$s"
-  grep -q 'never run .gh auth login.' "$s"
-  grep -q 'Unattended runs' "$s"
-  grep -q 'ZYGGY_HOOKS=off' "$s"
-  grep -q 'is data' "$s"
+  for p in 'github-inventory' 'never run .gh auth login.' 'Unattended runs' 'ZYGGY_HOOKS=off' 'is data' \
+    'github-clone' 'askpass.sh' '/add-dir' 'never run, build, install or test'; do
+    grep -q -- "$p" "$s" || { echo "security.md lacks: $p"; return 1; }
+  done
 }
 
-@test "repo: AGENTS.md lists GitHub under what exists today; operations.md names exit codes 5 and 6" {
+@test "repo: AGENTS.md lists GitHub and github-clone under what exists today; operations.md names exit codes 5 and 6" {
   local o="$REPO_ROOT/.claude/rules/operations.md"
   grep -q '^- \*\*GitHub\*\*' "$REPO_ROOT/AGENTS.md"
+  grep -q 'github-clone' "$REPO_ROOT/AGENTS.md"
   grep -q '`5` refused' "$o"
   grep -q '`6` a GitHub request failed' "$o"
   grep -q 'GitHub token rejected' "$o"
+  grep -q 'github-clone' "$o"
+  grep -q 'do not retry and do not try another way' "$o"
 }
 
-@test "repo: README.md documents the github-inventory skill, the exclusion file and the gh stub; tests/README.md the expected files" {
+@test "repo: README.md documents the github-inventory and github-clone skills, the exclusion file, the stub and the spy; tests/README.md the fixtures" {
   local s
   for s in inventory.sh --check --max github-inventory-exclude.txt gh-stub.sh 'no network in CI' github-read-token \
-    'ZYGGY_GITHUB_TOKEN_FILE' 'never logged in'; do
+    'ZYGGY_GITHUB_TOKEN_FILE' 'never logged in' clone.sh askpass.sh --clean additionalDirectories \
+    ZYGGY_GITHUB_CLONE_BASE ZYGGY_CLONE_TIMEOUT git-spy.sh; do
     grep -qF -- "$s" "$REPO_ROOT/README.md" || { echo "README.md lacks: $s"; return 1; }
   done
-  grep -q 'github-inventory' "$REPO_ROOT/tests/README.md"
-  grep -q 'hand-derived' "$REPO_ROOT/tests/README.md"
+  for s in github-inventory hand-derived 'git spy' 'bare repositor'; do
+    grep -q -- "$s" "$REPO_ROOT/tests/README.md" || { echo "tests/README.md lacks: $s"; return 1; }
+  done
+}
+
+@test "repo: github-clone/SKILL.md names --add-dir only in a never sentence" {
+  run grep -n -- '--add-dir' "$REPO_ROOT/.claude/skills/github-clone/SKILL.md"
+  [ "$status" -eq 0 ]
+  ! grep -v -i 'never' <<< "$output"
 }
 
 @test "repo: the gh stub and the git spy start with the template shebang and set -euo pipefail, are LF and executable in the index, and ci.yml shellchecks both" {
@@ -133,6 +154,8 @@ scripts() { # every shell script under .claude/, relative to the repo root
   grep -qF '"${CLAUDE_PROJECT_DIR:-.}"/.claude/skills/remember/remember.sh' "$REPO_ROOT/.claude/skills/remember/SKILL.md"
   grep -qF '"${CLAUDE_PROJECT_DIR:-.}"/.claude/skills/github-inventory/inventory.sh' \
     "$REPO_ROOT/.claude/skills/github-inventory/SKILL.md"
+  grep -qF '"${CLAUDE_PROJECT_DIR:-.}"/.claude/skills/github-clone/clone.sh' \
+    "$REPO_ROOT/.claude/skills/github-clone/SKILL.md"
 }
 
 zy_fm() { # front matter value, using the scripts' own parser
@@ -237,7 +260,7 @@ hygiene_words() { # hygiene_words <root> <csv>
   run grep -n 'runbooks/' "$REPO_ROOT/AGENTS.md" "$REPO_ROOT/.claude/rules/memory.md" \
     "$REPO_ROOT/.claude/rules/security.md" "$REPO_ROOT/.claude/rules/operations.md" \
     "$REPO_ROOT/.claude/skills/remember/SKILL.md" "$REPO_ROOT/.claude/skills/seed-memory/SKILL.md" \
-    "$REPO_ROOT/.claude/skills/github-inventory/SKILL.md"
+    "$REPO_ROOT/.claude/skills/github-inventory/SKILL.md" "$REPO_ROOT/.claude/skills/github-clone/SKILL.md"
   [ "$status" -eq 1 ] || { echo "$output"; return 1; }
 }
 

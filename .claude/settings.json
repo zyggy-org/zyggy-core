@@ -49,6 +49,13 @@
   "env": {
     "PLAYWRIGHT_MCP_HEADLESS": "true",
     "PLAYWRIGHT_MCP_BROWSER": "chromium",
-    "PLAYWRIGHT_MCP_ISOLATED": "true"
+    "PLAYWRIGHT_MCP_ISOLATED": "true",
+    "CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR": "1"
+  },
+  "permissions": {
+    "deny": [
+      "Read(~/.config/zyggy/**)",
+      "Edit(~/.cache/zyggy/repos/**)"
+    ]
   }
 }

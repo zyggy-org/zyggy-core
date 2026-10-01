@@ -18,4 +18,10 @@ re-derivation against the contract noted.
 `PATH` by `install_gh_stub`) that serves the fixture API pages, refuses every non-GET verb and unknown endpoint,
 and logs each call — no network in CI. `gh` itself must not be installed where the tests run.
 
+The `github-clone` tests (`clone.bats`) add a git spy (`fixtures/github/git-spy.sh`, installed as `git` by
+`install_git_spy`). `clone.sh` runs git under `env -i`, so the spy finds its log and mode from its own path; it
+records argv, cwd and the environment git was started with, asks the askpass helper both prompts and logs only
+whether the password matched — never the token. The real-git tests clone bare repositories built offline by
+`make_bare_repo` (`helpers.bash`) over `file://`, with a poisoned environment and `HOME` to prove the isolation.
+
 `.gitattributes` marks `expected/` and `fixtures/` as `-text`: their bytes are frozen and never normalised.
