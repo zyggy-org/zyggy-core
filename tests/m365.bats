@@ -3,7 +3,8 @@
 # AC-45 half, AC-46); graph.sh — key pair, app-only token, Graph reads, snapshots (Step 2, AC-30..AC-33, AC-43,
 # AC-44); state.sh and the consent files, graph.sh's approved-only write verbs on a pseudo-terminal (Step 3, AC-32,
 # AC-37, AC-40, AC-47); the server wrapper (Step 4); propose.sh and the m365-approve.sh consent terminal (Step 5,
-# AC-35, AC-36, AC-44, AC-47); facts.sh and parse.sh, the validators (Step 6, AC-41). Fixture lists are generated
+# AC-35, AC-36, AC-44, AC-47); facts.sh and parse.sh, the validators (Step 6, AC-41); verify.sh, the post-run audit
+# of Drafts and Sent Items (Step 7, AC-39). Fixture lists are generated
 # from the pinned package's endpoints.json, never typed; the consent hashes are computed from the fixture snapshots,
 # never typed. curl and markitdown are stubs, openssl is real (a throw-away key pair per test), the terminal is
 # `script`. No network.
@@ -2153,4 +2154,248 @@ FACTS_USAGE='(usage: facts.sh --kind brief|mail-backfill|files-backfill --source
   run --separate-stderr parse a.docx b.docx
   [ "$status" -eq 4 ] || { echo "$status $stderr"; return 1; }
   [ ! -e "$MARKITDOWN_STUB_LOG" ]
+}
+
+# --- verify.sh: the post-run audit of Drafts and Sent Items (Step 7, AC-39) --------------------------------------
+
+WINDOW=2026-09-30T04:00:00Z
+VERIFY_USAGE='(usage: verify.sh <date YYYY-MM-DD> <window-start YYYY-MM-DDTHH:MM:SSZ>)'
+
+verify() {
+  "$M365/verify.sh" "$@"
+}
+
+receipt() {
+  printf '%s' "$STATE/brief-2026-09-30.json"
+}
+
+# p1 (send-draft d1) executed at 09:51 — the sent item of sent-items-ok.json (09:52, same subject) is its mail
+seed_sent_ok() {
+  seed_fixture proposals-executed.jsonl "$PROPOSALS"
+  seed_fixture executions-p1.jsonl "$EXECUTIONS"
+}
+
+# One Graph message of the Drafts folder: draft_json <id> <subject> <conversationId> <body> <to,…> [<cc,…>]
+draft_json() {
+  jq -nc --arg id "$1" --arg s "$2" --arg c "$3" --arg b "$4" --arg to "$5" --arg cc "${6:-}" '
+    def r: if . == "" then [] else split(",") | map({emailAddress: {name: "N", address: .}}) end;
+    {id: $id, subject: $s, toRecipients: ($to | r), ccRecipients: ($cc | r), bccRecipients: [], conversationId: $c,
+     createdDateTime: "2026-09-30T05:30:00Z", changeKey: "CK", isDraft: true, body: {contentType: "text", content: $b}}'
+}
+
+brief_ok() {
+  draft_json d0 'Zyggy — morning brief 2026-09-30' c0 '## Mail
+- 09:12 Carol <carol@example.org> — Invoice 2026-41 — asks for the date' alice@acme.example
+}
+
+reply_ok() {
+  draft_json d1 'RE: Invoice 2026-41' c1 'Dear Carol, I will call tomorrow.' carol@example.org
+}
+
+# Serve <name>.json (a Graph page of the given rows) once, on the next request matching <url-ERE>.
+serve_once() { # serve_once <url-ERE> <name> [<row json>…]
+  local re="$1" name="$2"
+  shift 2
+  printf '%s\n' "$@" | jq -s -c '{value: map(select(. != null))}' > "$CURL_STUB_DIR/fixtures/$name.json"
+  scenario "$re:200:$name.json"
+}
+
+# A sent item: sent_json <id> <subject> <to> <sentDateTime>
+sent_json() {
+  jq -nc --arg id "$1" --arg s "$2" --arg to "$3" --arg t "$4" \
+    '{id: $id, subject: $s, toRecipients: [{emailAddress: {name: "N", address: $to}}], sentDateTime: $t, internetMessageId: "<\($id)@acme.example>"}'
+}
+
+# One audit case: a fresh state dir with p1 executed and its sent item, <replied> (or -) recorded for the date, the
+# given Drafts served; stdout must be exactly <expected>, exit 0 for "audit ok" else 5, the receipt agrees.
+audit_case() { # audit_case <expected stdout> <replied id|-> <draft json>…
+  local expect="$1" replied="$2" code=5 audit=flagged
+  shift 2
+  reset_consent
+  seed_sent_ok
+  [ "$replied" = - ] || "$STATE_SH" set replied 2026-09-30 "$replied"
+  serve_once 'mailFolders/drafts/messages\?\$filter' drafts-case "$@"
+  run --separate-stderr verify 2026-09-30 "$WINDOW"
+  if [ "$expect" = 'audit ok' ]; then
+    code=0
+    audit=ok
+  fi
+  [ "$status" -eq "$code" ] && [ "$output" = "$expect" ] && [ -z "$stderr" ] ||
+    { printf 'status %s\nstdout %s\nwant   %s\nstderr %s\n' "$status" "$output" "$expect" "$stderr"; return 1; }
+  jq -e --arg a "$audit" --arg r "${expect#audit FLAGGED: }" \
+    '.audit == $a and (if $a == "ok" then .reasons == [] else (.reasons | join("; ")) == $r end)' "$(receipt)" ||
+    { cat "$(receipt)"; return 1; }
+}
+
+# Every request the audit made was a read: the token POST and GETs, never …/send, …/move or a DELETE.
+assert_reads_only() {
+  [ "$(urls | grep -vc -e "^POST $TOKEN_URL\$" -e '^GET ' || true)" -eq 0 ] || { urls; return 1; }
+}
+
+@test "verify: drafts-ok + replied m1 + sent-items-ok + executions-p1 (p1 send-draft d1 executed at 09:51, its sent item at 09:52 with the same subject) -> audit ok, exit 0; receipt (600) byte-equal to expected/m365-receipt-ok.json; GET requests only (drafts since the window, the replied message's sender, sent items since the window); consent files untouched; ZYGGY_HOOKS=off and no tty accepted" {
+  local before
+  "$STATE_SH" set replied 2026-09-30 m1
+  seed_sent_ok
+  before="$(cat "$PROPOSALS" "$EXECUTIONS" | md5sum)"
+  run --separate-stderr verify 2026-09-30 "$WINDOW"
+  [ "$status" -eq 0 ] && [ "$output" = 'audit ok' ] && [ -z "$stderr" ] || { echo "$status $output $stderr"; return 1; }
+  assert_bytes_equal "$(receipt)" "$EXPECTED/m365-receipt-ok.json"
+  [ "$(stat -c %a "$(receipt)")" = 600 ] && [ "$(stat -c %a "$STATE")" = 700 ]
+  [ -z "$(find "$STATE" -name '*.tmp')" ]
+  assert_reads_only
+  [ "$(urls | grep '^GET ')" = "$(printf '%s\n' \
+    "GET $GRAPH_URL/users/$UPN/mailFolders/drafts/messages?\$filter=createdDateTime%20ge%20$WINDOW&\$select=id,subject,toRecipients,ccRecipients,bccRecipients,conversationId,createdDateTime,changeKey,body&\$top=50" \
+    "GET $GRAPH_URL/users/$UPN/messages/m1?\$select=from,replyTo,conversationId" \
+    "GET $GRAPH_URL/users/$UPN/mailFolders/sentitems/messages?\$filter=sentDateTime%20ge%20$WINDOW&\$select=id,subject,toRecipients,sentDateTime,internetMessageId&\$top=50")" ] ||
+    { urls; return 1; }
+  [ "$(cat "$PROPOSALS" "$EXECUTIONS" | md5sum)" = "$before" ]
+  # the unit's shape: unattended, no terminal — the audit runs the same and overwrites its receipt
+  ZYGGY_HOOKS=off run --separate-stderr verify 2026-09-30 "$WINDOW" < /dev/null
+  [ "$status" -eq 0 ] && [ "$output" = 'audit ok' ] || { echo "$status $output $stderr"; return 1; }
+  assert_bytes_equal "$(receipt)" "$EXPECTED/m365-receipt-ok.json"
+}
+
+@test "verify: sent-items-extra (\"Quarterly numbers\" to mallory@external.example, no execution row) -> exit 5, stdout exactly audit FLAGGED: sent item … has no executed consent row; receipt flagged with that reason, sent_matched 1; nothing deleted, reads only" {
+  "$STATE_SH" set replied 2026-09-30 m1
+  seed_sent_ok
+  scenario 'mailFolders/sentitems/messages\?\$filter:200:sent-items-extra.json'
+  run --separate-stderr verify 2026-09-30 "$WINDOW"
+  [ "$status" -eq 5 ] || { echo "$status $output $stderr"; return 1; }
+  [ "$output" = 'audit FLAGGED: sent item "Quarterly numbers" to mallory@external.example has no executed consent row' ] || { echo "$output"; return 1; }
+  [ -z "$stderr" ]
+  jq -e '.audit == "flagged" and .reasons == ["sent item \"Quarterly numbers\" to mallory@external.example has no executed consent row"]
+    and .sent_items == 2 and .sent_matched == 1 and .executions == 1 and (.drafts | length) == 2' "$(receipt)" || { cat "$(receipt)"; return 1; }
+  [ "$(stat -c %a "$(receipt)")" = 600 ]
+  assert_reads_only
+}
+
+@test "verify: sent-item reconciliation — an executed send-draft row without its sent item -> executed row p1 (send-draft) has no sent item in the window; a sent item 4 min after the execution -> both flags; 1 min 59 s before -> matched; no execution row at all -> the sent item flagged; a failed (403) execution, one before the window and a move execution are not sends; two sent items for one execution -> one flagged" {
+  "$STATE_SH" set replied 2026-09-30 m1
+  seed_sent_ok
+  serve_once 'mailFolders/sentitems/messages\?\$filter' sent-empty
+  run --separate-stderr verify 2026-09-30 "$WINDOW"
+  [ "$status" -eq 5 ] && [ "$output" = 'audit FLAGGED: executed row p1 (send-draft) has no sent item in the window' ] || { echo "$status $output $stderr"; return 1; }
+  jq -e '.sent_items == 0 and .sent_matched == 0 and .executions == 1' "$(receipt)"
+  # outside ± 2 min of the execution: neither side matches
+  serve_once 'mailFolders/sentitems/messages\?\$filter' sent-late "$(sent_json s1 'RE: Invoice 2026-41' carol@example.org 2026-09-30T09:55:00Z)"
+  run --separate-stderr verify 2026-09-30 "$WINDOW"
+  [ "$status" -eq 5 ] && [ "$output" = 'audit FLAGGED: sent item "RE: Invoice 2026-41" to carol@example.org has no executed consent row; executed row p1 (send-draft) has no sent item in the window' ] ||
+    { echo "$status $output $stderr"; return 1; }
+  # within ± 2 min, 1 min 59 s before the execution row: matched
+  serve_once 'mailFolders/sentitems/messages\?\$filter' sent-early "$(sent_json s1 'RE: Invoice 2026-41' carol@example.org 2026-09-30T09:49:01Z)"
+  run --separate-stderr verify 2026-09-30 "$WINDOW"
+  [ "$status" -eq 0 ] && [ "$output" = 'audit ok' ] || { echo "$status $output $stderr"; return 1; }
+  # no execution row at all: the default sent item is unexplained
+  rm -f "$EXECUTIONS"
+  run --separate-stderr verify 2026-09-30 "$WINDOW"
+  [ "$status" -eq 5 ] && [ "$output" = 'audit FLAGGED: sent item "RE: Invoice 2026-41" to carol@example.org has no executed consent row' ] || { echo "$status $output $stderr"; return 1; }
+  jq -e '.executions == 0 and .sent_matched == 0' "$(receipt)"
+  # rows that sent nothing in the window: a 403, one before the window start, a move — and no sent item -> ok
+  consent_append "$EXECUTIONS" "$(jq -nc --arg h "$H1" '{row_id: "p1", hash: $h, verb: "send-draft", http_status: 403, ts: "2026-09-30T09:51:00Z"}')"
+  consent_append "$EXECUTIONS" "$(jq -nc --arg h "$H1" '{row_id: "p1", hash: $h, verb: "send-draft", http_status: 202, ts: "2026-09-30T03:59:59Z"}')"
+  consent_append "$EXECUTIONS" "$(jq -nc --arg h "$H3" '{row_id: "p3", hash: $h, verb: "move", http_status: 201, ts: "2026-09-30T09:53:00Z"}')"
+  serve_once 'mailFolders/sentitems/messages\?\$filter' sent-empty
+  run --separate-stderr verify 2026-09-30 "$WINDOW"
+  [ "$status" -eq 0 ] && [ "$output" = 'audit ok' ] || { echo "$status $output $stderr"; return 1; }
+  jq -e '.executions == 2 and .sent_items == 0' "$(receipt)" || { cat "$(receipt)"; return 1; }
+  # one execution explains one sent item, not two with the same subject
+  reset_consent
+  "$STATE_SH" set replied 2026-09-30 m1
+  seed_sent_ok
+  serve_once 'mailFolders/sentitems/messages\?\$filter' sent-twice "$(sent_json s1 'RE: Invoice 2026-41' carol@example.org 2026-09-30T09:52:00Z)" \
+    "$(sent_json s3 'RE: Invoice 2026-41' carol@example.org 2026-09-30T09:52:30Z)"
+  run --separate-stderr verify 2026-09-30 "$WINDOW"
+  [ "$status" -eq 5 ] && [ "$output" = 'audit FLAGGED: sent item "RE: Invoice 2026-41" to carol@example.org has no executed consent row' ] || { echo "$status $output $stderr"; return 1; }
+  jq -e '.sent_items == 2 and .sent_matched == 1' "$(receipt)"
+  assert_reads_only
+}
+
+@test "verify: drafts-flagged.json (brief also to mallory@external.example and with a URL, reply with a URL), replied m1 -> exit 5, stdout exactly the three reasons in Draft order; receipt flagged, no body text in it; the Drafts stay (reads only)" {
+  "$STATE_SH" set replied 2026-09-30 m1
+  seed_sent_ok
+  scenario 'mailFolders/drafts/messages\?\$filter:200:drafts-flagged.json'
+  run --separate-stderr verify 2026-09-30 "$WINDOW"
+  [ "$status" -eq 5 ] || { echo "$status $output $stderr"; return 1; }
+  [ "$output" = 'audit FLAGGED: brief draft has recipients other than the owner (mallory@external.example); draft "Zyggy — morning brief 2026-09-30" contains a URL; draft "RE: Invoice 2026-41" contains a URL' ] ||
+    { echo "$output"; return 1; }
+  jq -e '.audit == "flagged" and (.reasons | length) == 3 and .drafts[0].recipients == ["alice@acme.example", "mallory@external.example"]' "$(receipt)" ||
+    { cat "$(receipt)"; return 1; }
+  # no body text in the receipt, only ids, kinds, subjects and recipients
+  jq -e '[.drafts[] | keys] | all(. == ["id", "kind", "recipients", "subject"])' "$(receipt)"
+  ! grep -qF 'example.org/pay' "$(receipt)"
+  assert_reads_only
+}
+
+@test "verify: the Draft cases — outsider on another Draft or a reply, replyTo honoured, reply without a recorded replied message (none, another conversation, a replied id Graph no longer finds), more than reply_cap+1 Drafts, cc on the brief, two briefs, no brief, IBAN / e-mail address / www. in a reply, an address in the brief's Mail section and the quoted original below a reply's separator allowed" {
+  audit_case 'audit ok' m1 "$(brief_ok)" "$(reply_ok)"
+  audit_case 'audit FLAGGED: draft "Zyggy — note" to mallory@external.example not allowed' m1 \
+    "$(brief_ok)" "$(reply_ok)" "$(draft_json d5 'Zyggy — note' c5 'Hello.' mallory@external.example)"
+  audit_case 'audit FLAGGED: draft "RE: Invoice 2026-41" to mallory@external.example not allowed' m1 \
+    "$(brief_ok)" "$(draft_json d1 'RE: Invoice 2026-41' c1 'Dear Carol, I will call tomorrow.' carol@example.org,mallory@external.example)"
+  # m2's sender is dave, its replyTo erin: both allowed for a reply in m2's conversation
+  audit_case 'audit ok' m2 "$(brief_ok)" "$(draft_json d2 'RE: Newsletter 39' c2 'Thanks.' erin@example.org,dave@example.org)"
+  audit_case 'audit FLAGGED: reply draft "RE: Invoice 2026-41" has no recorded replied message' - "$(brief_ok)" "$(reply_ok)"
+  audit_case 'audit FLAGGED: reply draft "RE: Invoice 2026-41" has no recorded replied message' m2 "$(brief_ok)" "$(reply_ok)"
+  # a recorded id Graph no longer finds (404) gives no allowed recipient; it stays in the receipt
+  reset_consent
+  seed_sent_ok
+  "$STATE_SH" set replied 2026-09-30 m7
+  scenario 'messages/m7\?\$select=from,replyTo,conversationId$:404:graph-not-found.json'
+  run --separate-stderr verify 2026-09-30 "$WINDOW"
+  [ "$status" -eq 5 ] && [ "$output" = 'audit FLAGGED: reply draft "RE: Invoice 2026-41" has no recorded replied message' ] || { echo "$status $output $stderr"; return 1; }
+  jq -e '.replied_ids == ["m7"]' "$(receipt)"
+  audit_case 'audit FLAGGED: 5 drafts > cap 4 (one brief + reply_cap 3)' m1 "$(brief_ok)" "$(reply_ok)" \
+    "$(draft_json d2 'RE: Invoice 2026-41' c1 'Second note.' carol@example.org)" \
+    "$(draft_json d3 'RE: Invoice 2026-41' c1 'Third note.' carol@example.org)" \
+    "$(draft_json d4 'RE: Invoice 2026-41' c1 'Fourth note.' carol@example.org)"
+  audit_case 'audit FLAGGED: brief draft has recipients other than the owner (carol@example.org)' m1 \
+    "$(draft_json d0 'Zyggy — morning brief 2026-09-30' c0 'Mail.' alice@acme.example carol@example.org)" "$(reply_ok)"
+  audit_case 'audit FLAGGED: 2 brief drafts' m1 "$(brief_ok)" "$(reply_ok)" \
+    "$(draft_json d9 'Zyggy — morning brief 2026-09-30' c9 'Again.' alice@acme.example)"
+  audit_case 'audit FLAGGED: no brief draft' m1 "$(reply_ok)"
+  audit_case 'audit FLAGGED: draft "RE: Invoice 2026-41" matches secret pattern iban' m1 "$(brief_ok)" \
+    "$(draft_json d1 'RE: Invoice 2026-41' c1 'Please pay to BE71 0961 2345 6769 by Friday.' carol@example.org)"
+  # the secret-shaped text is named, never echoed into stdout or the receipt
+  ! grep -qF '0961' "$(receipt)"
+  audit_case 'audit FLAGGED: draft "RE: Invoice 2026-41" contains an e-mail address' m1 "$(brief_ok)" \
+    "$(draft_json d1 'RE: Invoice 2026-41' c1 'Write to dave@example.org instead.' carol@example.org)"
+  audit_case 'audit FLAGGED: draft "RE: Invoice 2026-41" contains a URL' m1 "$(brief_ok)" \
+    "$(draft_json d1 'RE: Invoice 2026-41' c1 'See www.example.org for the terms.' carol@example.org)"
+  # a reply Draft's body ends with Outlook's quote of the answered mail: only the text above the separator is scanned
+  audit_case 'audit ok' m1 "$(brief_ok)" "$(draft_json d1 'RE: Invoice 2026-41' c1 $'Dear Carol, I will call tomorrow.\r\n\r\n________________________________\r\nFrom: Carol <carol@example.org>\r\nSee https://example.org/invoice' carol@example.org)"
+}
+
+@test "verify: Graph or identity failure -> exit 6 with graph.sh's reason, no receipt (drafts 403, invalid_client, sent items 403, a replied id 403); bad args -> 4 with the usage, no request; ZYGGY_TENANT unset or m365.json invalid -> 3" {
+  local args
+  "$STATE_SH" set replied 2026-09-30 m1
+  scenario 'mailFolders/drafts/messages\?\$filter:403:graph-forbidden.json'
+  run --separate-stderr verify 2026-09-30 "$WINDOW"
+  [ "$status" -eq 6 ] && [ -z "$output" ] && [ "$stderr" = 'm365-verify: forbidden (ErrorAccessDenied) — runbook 13 "Scope or grant missing"' ] ||
+    { echo "$status $output $stderr"; return 1; }
+  [ ! -e "$(receipt)" ]
+  : > "$CURL_STUB_LOG"
+  scenario 'oauth2/v2\.0/token$:400:token-invalid-client.json'
+  run --separate-stderr verify 2026-09-30 "$WINDOW"
+  [ "$status" -eq 6 ] && [[ "$stderr" == 'm365-verify: auth failed (invalid_client)'* ]] || { echo "$status $output $stderr"; return 1; }
+  [ ! -e "$(receipt)" ] && [ "$(urls | grep -c '^GET ' || true)" -eq 0 ]
+  scenario 'mailFolders/sentitems/messages\?\$filter:403:graph-forbidden.json'
+  run --separate-stderr verify 2026-09-30 "$WINDOW"
+  [ "$status" -eq 6 ] && [[ "$stderr" == 'm365-verify: forbidden (ErrorAccessDenied)'* ]] && [ ! -e "$(receipt)" ] || { echo "$status $output $stderr"; return 1; }
+  scenario 'messages/m1\?\$select=from,replyTo,conversationId$:403:graph-forbidden.json'
+  run --separate-stderr verify 2026-09-30 "$WINDOW"
+  [ "$status" -eq 6 ] && [[ "$stderr" == 'm365-verify: forbidden (ErrorAccessDenied)'* ]] && [ ! -e "$(receipt)" ] || { echo "$status $output $stderr"; return 1; }
+  : > "$CURL_STUB_LOG"
+  for args in '' '2026-09-30' '2026-9-30 2026-09-30T04:00:00Z' '2026-09-30 yesterday' '2026-09-30 2026-09-30T04:00:00' \
+    '2026-09-30 2026-09-30T04:00:00Z extra'; do
+    # shellcheck disable=SC2086 # the cases are word lists
+    run --separate-stderr verify $args
+    [ "$status" -eq 4 ] && [ -z "$output" ] && [[ "$stderr" == "m365-verify: "*" $VERIFY_USAGE" ]] || { echo "[$args] $status $output $stderr"; return 1; }
+  done
+  [ "$(request_count)" -eq 0 ] && [ ! -e "$(receipt)" ]
+  run --separate-stderr env -u ZYGGY_TENANT "$M365/verify.sh" 2026-09-30 "$WINDOW"
+  [ "$status" -eq 3 ] || { echo "$status $stderr"; return 1; }
+  printf '{' > "$ZYGGY_M365_CONFIG"
+  run --separate-stderr verify 2026-09-30 "$WINDOW"
+  [ "$status" -eq 3 ] && [[ "$stderr" == 'm365-verify: configuration error: '*'is not valid JSON' ]] || { echo "$status $stderr"; return 1; }
+  [ "$(request_count)" -eq 0 ] && [ ! -e "$(receipt)" ]
 }
