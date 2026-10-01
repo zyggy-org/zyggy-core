@@ -108,19 +108,22 @@ scripts() { # every shell script under .claude/, relative to the repo root
   grep -q 'hand-derived' "$REPO_ROOT/tests/README.md"
 }
 
-@test "repo: the gh stub starts with the template shebang and set -euo pipefail, is LF and executable in the index, and ci.yml shellchecks it" {
-  local f=tests/fixtures/github/gh-stub.sh
+@test "repo: the gh stub and the git spy start with the template shebang and set -euo pipefail, are LF and executable in the index, and ci.yml shellchecks both" {
+  local f
   cd "$REPO_ROOT"
-  [ "$(head -n 1 "$f")" = "#!/usr/bin/env bash" ]
-  head -n 3 "$f" | grep -qx 'set -euo pipefail'
-  [ "$(git ls-files -s -- "$f" | cut -d' ' -f1)" = 100755 ]
-  [ "$(git ls-files --eol -- "$f" | awk '{ print $1 }')" = i/lf ]
-  grep -qF "$f" .github/workflows/ci.yml
+  for f in tests/fixtures/github/gh-stub.sh tests/fixtures/github/git-spy.sh; do
+    [ "$(head -n 1 "$f")" = "#!/usr/bin/env bash" ] || { echo "$f: shebang"; return 1; }
+    head -n 3 "$f" | grep -qx 'set -euo pipefail'
+    [ "$(git ls-files -s -- "$f" | cut -d' ' -f1)" = 100755 ] || { echo "$f: mode"; return 1; }
+    [ "$(git ls-files --eol -- "$f" | awk '{ print $1 }')" = i/lf ] || { echo "$f: eol"; return 1; }
+    grep -qF "$f" .github/workflows/ci.yml || { echo "$f: ci.yml"; return 1; }
+  done
 }
 
 @test "repo: no token-shaped value outside the secret samples, the patterns, the fixture token helper and the secret fixture page" {
   run git -C "$REPO_ROOT" grep -nE '(github_pat_|ghp_|ghs_)[A-Za-z0-9_]{20,}' -- ':!tests/fixtures/secret-samples.txt' \
-    ':!tests/helpers.bash' ':!.claude/hooks/secret-patterns.txt' ':!tests/fixtures/github/repos-secret.json'
+    ':!tests/helpers.bash' ':!.claude/hooks/secret-patterns.txt' ':!tests/fixtures/github/repos-secret.json' \
+    ':!tests/fixtures/github/git-spy.sh'
   [ "$status" -eq 1 ] || { echo "$output"; return 1; }
 }
 
@@ -265,7 +268,7 @@ hygiene_words() { # hygiene_words <root> <csv>
 
 @test "repo: shellcheck -S style is clean on hooks, skill scripts and helpers" {
   cd "$REPO_ROOT"
-  run shellcheck -S style .claude/hooks/*.sh .claude/skills/*/*.sh tests/*.bash tests/fixtures/github/gh-stub.sh
+  run shellcheck -S style .claude/hooks/*.sh .claude/skills/*/*.sh tests/*.bash tests/fixtures/github/gh-stub.sh tests/fixtures/github/git-spy.sh
   [ "$status" -eq 0 ] || { echo "$output"; return 1; }
 }
 

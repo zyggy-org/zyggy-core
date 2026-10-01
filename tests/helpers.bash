@@ -100,3 +100,11 @@ install_token_file() {
   chmod 600 "$BATS_TEST_TMPDIR/token"
   export ZYGGY_GITHUB_TOKEN_FILE="$BATS_TEST_TMPDIR/token"
 }
+
+# The git spy (tests/fixtures/github/git-spy.sh) as bin/git; mode in git-spy.mode (default ok), log in git-spy.log.
+install_git_spy() {
+  mkdir -p "$BATS_TEST_TMPDIR/bin"
+  cp "$FIXTURES/github/git-spy.sh" "$BATS_TEST_TMPDIR/bin/git"
+  chmod +x "$BATS_TEST_TMPDIR/bin/git"
+  printf '%s' "${1:-ok}" > "$BATS_TEST_TMPDIR/git-spy.mode"
+}

@@ -154,7 +154,7 @@ shellcheck jq`; the CI image is `ubuntu-latest`):
 
 ```bash
 bats tests/
-shellcheck -S style .claude/hooks/*.sh .claude/skills/*/*.sh tests/*.bash tests/fixtures/github/gh-stub.sh
+shellcheck -S style .claude/hooks/*.sh .claude/skills/*/*.sh tests/*.bash tests/fixtures/github/gh-stub.sh tests/fixtures/github/git-spy.sh
 jq . .claude/settings.json > /dev/null
 git ls-files --eol | grep -v 'i/lf\|i/-text\|i/none'      # must print nothing (LF, binary or empty only)
 ```
