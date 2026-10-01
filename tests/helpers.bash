@@ -101,6 +101,13 @@ install_token_file() {
   export ZYGGY_GITHUB_TOKEN_FILE="$BATS_TEST_TMPDIR/token"
 }
 
+# The m365 fixture configuration (tenant acme, user alice, fixture GUIDs only — spec 23) as a per-test copy named
+# by ZYGGY_M365_CONFIG, the scripts' override of <checkout>/instance/m365.json.
+install_m365_fixture_config() {
+  cp "$FIXTURES/m365/m365.json" "$BATS_TEST_TMPDIR/m365.json"
+  export ZYGGY_M365_CONFIG="$BATS_TEST_TMPDIR/m365.json"
+}
+
 # The git spy (tests/fixtures/github/git-spy.sh) as bin/git; mode in git-spy.mode (default ok), log in git-spy.log.
 install_git_spy() {
   mkdir -p "$BATS_TEST_TMPDIR/bin"

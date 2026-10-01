@@ -1,0 +1,3733 @@
+{
+  "source": {
+    "package": "@softeria/ms-365-mcp-server",
+    "version": "0.157.2",
+    "integrity": "sha512-07Elnb0oIqgalywK6pK7KNxUuLDoOs+mraMCjluM3jeUYeO5DMkpS55HgdKiYoLAlpyxxytWFqhiDUVfah7ghg==",
+    "derivation": "generated from dist/endpoints.json (one tool per toolName, --org-mode), the UTILITY_TOOLS of dist/graph-tools.js and the auth tools of dist/auth-tools.js; descriptions are '<METHOD> <Graph path> — <text>' cut to 80; input schemas kept for the tools the prompts use",
+    "counts": {
+      "endpoints": 334,
+      "utilities": 4,
+      "auth": 6,
+      "all": 344,
+      "enabled": 14,
+      "excluded": 330
+    }
+  },
+  "tools": [
+    {
+      "name": "accept-calendar-event",
+      "description": "POST /me/events/{event-id}/accept — Accept the specified event in a user calend…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "add-excel-table-rows",
+      "description": "POST /drives/{drive-id}/items/{driveItem-id}/workbook/tables/{workbookTable-id}…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "add-group-member",
+      "description": "POST /groups/{group-id}/members/$ref — Add a member to a security or Microsoft …",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "add-group-owner",
+      "description": "POST /groups/{group-id}/owners/$ref — Add a user or service principal to a Micr…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "add-mail-attachment",
+      "description": "POST /me/messages/{message-id}/attachments — Use this API to create a new Attac…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "add-team-member",
+      "description": "POST /teams/{team-id}/members — Add a new conversationMember to a team.",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "cancel-calendar-event",
+      "description": "POST /me/events/{event-id}/cancel — This action allows the organizer of a meeti…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "clear-excel-range",
+      "description": "POST /drives/{drive-id}/items/{driveItem-id}/workbook/worksheets/{workbookWorks…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "clear-my-presence",
+      "description": "POST /me/presence/clearPresence — Clear the application's presence session for …",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "clear-my-user-preferred-presence",
+      "description": "POST /me/presence/clearUserPreferredPresence — Clear the preferred availability…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "copilot-retrieve",
+      "description": "POST /copilot/retrieval — Search Microsoft 365 content using the Copilot Retrie…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "copy-drive-item",
+      "description": "POST /drives/{drive-id}/items/{driveItem-id}/copy — Copy a drive item.",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "copy-mail-message",
+      "description": "POST /me/messages/{message-id}/copy — Copy a message to a folder within the use…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "create-calendar",
+      "description": "POST /me/calendars — Create a new calendar for a user.",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "create-calendar-event",
+      "description": "POST /me/events — Create (schedule) a new calendar event — a meeting or appoint…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "create-chat",
+      "description": "POST /chats — Create a new chat object.",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "create-contact-child-folder",
+      "description": "POST /me/contactFolders/{contactFolder-id}/childFolders — Create a new contactF…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "create-contact-folder",
+      "description": "POST /me/contactFolders — Create a new contactFolder under the user's default c…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "create-contact-in-folder",
+      "description": "POST /me/contactFolders/{contactFolder-id}/contacts — Add a contact to the root…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "create-custom-emoji",
+      "description": "POST /teamwork/messaging/customEmojis — ",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "apiVersion": "beta"
+      }
+    },
+    {
+      "name": "create-draft-email",
+      "description": "POST /me/messages — Create a draft Outlook email message in the signed-in user'…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "create-drive-item-preview",
+      "description": "POST /drives/{drive-id}/items/{driveItem-id}/preview — Create a drive item prev…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "create-drive-item-share-link",
+      "description": "POST /drives/{drive-id}/items/{driveItem-id}/createLink — Create a link to shar…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "create-excel-chart",
+      "description": "POST /drives/{drive-id}/items/{driveItem-id}/workbook/worksheets/{workbookWorks…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "create-excel-table",
+      "description": "POST /drives/{drive-id}/items/{driveItem-id}/workbook/worksheets/{workbookWorks…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "create-focused-inbox-override",
+      "description": "POST /me/inferenceClassification/overrides — Create an override for a sender id…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "create-forward-draft",
+      "description": "POST /me/messages/{message-id}/createForward — Create a forward draft.",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "create-group",
+      "description": "POST /groups — Create a new group as specified in the request body. You can cre…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "create-mail-attachment-upload-session",
+      "description": "POST /me/messages/{message-id}/attachments/createUploadSession — Create an uplo…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "create-mail-child-folder",
+      "description": "POST /me/mailFolders/{mailFolder-id}/childFolders — Use this API to create a ne…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "create-mail-folder",
+      "description": "POST /me/mailFolders — Use this API to create a new mail folder in the root fol…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "create-mail-rule",
+      "description": "POST /me/mailFolders/{mailFolder-id}/messageRules — Create a messageRule object…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "create-my-calendar-permission",
+      "description": "POST /me/calendar/calendarPermissions — Create a calendarPermission resource to…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "create-onedrive-folder",
+      "description": "POST /drives/{drive-id}/items/{driveItem-id}/children — Create a OneDrive folde…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "create-onenote-notebook",
+      "description": "POST /me/onenote/notebooks — Create a new OneNote notebook.",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "create-onenote-page",
+      "description": "POST /me/onenote/pages — Create a new OneNote page in the default section of th…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "create-onenote-section",
+      "description": "POST /me/onenote/notebooks/{notebook-id}/sections — Create a new onenoteSection…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "create-onenote-section-page",
+      "description": "POST /me/onenote/sections/{onenoteSection-id}/pages — Create a new page in the …",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "create-online-meeting",
+      "description": "POST /me/onlineMeetings — Create an online meeting on behalf of a user.",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "create-outlook-category",
+      "description": "POST /me/outlook/masterCategories — Create an outlookCategory object in the use…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "create-outlook-contact",
+      "description": "POST /me/contacts — Add a contact to the root Contacts folder or to the contact…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "create-planner-bucket",
+      "description": "POST /planner/buckets — Create a new plannerBucket object.",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "create-planner-task",
+      "description": "POST /planner/tasks — Create a new plannerTask.",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "create-planner-task-message",
+      "description": "POST /planner/tasks/{plannerTask-id}/messages — Create a new plannerTaskChatMes…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "apiVersion": "beta"
+      }
+    },
+    {
+      "name": "create-reply-all-draft",
+      "description": "POST /me/messages/{message-id}/createReplyAll — Create a draft to reply to the …",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "create-reply-draft",
+      "description": "POST /me/messages/{message-id}/createReply — Create a draft to reply to the sen…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "create-shared-mailbox-draft",
+      "description": "POST /users/{user-id}/messages — Create a shared mailbox draft.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "body": {
+            "type": "object",
+            "properties": {
+              "id": {},
+              "createdDateTime": {},
+              "lastModifiedDateTime": {},
+              "body": {},
+              "subject": {},
+              "attachments": {},
+              "singleValueExtendedProperties": {},
+              "multiValueExtendedProperties": {},
+              "importance": {},
+              "from": {},
+              "toRecipients": {},
+              "categories": {},
+              "changeKey": {},
+              "bccRecipients": {},
+              "bodyPreview": {},
+              "ccRecipients": {},
+              "conversationId": {},
+              "conversationIndex": {},
+              "flag": {},
+              "hasAttachments": {},
+              "inferenceClassification": {},
+              "internetMessageHeaders": {},
+              "internetMessageId": {},
+              "isDeliveryReceiptRequested": {},
+              "isDraft": {}
+            }
+          },
+          "userId": {
+            "type": "string",
+            "in": "path"
+          },
+          "includeHeaders": {
+            "type": "boolean"
+          },
+          "excludeResponse": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": true
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "create-shared-mailbox-forward-draft",
+      "description": "POST /users/{user-id}/messages/{message-id}/createForward — Create a shared mai…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "create-shared-mailbox-reply-all-draft",
+      "description": "POST /users/{user-id}/messages/{message-id}/createReplyAll — Create a draft to …",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "create-shared-mailbox-reply-draft",
+      "description": "POST /users/{user-id}/messages/{message-id}/createReply — Create a draft to rep…",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "body": {
+            "type": "object",
+            "$comment": "create_reply_draft_Body",
+            "properties": {
+              "Message": {},
+              "Comment": {}
+            }
+          },
+          "userId": {
+            "type": "string",
+            "in": "path"
+          },
+          "messageId": {
+            "type": "string",
+            "in": "path"
+          },
+          "includeHeaders": {
+            "type": "boolean"
+          },
+          "excludeResponse": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": true
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "create-sharepoint-list",
+      "description": "POST /sites/{site-id}/lists — Create a new list in a site.",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "create-sharepoint-list-column",
+      "description": "POST /sites/{site-id}/lists/{list-id}/columns — Create a column for a list with…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "create-sharepoint-list-item",
+      "description": "POST /sites/{site-id}/lists/{list-id}/items — Create a new listItem in a list.",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "create-sharepoint-site-onenote-notebook",
+      "description": "POST /sites/{site-id}/onenote/notebooks — Create a SharePoint site OneNote note…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "create-sharepoint-site-onenote-section",
+      "description": "POST /sites/{site-id}/onenote/notebooks/{notebook-id}/sections — Create a Share…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "create-sharepoint-site-onenote-section-group-section",
+      "description": "POST /sites/{site-id}/onenote/sectionGroups/{sectionGroup-id}/sections — Create…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "create-sharepoint-site-onenote-section-page",
+      "description": "POST /sites/{site-id}/onenote/sections/{onenoteSection-id}/pages — Create a Sha…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "create-specific-calendar-event",
+      "description": "POST /me/calendars/{calendar-id}/events — Create a calendar event on a specific…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "create-subscription",
+      "description": "POST /subscriptions — Subscribes a listener application to receive change notif…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "create-team-channel",
+      "description": "POST /teams/{team-id}/channels — Create a new channel in a team, as specified i…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "create-todo-linked-resource",
+      "description": "POST /me/todo/lists/{todoTaskList-id}/tasks/{todoTask-id}/linkedResources — Cre…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "create-todo-task",
+      "description": "POST /me/todo/lists/{todoTaskList-id}/tasks — Create a new task object in a spe…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "create-todo-task-list",
+      "description": "POST /me/todo/lists — Create a new lists object.",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "create-upload-session",
+      "description": "POST /drives/{drive-id}/items/{driveItem-id}/createUploadSession — Create an up…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "decline-calendar-event",
+      "description": "POST /me/events/{event-id}/decline — Decline invitation to the specified event …",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "delete-calendar",
+      "description": "DELETE /me/calendars/{calendar-id} — Delete a calendar other than the default c…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "delete-calendar-event",
+      "description": "DELETE /me/events/{event-id} — Removes the specified event from the containing …",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "delete-contact-folder",
+      "description": "DELETE /me/contactFolders/{contactFolder-id} — Delete contactFolder other than …",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "delete-drive-item-permission",
+      "description": "DELETE /drives/{drive-id}/items/{driveItem-id}/permissions/{permission-id} — De…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "delete-excel-range",
+      "description": "POST /drives/{drive-id}/items/{driveItem-id}/workbook/worksheets/{workbookWorks…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "delete-excel-table-row",
+      "description": "DELETE /drives/{drive-id}/items/{driveItem-id}/workbook/tables/{workbookTable-i…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "delete-focused-inbox-override",
+      "description": "DELETE /me/inferenceClassification/overrides/{inferenceClassificationOverride-i…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "delete-group",
+      "description": "DELETE /groups/{group-id} — Delete a group. When deleted, both Microsoft 365 an…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "delete-mail-attachment",
+      "description": "DELETE /me/messages/{message-id}/attachments/{attachment-id} — Delete a mail at…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "delete-mail-folder",
+      "description": "DELETE /me/mailFolders/{mailFolder-id} — Delete the specified mailFolder. The f…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "delete-mail-message",
+      "description": "DELETE /me/messages/{message-id} — Delete an Outlook email message by its messa…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "delete-mail-rule",
+      "description": "DELETE /me/mailFolders/{mailFolder-id}/messageRules/{messageRule-id} — Delete t…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "delete-my-calendar-permission",
+      "description": "DELETE /me/calendar/calendarPermissions/{calendarPermission-id} — Delete my cal…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "delete-onedrive-file",
+      "description": "DELETE /drives/{drive-id}/items/{driveItem-id} — Delete a OneDrive file.",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "delete-onenote-page",
+      "description": "DELETE /me/onenote/pages/{onenotePage-id} — Delete a OneNote page.",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "delete-online-meeting",
+      "description": "DELETE /me/onlineMeetings/{onlineMeeting-id} — Delete an onlineMeeting object.",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "delete-outlook-contact",
+      "description": "DELETE /me/contacts/{contact-id} — Delete a contact.",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "delete-planner-bucket",
+      "description": "DELETE /planner/buckets/{plannerBucket-id} — Delete plannerBucket.",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "delete-planner-task-message",
+      "description": "DELETE /planner/tasks/{plannerTask-id}/messages/{plannerTaskChatMessage-id} — D…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "apiVersion": "beta"
+      }
+    },
+    {
+      "name": "delete-sharepoint-list-column",
+      "description": "DELETE /sites/{site-id}/lists/{list-id}/columns/{columnDefinition-id} — Delete …",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "delete-sharepoint-list-item",
+      "description": "DELETE /sites/{site-id}/lists/{list-id}/items/{listItem-id} — Removes an item f…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "delete-sharepoint-site-onenote-page",
+      "description": "DELETE /sites/{site-id}/onenote/pages/{onenotePage-id} — Delete a SharePoint si…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "delete-specific-calendar-event",
+      "description": "DELETE /me/calendars/{calendar-id}/events/{event-id} — Delete a specific calend…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "delete-subscription",
+      "description": "DELETE /subscriptions/{subscription-id} — Delete a subscription. For the list o…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "delete-team-channel",
+      "description": "DELETE /teams/{team-id}/channels/{channel-id} — Delete the channel.",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "delete-todo-linked-resource",
+      "description": "DELETE /me/todo/lists/{todoTaskList-id}/tasks/{todoTask-id}/linkedResources/{li…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "delete-todo-task",
+      "description": "DELETE /me/todo/lists/{todoTaskList-id}/tasks/{todoTask-id} — Delete a todoTask…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "delete-todo-task-list",
+      "description": "DELETE /me/todo/lists/{todoTaskList-id} — Deletes a todoTaskList object.",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "dismiss-calendar-event-reminder",
+      "description": "POST /me/events/{event-id}/dismissReminder — Dismiss a reminder that has been t…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "download-bytes",
+      "description": "tool download-bytes — Download binary content from Microsoft Graph and return i…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "download-bytes-to-file",
+      "description": "tool download-bytes-to-file — Write authenticated Microsoft Graph byte content …",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "string"
+          },
+          "outputPath": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "target",
+          "outputPath"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "extract-drive-item-sensitivity-labels",
+      "description": "POST /drives/{drive-id}/items/{driveItem-id}/extractSensitivityLabels — Extract…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "find-meeting-times",
+      "description": "POST /me/findMeetingTimes — Suggest meeting times and locations based on organi…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "format-excel-range",
+      "description": "PATCH /drives/{drive-id}/items/{driveItem-id}/workbook/worksheets/{workbookWork…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "format-excel-range-border",
+      "description": "PATCH /drives/{drive-id}/items/{driveItem-id}/workbook/worksheets/{workbookWork…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "format-excel-range-fill",
+      "description": "PATCH /drives/{drive-id}/items/{driveItem-id}/workbook/worksheets/{workbookWork…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "format-excel-range-font",
+      "description": "PATCH /drives/{drive-id}/items/{driveItem-id}/workbook/worksheets/{workbookWork…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "forward-calendar-event",
+      "description": "POST /me/events/{event-id}/forward — This action allows the organizer or attend…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "forward-mail-message",
+      "description": "POST /me/messages/{message-id}/forward — Forward a message using either JSON or…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "forward-shared-mailbox-mail",
+      "description": "POST /users/{user-id}/messages/{message-id}/forward — Forward a message using e…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "get-adhoc-call-transcript-content",
+      "description": "GET /me/adhocCalls/{adhocCall-id}/transcripts/{callTranscript-id}/content — The…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "get-calendar-event",
+      "description": "GET /me/events/{event-id} — Get the properties and relationships of the specifi…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "get-calendar-view",
+      "description": "GET /me/calendarView — Get the occurrences, exceptions, and single instances of…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "get-channel-files-folder",
+      "description": "GET /teams/{team-id}/channels/{channel-id}/filesFolder — Get the metadata for t…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "get-channel-message",
+      "description": "GET /teams/{team-id}/channels/{channel-id}/messages/{chatMessage-id} — Retrieve…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "get-chat",
+      "description": "GET /chats/{chat-id} — Retrieve a single chat (without its messages). This meth…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "get-chat-message",
+      "description": "GET /chats/{chat-id}/messages/{chatMessage-id} — Retrieve a single message or a…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "get-current-user",
+      "description": "GET /me — Retrieve the properties and relationships of user object. This operat…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "get-download-url",
+      "description": "tool get-download-url — Resolve a short-lived, pre-authenticated download URL f…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "get-drive-delta",
+      "description": "GET /drives/{drive-id}/items/{driveItem-id}/delta() — Track changes in a driveI…",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "$top": {
+            "type": "number",
+            "in": "query"
+          },
+          "$skip": {
+            "type": "number",
+            "in": "query"
+          },
+          "$search": {
+            "type": "string",
+            "in": "query"
+          },
+          "$filter": {
+            "type": "string",
+            "in": "query"
+          },
+          "$count": {
+            "type": "boolean",
+            "in": "query"
+          },
+          "$select": {
+            "type": "array",
+            "in": "query"
+          },
+          "$orderby": {
+            "type": "array",
+            "in": "query"
+          },
+          "$expand": {
+            "type": "array",
+            "in": "query"
+          },
+          "driveId": {
+            "type": "string",
+            "in": "path"
+          },
+          "driveItemId": {
+            "type": "string",
+            "in": "path"
+          },
+          "fetchAllPages": {
+            "type": "boolean"
+          },
+          "skiptoken": {
+            "type": "string"
+          },
+          "includeHeaders": {
+            "type": "boolean"
+          },
+          "excludeResponse": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": true
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "get-drive-item",
+      "description": "GET /drives/{drive-id}/items/{driveItem-id} — All items contained in the drive.…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "get-drive-root-item",
+      "description": "GET /drives/{drive-id}/root — The root folder of the drive. Read-only.",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "get-excel-range",
+      "description": "GET /drives/{drive-id}/items/{driveItem-id}/workbook/worksheets/{workbookWorksh…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "get-excel-range-format",
+      "description": "GET /drives/{drive-id}/items/{driveItem-id}/workbook/worksheets/{workbookWorksh…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "get-excel-table",
+      "description": "GET /drives/{drive-id}/items/{driveItem-id}/workbook/tables/{workbookTable-id} …",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "get-excel-used-range",
+      "description": "GET /drives/{drive-id}/items/{driveItem-id}/workbook/worksheets/{workbookWorksh…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "get-group",
+      "description": "GET /groups/{group-id} — Get the properties and relationships of a group object…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "get-group-calendar-view",
+      "description": "GET /groups/{group-id}/calendarView — Get the occurrences, exceptions, and sing…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "get-mail-message",
+      "description": "GET /me/messages/{message-id} — Get a single Outlook email message by its messa…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "get-mail-message-mime",
+      "description": "GET /me/messages/{message-id}/$value — Download the raw MIME source (RFC 5322 .…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "get-mail-tips",
+      "description": "POST /me/getMailTips — Get the MailTips of one or more recipients as available …",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "get-mailbox-settings",
+      "description": "GET /me/mailboxSettings — Get the user's mailboxSettings. You can view all mail…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "get-meeting-attendance-report",
+      "description": "GET /me/onlineMeetings/{onlineMeeting-id}/attendanceReports/{meetingAttendanceR…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "get-meeting-recording",
+      "description": "GET /me/onlineMeetings/{onlineMeeting-id}/recordings/{callRecording-id} — The r…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "get-meeting-recording-content",
+      "description": "GET /me/onlineMeetings/{onlineMeeting-id}/recordings/{callRecording-id}/content…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "get-meeting-transcript",
+      "description": "GET /me/onlineMeetings/{onlineMeeting-id}/transcripts/{callTranscript-id} — The…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "get-meeting-transcript-content",
+      "description": "GET /me/onlineMeetings/{onlineMeeting-id}/transcripts/{callTranscript-id}/conte…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "get-my-manager",
+      "description": "GET /me/manager — The user or contact that is this user's manager. Read-only. S…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "get-my-presence",
+      "description": "GET /me/presence — Get a user's presence information.",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "get-my-profile",
+      "description": "GET /me/profile — Retrieve the properties and relationships of a profile object…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "apiVersion": "beta"
+      }
+    },
+    {
+      "name": "get-onenote-notebook-from-web-url",
+      "description": "POST /me/onenote/notebooks/getNotebookFromWebUrl — Retrieve the properties and …",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "get-onenote-page-content",
+      "description": "GET /me/onenote/pages/{onenotePage-id}/content — The page's HTML content.",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "get-online-meeting",
+      "description": "GET /me/onlineMeetings/{onlineMeeting-id} — Retrieve the properties and relatio…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "get-outlook-contact",
+      "description": "GET /me/contacts/{contact-id} — Retrieve the properties and relationships of a …",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "get-planner-bucket",
+      "description": "GET /planner/buckets/{plannerBucket-id} — Retrieve the properties and relations…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "get-planner-plan",
+      "description": "GET /planner/plans/{plannerPlan-id} — Retrieve the properties and relationships…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "get-planner-task",
+      "description": "GET /planner/tasks/{plannerTask-id} — Retrieve the properties and relationships…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "get-planner-task-details",
+      "description": "GET /planner/tasks/{plannerTask-id}/details — Retrieve the properties and relat…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "get-presences-by-user-id",
+      "description": "POST /communications/getPresencesByUserId — Get the presence information for mu…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "get-room",
+      "description": "GET /places/{place-id}/graph.room — Get a collection of the specified type of p…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "get-room-list",
+      "description": "GET /places/{place-id}/graph.roomList — Read the properties of a place object s…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "get-room-list-room",
+      "description": "GET /places/{place-id}/graph.roomList/rooms/{room-id} — Get a single meeting ro…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "get-schedule",
+      "description": "POST /me/calendar/getSchedule — Get the free/busy availability information for …",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "get-sensitivity-label",
+      "description": "GET /me/dataSecurityAndGovernance/sensitivityLabels/{sensitivityLabel-id} — Get…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "get-shared-calendar-view",
+      "description": "GET /users/{user-id}/calendarView — List the occurrences, exceptions, and singl…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "get-shared-mailbox-message",
+      "description": "GET /users/{user-id}/messages/{message-id} — Get a single Outlook message from …",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "get-sharepoint-list-column",
+      "description": "GET /sites/{site-id}/lists/{list-id}/columns/{columnDefinition-id} — The collec…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "get-sharepoint-site",
+      "description": "GET /sites/{site-id} — Retrieve properties and relationships for a site resourc…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "get-sharepoint-site-by-path",
+      "description": "GET /sites/{site-id}:/{path} — Get a SharePoint site by path.",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "get-sharepoint-site-drive-by-id",
+      "description": "GET /sites/{site-id}/drives/{drive-id} — The collection of drives (document lib…",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "$select": {
+            "type": "array",
+            "in": "query"
+          },
+          "$expand": {
+            "type": "array",
+            "in": "query"
+          },
+          "siteId": {
+            "type": "string",
+            "in": "path"
+          },
+          "driveId": {
+            "type": "string",
+            "in": "path"
+          },
+          "fetchAllPages": {
+            "type": "boolean"
+          },
+          "includeHeaders": {
+            "type": "boolean"
+          },
+          "excludeResponse": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": true
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "get-sharepoint-site-item",
+      "description": "GET /sites/{site-id}/items/{baseItem-id} — Used to address any item contained i…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "get-sharepoint-site-list",
+      "description": "GET /sites/{site-id}/lists/{list-id} — Returns the metadata for a list.",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "get-sharepoint-site-list-item",
+      "description": "GET /sites/{site-id}/lists/{list-id}/items/{listItem-id} — Returns the metadata…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "get-sharepoint-site-onenote-page-content",
+      "description": "GET /sites/{site-id}/onenote/pages/{onenotePage-id}/content — The page's HTML c…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "get-sharepoint-sites-delta",
+      "description": "GET /sites/delta() — Get newly created, updated, or deleted sites without havin…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "get-specific-calendar-event",
+      "description": "GET /me/calendars/{calendar-id}/events/{event-id} — Get a single event from one…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "get-specific-calendar-view",
+      "description": "GET /me/calendars/{calendar-id}/calendarView — List the occurrences, exceptions…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "get-subscription",
+      "description": "GET /subscriptions/{subscription-id} — Retrieve the properties and relationship…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "get-team",
+      "description": "GET /teams/{team-id} — Retrieve the properties and relationships of the specifi…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "get-team-channel",
+      "description": "GET /teams/{team-id}/channels/{channel-id} — Retrieve the properties and relati…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "get-todo-task",
+      "description": "GET /me/todo/lists/{todoTaskList-id}/tasks/{todoTask-id} — Read the properties …",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "get-user-manager",
+      "description": "GET /users/{user-id}/manager — Returns the user or organizational contact assig…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "get-user-presence",
+      "description": "GET /users/{user-id}/presence — Get a user's presence information.",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "get-virtual-event-webinar",
+      "description": "GET /solutions/virtualEvents/webinars/{virtualEventWebinar-id} — Read the prope…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "graph-batch",
+      "description": "POST /$batch — Combine up to 20 Graph requests into a single HTTP call. Body: {…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "insert-excel-range",
+      "description": "POST /drives/{drive-id}/items/{driveItem-id}/workbook/worksheets/{workbookWorks…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "list-accounts",
+      "description": "auth list-accounts — List all Microsoft accounts configured in this server. Use…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "list-adhoc-call-transcripts",
+      "description": "GET /me/adhocCalls/getAllTranscripts(userId='{userId}',startDateTime={startDate…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-all-onenote-sections",
+      "description": "GET /me/onenote/sections — Retrieve a list of onenoteSection objects.",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-calendar-event-instances",
+      "description": "GET /me/calendars/{calendar-id}/events/{event-id}/instances — The occurrences o…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-calendar-events",
+      "description": "GET /me/events — Get a list of event objects in the user's mailbox. The list co…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-calendar-events-delta",
+      "description": "GET /me/events/delta() — Get a set of event resources that have been added, del…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-calendar-view-delta",
+      "description": "GET /me/calendarView/delta() — Get a set of event resources that have been adde…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-calendars",
+      "description": "GET /me/calendars — Get all the user's calendars (/calendars navigation propert…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-channel-message-hosted-contents",
+      "description": "GET /teams/{team-id}/channels/{channel-id}/messages/{chatMessage-id}/hostedCont…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-channel-message-replies",
+      "description": "GET /teams/{team-id}/channels/{channel-id}/messages/{chatMessage-id}/replies — …",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-channel-messages",
+      "description": "GET /teams/{team-id}/channels/{channel-id}/messages — Retrieve the list of mess…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-channel-tabs",
+      "description": "GET /teams/{team-id}/channels/{channel-id}/tabs — Retrieve the list of tabs in …",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-chat-members",
+      "description": "GET /chats/{chat-id}/members — List all conversation members in a chat or chann…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-chat-message-hosted-contents",
+      "description": "GET /chats/{chat-id}/messages/{chatMessage-id}/hostedContents — Retrieve the li…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-chat-message-replies",
+      "description": "GET /chats/{chat-id}/messages/{chatMessage-id}/replies — Replies for a specifie…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-chat-messages",
+      "description": "GET /chats/{chat-id}/messages — Retrieve the list of messages in a chat. This m…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-chats",
+      "description": "GET /me/chats — List chats.",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-contact-folder-child-folders",
+      "description": "GET /me/contactFolders/{contactFolder-id}/childFolders — Get a collection of ch…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-contact-folder-contacts",
+      "description": "GET /me/contactFolders/{contactFolder-id}/contacts — Get a contact collection f…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-contact-folders",
+      "description": "GET /me/contactFolders — Get the contact folder collection in the default Conta…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-custom-emojis",
+      "description": "GET /teamwork/messaging/customEmojis — Get a list of custom emojis available in…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "apiVersion": "beta"
+      }
+    },
+    {
+      "name": "list-drive-item-permissions",
+      "description": "GET /drives/{drive-id}/items/{driveItem-id}/permissions — The set of permission…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-drive-item-thumbnails",
+      "description": "GET /drives/{drive-id}/items/{driveItem-id}/thumbnails — Collection of thumbnai…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-drive-item-versions",
+      "description": "GET /drives/{drive-id}/items/{driveItem-id}/versions — The list of previous ver…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-drives",
+      "description": "GET /me/drives — Retrieve the list of Drive resources available for a target Us…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-excel-table-rows",
+      "description": "GET /drives/{drive-id}/items/{driveItem-id}/workbook/tables/{workbookTable-id}/…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-excel-tables",
+      "description": "GET /drives/{drive-id}/items/{driveItem-id}/workbook/tables — Represents a coll…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-excel-worksheets",
+      "description": "GET /drives/{drive-id}/items/{driveItem-id}/workbook/worksheets — Represents a …",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-focused-inbox-overrides",
+      "description": "GET /me/inferenceClassification/overrides — Get the overrides that a user has s…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-folder-files",
+      "description": "GET /drives/{drive-id}/items/{driveItem-id}/children — Return a collection of D…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-group-conversations",
+      "description": "GET /groups/{group-id}/conversations — Retrieve the list of conversations in th…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-group-events",
+      "description": "GET /groups/{group-id}/events — Retrieve a list of event objects.",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-group-members",
+      "description": "GET /groups/{group-id}/members — Get a list of the group's direct members. A gr…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-group-owners",
+      "description": "GET /groups/{group-id}/owners — Retrieve a list of the group's owners. The owne…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-group-threads",
+      "description": "GET /groups/{group-id}/threads — Get all the threads of a group.",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-groups",
+      "description": "GET /groups — List all the groups available in an organization, excluding dynam…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-joined-teams",
+      "description": "GET /me/joinedTeams — Get the teams in Microsoft Teams that the user is a direc…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-mail-attachments",
+      "description": "GET /me/messages/{message-id}/attachments — Retrieve a list of attachment objec…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-mail-child-folders",
+      "description": "GET /me/mailFolders/{mailFolder-id}/childFolders — Get the folder collection un…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-mail-folder-messages",
+      "description": "GET /me/mailFolders/{mailFolder-id}/messages — Get all the messages in the spec…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-mail-folder-messages-delta",
+      "description": "GET /me/mailFolders/{mailFolder-id}/messages/delta() — Get a set of messages ad…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-mail-folders",
+      "description": "GET /me/mailFolders — Get the mail folder collection directly under the root fo…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-mail-messages",
+      "description": "GET /me/messages — List, search, and filter Outlook email messages in the signe…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-mail-rules",
+      "description": "GET /me/mailFolders/{mailFolder-id}/messageRules — Get all the messageRule obje…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-meeting-attendance-records",
+      "description": "GET /me/onlineMeetings/{onlineMeeting-id}/attendanceReports/{meetingAttendanceR…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-meeting-attendance-reports",
+      "description": "GET /me/onlineMeetings/{onlineMeeting-id}/attendanceReports — Get a list of mee…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-meeting-recordings",
+      "description": "GET /me/onlineMeetings/{onlineMeeting-id}/recordings — Get a callRecording obje…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-meeting-transcripts",
+      "description": "GET /me/onlineMeetings/{onlineMeeting-id}/transcripts — The transcripts of an o…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-my-associated-teams",
+      "description": "GET /me/teamwork/associatedTeams — Get the list of teams in Microsoft Teams tha…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-my-calendar-permissions",
+      "description": "GET /me/calendar/calendarPermissions — The permissions of the users with whom t…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-my-direct-reports",
+      "description": "GET /me/directReports — Get a user's direct reports. Returns the users and cont…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-my-installed-teams-apps",
+      "description": "GET /me/teamwork/installedApps — The apps installed in the personal scope of th…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-my-memberships",
+      "description": "GET /me/memberOf — The groups and directory roles that the user is a member of.…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-onenote-notebook-sections",
+      "description": "GET /me/onenote/notebooks/{notebook-id}/sections — Retrieve a list of onenoteSe…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-onenote-notebooks",
+      "description": "GET /me/onenote/notebooks — Retrieve a list of notebook objects.",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-onenote-pages",
+      "description": "GET /me/onenote/pages — Retrieve a list of page objects.",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-onenote-section-groups",
+      "description": "GET /me/onenote/sectionGroups — Retrieve a list of sectionGroup objects.",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-onenote-section-pages",
+      "description": "GET /me/onenote/sections/{onenoteSection-id}/pages — Retrieve a list of page ob…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-online-meetings",
+      "description": "GET /me/onlineMeetings — Retrieve the properties and relationships of an online…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-outlook-categories",
+      "description": "GET /me/outlook/masterCategories — Get all the categories that have been define…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-outlook-contacts",
+      "description": "GET /me/contacts — Get a contact collection from the default contacts folder of…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-pinned-chat-messages",
+      "description": "GET /chats/{chat-id}/pinnedMessages — Get a list of pinnedChatMessages in a cha…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-plan-buckets",
+      "description": "GET /planner/plans/{plannerPlan-id}/buckets — Retrieve a list of plannerBucket …",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-plan-tasks",
+      "description": "GET /planner/plans/{plannerPlan-id}/tasks — Retrieve a list of plannerTask obje…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-planner-task-messages",
+      "description": "GET /planner/tasks/{plannerTask-id}/messages — Retrieve a list of plannerTaskCh…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "apiVersion": "beta"
+      }
+    },
+    {
+      "name": "list-planner-tasks",
+      "description": "GET /me/planner/tasks — Retrieve a list of plannertask objects assigned to a Us…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-relevant-people",
+      "description": "GET /me/people — Retrieve a collection of person objects ordered by their relev…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-room-list-rooms",
+      "description": "GET /places/{place-id}/graph.roomList/rooms — List the meeting rooms that belon…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-sensitivity-labels",
+      "description": "GET /me/dataSecurityAndGovernance/sensitivityLabels — List sensitivity labels.",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-shared-calendar-events",
+      "description": "GET /users/{user-id}/calendar/events — List events in another user's default ca…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-shared-mailbox-folder-messages",
+      "description": "GET /users/{user-id}/mailFolders/{mailFolder-id}/messages — The collection of m…",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "$top": {
+            "type": "number",
+            "in": "query"
+          },
+          "$skip": {
+            "type": "number",
+            "in": "query"
+          },
+          "$search": {
+            "type": "string",
+            "in": "query"
+          },
+          "$filter": {
+            "type": "string",
+            "in": "query"
+          },
+          "$count": {
+            "type": "boolean",
+            "in": "query"
+          },
+          "$orderby": {
+            "type": "array",
+            "in": "query"
+          },
+          "$select": {
+            "type": "array",
+            "in": "query"
+          },
+          "$expand": {
+            "type": "array",
+            "in": "query"
+          },
+          "userId": {
+            "type": "string",
+            "in": "path"
+          },
+          "mailFolderId": {
+            "type": "string",
+            "in": "path"
+          },
+          "fetchAllPages": {
+            "type": "boolean"
+          },
+          "skiptoken": {
+            "type": "string"
+          },
+          "includeHeaders": {
+            "type": "boolean"
+          },
+          "excludeResponse": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": true
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-shared-mailbox-messages",
+      "description": "GET /users/{user-id}/messages — The messages in a mailbox or folder. Read-only.…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-sharepoint-list-columns",
+      "description": "GET /sites/{site-id}/lists/{list-id}/columns — Get the collection of columns re…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-sharepoint-site-drives",
+      "description": "GET /sites/{site-id}/drives — The collection of drives (document libraries) und…",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "$top": {
+            "type": "number",
+            "in": "query"
+          },
+          "$skip": {
+            "type": "number",
+            "in": "query"
+          },
+          "$search": {
+            "type": "string",
+            "in": "query"
+          },
+          "$filter": {
+            "type": "string",
+            "in": "query"
+          },
+          "$count": {
+            "type": "boolean",
+            "in": "query"
+          },
+          "$orderby": {
+            "type": "array",
+            "in": "query"
+          },
+          "$select": {
+            "type": "array",
+            "in": "query"
+          },
+          "$expand": {
+            "type": "array",
+            "in": "query"
+          },
+          "siteId": {
+            "type": "string",
+            "in": "path"
+          },
+          "fetchAllPages": {
+            "type": "boolean"
+          },
+          "skiptoken": {
+            "type": "string"
+          },
+          "includeHeaders": {
+            "type": "boolean"
+          },
+          "excludeResponse": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": true
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-sharepoint-site-items",
+      "description": "GET /sites/{site-id}/items — Used to address any item contained in this site. T…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-sharepoint-site-list-items",
+      "description": "GET /sites/{site-id}/lists/{list-id}/items — Get the collection of items in a l…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-sharepoint-site-lists",
+      "description": "GET /sites/{site-id}/lists — Get the collection of lists for a site. Lists with…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-sharepoint-site-onenote-notebook-section-groups",
+      "description": "GET /sites/{site-id}/onenote/notebooks/{notebook-id}/sectionGroups — The sectio…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-sharepoint-site-onenote-notebook-sections",
+      "description": "GET /sites/{site-id}/onenote/notebooks/{notebook-id}/sections — The sections in…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-sharepoint-site-onenote-notebooks",
+      "description": "GET /sites/{site-id}/onenote/notebooks — The collection of OneNote notebooks th…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-sharepoint-site-onenote-section-group-section-groups",
+      "description": "GET /sites/{site-id}/onenote/sectionGroups/{sectionGroup-id}/sectionGroups — Th…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-sharepoint-site-onenote-section-group-sections",
+      "description": "GET /sites/{site-id}/onenote/sectionGroups/{sectionGroup-id}/sections — The sec…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-sharepoint-site-onenote-section-pages",
+      "description": "GET /sites/{site-id}/onenote/sections/{onenoteSection-id}/pages — The collectio…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-specific-calendar-events",
+      "description": "GET /me/calendars/{calendar-id}/events — List events from one of the signed-in …",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-subscriptions",
+      "description": "GET /subscriptions — Retrieve the properties and relationships of webhook subsc…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-supported-languages",
+      "description": "GET /me/outlook/supportedLanguages() — Get the list of locales and languages th…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-supported-time-zones",
+      "description": "GET /me/outlook/supportedTimeZones(TimeZoneStandard='{TimeZoneStandard}') — Get…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-team-channels",
+      "description": "GET /teams/{team-id}/channels — Retrieve the list of channels in this team.",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-team-members",
+      "description": "GET /teams/{team-id}/members — Get the conversationMember collection of a team.…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-todo-linked-resources",
+      "description": "GET /me/todo/lists/{todoTaskList-id}/tasks/{todoTask-id}/linkedResources — Get …",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-todo-task-lists",
+      "description": "GET /me/todo/lists — Get a list of the todoTaskList objects and their propertie…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-todo-tasks",
+      "description": "GET /me/todo/lists/{todoTaskList-id}/tasks — Get the todoTask resources from th…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-trending-insights",
+      "description": "GET /me/insights/trending — Calculated insight that includes a list of document…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-user-direct-reports",
+      "description": "GET /users/{user-id}/directReports — Get an agentUser's direct reports. Returns…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-users",
+      "description": "GET /users — Retrieve a list of user objects.",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list-webinar-sessions",
+      "description": "GET /solutions/virtualEvents/webinars/{virtualEventWebinar-id}/sessions — Get a…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "login",
+      "description": "auth login — Authenticate with Microsoft account",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "logout",
+      "description": "auth logout — Log out from Microsoft account",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "merge-excel-range",
+      "description": "POST /drives/{drive-id}/items/{driveItem-id}/workbook/worksheets/{workbookWorks…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "move-mail-message",
+      "description": "POST /me/messages/{message-id}/move — Move a message to another folder within t…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "move-rename-onedrive-item",
+      "description": "PATCH /drives/{drive-id}/items/{driveItem-id} — Move or rename a OneDrive item.",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "move-shared-mailbox-message",
+      "description": "POST /users/{user-id}/messages/{message-id}/move — Move a message in another us…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "parse-teams-url",
+      "description": "tool parse-teams-url — Converts any Teams meeting URL format (short /meet/, ful…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "pin-chat-message",
+      "description": "POST /chats/{chat-id}/pinnedMessages — Pin a chat message in the specified chat…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "reauthorize-subscription",
+      "description": "POST /subscriptions/{subscription-id}/reauthorize — Reauthorize a subscription …",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "remove-account",
+      "description": "auth remove-account — Remove a Microsoft account from the cache. Accepts email …",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "remove-group-member",
+      "description": "DELETE /groups/{group-id}/members/{directoryObject-id}/$ref — Remove a member f…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "remove-group-owner",
+      "description": "DELETE /groups/{group-id}/owners/{directoryObject-id}/$ref — Remove an owner fr…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "remove-team-member",
+      "description": "DELETE /teams/{team-id}/members/{conversationMember-id} — Remove a conversation…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "reply-all-mail-message",
+      "description": "POST /me/messages/{message-id}/replyAll — Reply to all recipients of a message …",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "reply-all-shared-mailbox-mail",
+      "description": "POST /users/{user-id}/messages/{message-id}/replyAll — Reply to all recipients …",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "reply-mail-message",
+      "description": "POST /me/messages/{message-id}/reply — Reply to the sender of a message using e…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "reply-shared-mailbox-mail",
+      "description": "POST /users/{user-id}/messages/{message-id}/reply — Reply to the sender of a me…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "reply-to-channel-message",
+      "description": "POST /teams/{team-id}/channels/{channel-id}/messages/{chatMessage-id}/replies —…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "reply-to-chat-message",
+      "description": "POST /chats/{chat-id}/messages/{chatMessage-id}/replies — Reply to a chat messa…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "reply-to-group-thread",
+      "description": "POST /groups/{group-id}/threads/{conversationThread-id}/reply — Create an open …",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "search-onedrive-files",
+      "description": "GET /drives/{drive-id}/search(q='{q}') — Search the hierarchy of items for item…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "search-query",
+      "description": "POST /search/query — Runs the query specified in the request body. Search resul…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "search-sharepoint-sites",
+      "description": "GET /sites — List all available sites in an organization. Specific filter crite…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "select-account",
+      "description": "auth select-account — Select a Microsoft account as the default. Accepts email …",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "send-channel-message",
+      "description": "POST /teams/{team-id}/channels/{channel-id}/messages — Send a new chatMessage i…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "send-chat-message",
+      "description": "POST /chats/{chat-id}/messages — Send a new chatMessage in the specified chat. …",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "send-draft-message",
+      "description": "POST /me/messages/{message-id}/send — Send an existing draft message. The draft…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "send-mail",
+      "description": "POST /me/sendMail — Send the message specified in the request body using either…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "send-my-activity-notification",
+      "description": "POST /me/teamwork/sendActivityNotification — Send an activity feed notification…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "send-shared-mailbox-draft",
+      "description": "POST /users/{user-id}/messages/{message-id}/send — Send an existing draft messa…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "send-shared-mailbox-mail",
+      "description": "POST /users/{user-id}/sendMail — Send the message specified in the request body…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "set-channel-message-reaction",
+      "description": "POST /teams/{team-id}/channels/{channel-id}/messages/{chatMessage-id}/setReacti…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "set-chat-message-reaction",
+      "description": "POST /chats/{chat-id}/messages/{chatMessage-id}/setReaction — Set a chat messag…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "set-my-presence",
+      "description": "POST /me/presence/setPresence — Set the state of a user's presence session as a…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "set-my-status-message",
+      "description": "POST /me/presence/setStatusMessage — Set a presence status message for a user. …",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "set-my-user-preferred-presence",
+      "description": "POST /me/presence/setUserPreferredPresence — Set the preferred availability and…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "share-drive-item",
+      "description": "POST /drives/{drive-id}/items/{driveItem-id}/invite — Send a sharing invitation…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "snooze-calendar-event-reminder",
+      "description": "POST /me/events/{event-id}/snoozeReminder — Postpone a reminder for an event in…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "sort-excel-range",
+      "description": "PATCH /drives/{drive-id}/items/{driveItem-id}/workbook/worksheets/{workbookWork…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "tentatively-accept-calendar-event",
+      "description": "POST /me/events/{event-id}/tentativelyAccept — Tentatively accept the specified…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "unmerge-excel-range",
+      "description": "POST /drives/{drive-id}/items/{driveItem-id}/workbook/worksheets/{workbookWorks…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "unpin-chat-message",
+      "description": "DELETE /chats/{chat-id}/pinnedMessages/{pinnedChatMessageInfo-id} — Unpin a mes…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "unset-channel-message-reaction",
+      "description": "POST /teams/{team-id}/channels/{channel-id}/messages/{chatMessage-id}/unsetReac…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "unset-chat-message-reaction",
+      "description": "POST /chats/{chat-id}/messages/{chatMessage-id}/unsetReaction — Unset a chat me…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "update-calendar",
+      "description": "PATCH /me/calendars/{calendar-id} — Update a calendar.",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "update-calendar-event",
+      "description": "PATCH /me/events/{event-id} — Update an event on the default calendar. Requires…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "update-channel-message",
+      "description": "PATCH /teams/{team-id}/channels/{channel-id}/messages/{chatMessage-id} — Update…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "update-channel-message-reply",
+      "description": "PATCH /teams/{team-id}/channels/{channel-id}/messages/{chatMessage-id}/replies/…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "update-chat-message",
+      "description": "PATCH /chats/{chat-id}/messages/{chatMessage-id} — Update a chat message.",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "update-contact-folder",
+      "description": "PATCH /me/contactFolders/{contactFolder-id} — Update the properties of contactf…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "update-excel-range",
+      "description": "PATCH /drives/{drive-id}/items/{driveItem-id}/workbook/worksheets/{workbookWork…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "update-excel-table-row",
+      "description": "PATCH /drives/{drive-id}/items/{driveItem-id}/workbook/tables/{workbookTable-id…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "update-focused-inbox-override",
+      "description": "PATCH /me/inferenceClassification/overrides/{inferenceClassificationOverride-id…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "update-group",
+      "description": "PATCH /groups/{group-id} — Create a new group object if it doesn't exist, or up…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "update-mail-folder",
+      "description": "PATCH /me/mailFolders/{mailFolder-id} — Update the properties of mailfolder obj…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "update-mail-message",
+      "description": "PATCH /me/messages/{message-id} — Update an existing Outlook email message by i…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "update-mail-rule",
+      "description": "PATCH /me/mailFolders/{mailFolder-id}/messageRules/{messageRule-id} — Change wr…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "update-mailbox-settings",
+      "description": "PATCH /me/mailboxSettings — Enable, configure, or disable one or more of the fo…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "update-my-calendar-permission",
+      "description": "PATCH /me/calendar/calendarPermissions/{calendarPermission-id} — Update my cale…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "update-online-meeting",
+      "description": "PATCH /me/onlineMeetings/{onlineMeeting-id} — Update the properties of the spec…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "update-outlook-contact",
+      "description": "PATCH /me/contacts/{contact-id} — Update the properties of a contact object.",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "update-place",
+      "description": "PATCH /places/{place-id} — Update the properties of place object that can be a …",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "update-planner-bucket",
+      "description": "PATCH /planner/buckets/{plannerBucket-id} — Update the properties of plannerbuc…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "update-planner-task",
+      "description": "PATCH /planner/tasks/{plannerTask-id} — Update the properties of plannerTask ob…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "update-planner-task-details",
+      "description": "PATCH /planner/tasks/{plannerTask-id}/details — Update the properties of planne…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "update-shared-mailbox-message",
+      "description": "PATCH /users/{user-id}/messages/{message-id} — Update a message in another user…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "update-sharepoint-list-column",
+      "description": "PATCH /sites/{site-id}/lists/{list-id}/columns/{columnDefinition-id} — Update a…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "update-sharepoint-list-item",
+      "description": "PATCH /sites/{site-id}/lists/{list-id}/items/{listItem-id} — Update a SharePoin…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "update-sharepoint-site-onenote-page-content",
+      "description": "PATCH /sites/{site-id}/onenote/pages/{onenotePage-id}/content — Update SharePoi…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "update-specific-calendar-event",
+      "description": "PATCH /me/calendars/{calendar-id}/events/{event-id} — Update a specific calenda…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "update-subscription",
+      "description": "PATCH /subscriptions/{subscription-id} — Renew a subscription by extending its …",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "update-team-channel",
+      "description": "PATCH /teams/{team-id}/channels/{channel-id} — Update the properties of the spe…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "update-todo-task",
+      "description": "PATCH /me/todo/lists/{todoTaskList-id}/tasks/{todoTask-id} — Update the propert…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "update-todo-task-list",
+      "description": "PATCH /me/todo/lists/{todoTaskList-id} — Update the properties of a todoTaskLis…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "upload-file-content",
+      "description": "PUT /drives/{drive-id}/items/{driveItem-id}/content — The content stream, if th…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "upload-my-profile-photo",
+      "description": "PUT /me/photo/$value — Update the photo for the specified contact, group, team,…",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "verify-login",
+      "description": "auth verify-login — Check current Microsoft authentication status",
+      "inputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": false
+      }
+    }
+  ]
+}
