@@ -124,6 +124,14 @@ scripts() { # every shell script under .claude/, relative to the repo root
   [ "$status" -eq 1 ] || { echo "$output"; return 1; }
 }
 
+@test "repo: skills call their scripts with a working-directory fallback (CLAUDE_PROJECT_DIR is not set in the Bash tool)" {
+  run grep -n '"\$CLAUDE_PROJECT_DIR"' "$REPO_ROOT"/.claude/skills/*/SKILL.md
+  [ "$status" -eq 1 ] || { echo "$output"; return 1; }
+  grep -qF '"${CLAUDE_PROJECT_DIR:-.}"/.claude/skills/remember/remember.sh' "$REPO_ROOT/.claude/skills/remember/SKILL.md"
+  grep -qF '"${CLAUDE_PROJECT_DIR:-.}"/.claude/skills/github-inventory/inventory.sh' \
+    "$REPO_ROOT/.claude/skills/github-inventory/SKILL.md"
+}
+
 zy_fm() { # front matter value, using the scripts' own parser
   bash -c 'source "$1"; zy_front_matter_value "$2" "$3"' _ "$HOOKS/lib.sh" "$1" "$2"
 }

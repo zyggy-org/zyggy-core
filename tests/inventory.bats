@@ -186,15 +186,17 @@ path_without() { # path_without <name>
   [ "$output" -eq 7 ]
   run gh api --method GET --paginate -f per_page=100 -f sort=pushed --jq '.[]' user/repos
   [ "$status" -eq 98 ]
-  run bash -c "gh api -H 'Accept: application/vnd.github.raw+json' repos/alice/tea-notes/readme | head -n 1"
-  [ "$output" = "# Tea notes" ]
+  # whole output first, then its first line: a pipe into head would break the stub's writes where SIGPIPE is
+  # ignored (GitHub's runners), and run merges the "Broken pipe" stderr into $output
+  gh api -H 'Accept: application/vnd.github.raw+json' repos/alice/tea-notes/readme > "$BATS_TEST_TMPDIR/readme"
+  [ "$(head -n 1 "$BATS_TEST_TMPDIR/readme")" = "# Tea notes" ]
   run gh api repos/alice/tea-notes/readme
   [ "$status" -eq 98 ]
   run --separate-stderr gh api -H 'Accept: application/vnd.github.raw+json' repos/alice/none/readme
   [ "$status" -eq 1 ]
   [ "$stderr" = "gh: Not Found (HTTP 404)" ]
-  run bash -c "gh api -i user | head -n 1"
-  [ "$output" = "HTTP/2.0 200 OK" ]
+  gh api -i user > "$BATS_TEST_TMPDIR/user"
+  [ "$(head -n 1 "$BATS_TEST_TMPDIR/user")" = "HTTP/2.0 200 OK" ]
   run bash -c "gh api -i user | grep -c GitHub-Authentication-Token-Expiration"
   [ "$output" = 0 ]
   run bash -c "GH_STUB_HEADERS=user-headers-expiring.txt gh api -i user | grep -c GitHub-Authentication-Token-Expiration"

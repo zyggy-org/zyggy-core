@@ -26,7 +26,7 @@ instance's Claude Code sessions** (remote control or `claude -p` are started the
 
 Machine-local, never committed (`.gitignore`): `memory/` (the nested memory repository),
 `.claude/settings.local.json` (the principal `ZYGGY_*` and `autoMemoryDirectory`, installed from the instance's
-`instance/settings.local.json`), `*.log`, `node.json`, `.claude/zyggy.lock`, `evolution/`.
+`instance/settings.local.json`), `*.log`, `node.json`, `.claude/zyggy.lock`, `evolution/`, `.playwright-mcp/` (the browser plugin's output).
 
 ## Rules for this repository
 
