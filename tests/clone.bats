@@ -551,7 +551,7 @@ poison_home() {
   run --separate-stderr clone alice/repo
   [ "$status" -eq 0 ] || { echo "$stderr"; return 1; }
   [ -z "$stderr" ]
-  [ "$(stat -c %a "$ROOT" "$ROOT/alice" "$d" | sort -u)" = 700 ]
+  [ "$(stat -c %a "$XDG_CACHE_HOME/zyggy" "$ROOT" "$ROOT/alice" "$d" | sort -u)" = 700 ]
   v="$(tgit -C "$d" rev-parse --is-shallow-repository)"
   [ "$v" = true ]
   v="$(tgit -C "$d" tag)"

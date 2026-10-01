@@ -190,7 +190,7 @@ zy_git() { # zy_git <git arguments>
 owner_dir="$root/${canon_owner,,}"
 dest="$owner_dir/${canon_name,,}"
 mkdir -p "$owner_dir"
-chmod 700 "$root" "$owner_dir"
+chmod 700 "$(dirname "$root")" "$root" "$owner_dir"
 tmp_dest="$owner_dir/.${canon_name,,}.tmp.$$"
 
 status=0
