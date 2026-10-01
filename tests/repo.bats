@@ -131,11 +131,11 @@ scripts() { # every shell script under .claude/, relative to the repo root
   ! grep -v -i 'never' <<< "$output"
 }
 
-@test "repo: the gh stub, the git spy, the curl stub and the MCP server stub start with the template shebang and set -euo pipefail, are LF and executable in the index, and ci.yml shellchecks all four" {
+@test "repo: the gh stub, the git spy, the curl stub, the MCP server stub and the MarkItDown stub start with the template shebang and set -euo pipefail, are LF and executable in the index, and ci.yml shellchecks all five" {
   local f
   cd "$REPO_ROOT"
   for f in tests/fixtures/github/gh-stub.sh tests/fixtures/github/git-spy.sh tests/fixtures/graph/curl-stub.sh \
-    tests/fixtures/m365/ms-365-mcp-server-stub.sh; do
+    tests/fixtures/m365/ms-365-mcp-server-stub.sh tests/fixtures/m365/markitdown-stub.sh; do
     [ "$(head -n 1 "$f")" = "#!/usr/bin/env bash" ] || { echo "$f: shebang"; return 1; }
     head -n 3 "$f" | grep -qx 'set -euo pipefail'
     [ "$(git ls-files -s -- "$f" | cut -d' ' -f1)" = 100755 ] || { echo "$f: mode"; return 1; }
@@ -149,7 +149,7 @@ scripts() { # every shell script under .claude/, relative to the repo root
 @test "repo: no token-shaped value outside the secret samples, the patterns, the fixture token helper and the secret fixture page" {
   run git -C "$REPO_ROOT" grep -nE '(github_pat_|ghp_|ghs_)[A-Za-z0-9_]{20,}' -- ':!tests/fixtures/secret-samples.txt' \
     ':!tests/helpers.bash' ':!.claude/hooks/secret-patterns.txt' ':!tests/fixtures/github/repos-secret.json' \
-    ':!tests/fixtures/github/git-spy.sh'
+    ':!tests/fixtures/github/git-spy.sh' ':!tests/fixtures/m365/facts-brief.txt'
   [ "$status" -eq 1 ] || { echo "$output"; return 1; }
 }
 

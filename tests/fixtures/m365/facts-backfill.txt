@@ -1,0 +1,4 @@
+Dave (project lead, Example Org) chairs the quarterly planning of the ops programme.
+The ops programme budget for next year is still under discussion with Example Org.
+Alice owns the migration of the reporting service to the new platform.
+Erin (controller, Acme) reviews the travel expenses every month.

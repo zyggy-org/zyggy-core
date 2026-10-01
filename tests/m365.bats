@@ -3,9 +3,10 @@
 # AC-45 half, AC-46); graph.sh — key pair, app-only token, Graph reads, snapshots (Step 2, AC-30..AC-33, AC-43,
 # AC-44); state.sh and the consent files, graph.sh's approved-only write verbs on a pseudo-terminal (Step 3, AC-32,
 # AC-37, AC-40, AC-47); the server wrapper (Step 4); propose.sh and the m365-approve.sh consent terminal (Step 5,
-# AC-35, AC-36, AC-44, AC-47). Fixture lists are generated from the pinned package's endpoints.json, never typed; the consent
-# hashes are computed from the fixture snapshots, never typed. curl is a stub, openssl is real (a throw-away key pair
-# per test), the terminal is `script`. No network.
+# AC-35, AC-36, AC-44, AC-47); facts.sh and parse.sh, the validators (Step 6, AC-41). Fixture lists are generated
+# from the pinned package's endpoints.json, never typed; the consent hashes are computed from the fixture snapshots,
+# never typed. curl and markitdown are stubs, openssl is real (a throw-away key pair per test), the terminal is
+# `script`. No network.
 
 load helpers
 load fixtures/m365/pty
@@ -1946,4 +1947,210 @@ screen_before_first_prompt() { # the pty output up to and including the first an
   jq -s -e --arg h "$H2" 'length == 2 and (.[1] | .action == "delete" and .snapshot_hash == $h and .status == "pending")' "$PROPOSALS"
   [ "$(row_status p1)" = pending ] && [ ! -e "$EXECUTIONS" ] && [ "$(wc -l < "$APPROVALS")" -eq 1 ]
   ! grep -qE 'messages/d1/send|messages/m1/move' "$CURL_STUB_LOG"
+}
+
+# --- facts.sh and parse.sh, the validators (Step 6) ----------------------------------------------------------------
+
+facts() {
+  "$M365/facts.sh" "$@"
+}
+
+parse() {
+  "$M365/parse.sh" "$@"
+}
+
+inbox_snapshot() { # every file under the user's memory dir with its content
+  (cd "$USER_DIR" && find . -type f | sort | xargs cat) | md5sum
+}
+
+FACTS_SOURCE='m365-mail 2026-09-30 Invoice 2026-41'
+FACTS_USAGE='(usage: facts.sh --kind brief|mail-backfill|files-backfill --source <tag> [--max <n>] < lines)'
+
+@test "facts: --kind brief --source … < facts-brief.txt -> exit 0, no stdout; inbox/m365-brief-2026-09-30.md byte-equal to expected/m365-facts-brief.md; stderr the counts line (4 accepted, 6 refused by reason, 1 duplicate, 1 cut to 240); no refused text echoed" {
+  run --separate-stderr facts --kind brief --source "$FACTS_SOURCE" < "$M365_FIXTURES/facts-brief.txt"
+  [ "$status" -eq 0 ] && [ -z "$output" ] || { echo "$status $output $stderr"; return 1; }
+  [ "$stderr" = 'facts: 4 accepted, 6 refused (1 empty, 1 non-letter start, 1 e-mail address, 1 url, 1 phone, 1 secret pattern github-token), 1 duplicate dropped, 1 cut to 240' ] ||
+    { echo "$stderr"; return 1; }
+  assert_bytes_equal "$USER_DIR/inbox/m365-brief-2026-09-30.md" "$EXPECTED/m365-facts-brief.md"
+  ! grep -qE 'carol@|https|\+32|ghp_|starts with dash' <<< "$stderr"
+  [ -z "$(find "$USER_DIR" -name '*.tmp')" ]
+}
+
+@test "facts: IBAN, a 16-digit number, www., emoji-only and a long-opaque-token line refused and named (never echoed); a 300-char line cut to 240 with …; control characters removed, tabs collapsed" {
+  local file="$USER_DIR/inbox/m365-files-backfill-2026-09-30.md" src='m365-file ops:/Reports/q3.docx 2026-09-30'
+  run --separate-stderr facts --kind files-backfill --source "$src" < "$M365_FIXTURES/facts-refused.txt"
+  [ "$status" -eq 0 ] && [ -z "$output" ] || { echo "$status $output $stderr"; return 1; }
+  [ "$stderr" = 'facts: 1 accepted, 5 refused (1 non-letter start, 1 url, 1 secret pattern iban, 1 secret pattern card-number, 1 secret pattern long-opaque-token), 0 duplicates dropped, 1 cut to 240' ] ||
+    { echo "$stderr"; return 1; }
+  ! grep -qE 'BE71|4111|www\.|Qm9i' <<< "$stderr"
+  ! grep -qE 'BE71|4111|www\.|Qm9i' "$file"
+  [ "$(grep -c '^- \[observed\] 2026-09-30 \[m365-file ops:/Reports/q3.docx 2026-09-30\]: Example Org renewed' "$file")" -eq 1 ]
+  # the fact after "]: " is 240 characters, the last one the ellipsis
+  [ "$(sed -n 's/^- \[observed\] [0-9-]* \[[^]]*\]: //p' "$file" | LC_ALL=C.UTF-8 wc -m)" -eq 241 ]
+  grep -q '…$' "$file"
+  grep -qx 'name: m365 files-backfill 2026-09-30' "$file"
+  run --separate-stderr facts --kind files-backfill --source "$src" < <(printf 'Alice\tleads the\a weekly\r review.\n')
+  [ "$status" -eq 0 ] && [ "$stderr" = 'facts: 1 accepted, 0 refused, 0 duplicates dropped, 0 cut to 240' ] || { echo "$status $stderr"; return 1; }
+  grep -qxF -- "- [observed] 2026-09-30 [$src]: Alice leads the weekly review." "$file"
+}
+
+@test "facts: --max 3 with four good lines -> 3 written, exit 5 cap 3 reached; a second run appends below, front matter once, cross-run duplicates dropped (also under another source) -> expected/m365-facts-backfill.md" {
+  local file="$USER_DIR/inbox/m365-mail-backfill-2026-09-30.md" src='m365-mail 2026-09-12 Quarterly planning'
+  run --separate-stderr facts --kind mail-backfill --source "$src" --max 3 < "$M365_FIXTURES/facts-backfill.txt"
+  [ "$status" -eq 5 ] && [ -z "$output" ] || { echo "$status $output $stderr"; return 1; }
+  [ "$stderr" = "$(printf '%s\n' 'facts: 3 accepted, 0 refused, 0 duplicates dropped, 0 cut to 240' 'facts: cap 3 reached')" ] || { echo "$stderr"; return 1; }
+  [ "$(grep -c '^- \[observed\]' "$file")" -eq 3 ]
+  run --separate-stderr facts --kind mail-backfill --source "$src" < "$M365_FIXTURES/facts-backfill.txt"
+  [ "$status" -eq 0 ] && [ "$stderr" = 'facts: 1 accepted, 0 refused, 3 duplicates dropped, 0 cut to 240' ] || { echo "$status $stderr"; return 1; }
+  assert_bytes_equal "$file" "$EXPECTED/m365-facts-backfill.md"
+  run --separate-stderr facts --kind mail-backfill --source "m365-mail 2026-09-13 Planning follow-up" < "$M365_FIXTURES/facts-backfill.txt"
+  [ "$status" -eq 0 ] && [ "$stderr" = 'facts: 0 accepted, 0 refused, 4 duplicates dropped, 0 cut to 240' ] || { echo "$status $stderr"; return 1; }
+  assert_bytes_equal "$file" "$EXPECTED/m365-facts-backfill.md"
+  [ "$(grep -c '^---$' "$file")" -eq 2 ]
+}
+
+@test "facts: --kind x | no --kind | no --source | --source with a newline, brackets, an e-mail address, a URL or a secret (never echoed) | --max 0 or abc | an extra argument -> exit 4, nothing written; empty stdin -> exit 0 \"0 accepted\", no file; ZYGGY_TENANT unset -> 3; ZYGGY_HOOKS=off accepted" {
+  local before c
+  before="$(inbox_snapshot)"
+  local -a bad=(
+    "--kind x --source s" "--source s" "--kind brief" "--kind brief --source" "--kind brief --source s --max 0"
+    "--kind brief --source s --max abc" "--kind brief --source s extra" "--kind brief --kind brief --source s"
+  )
+  for c in "${bad[@]}"; do
+    # shellcheck disable=SC2086 # the case is a command line
+    run --separate-stderr facts $c < "$M365_FIXTURES/facts-backfill.txt"
+    [ "$status" -eq 4 ] && [ -z "$output" ] || { echo "$c: $status $output $stderr"; return 1; }
+    [[ "$stderr" == "facts: "*" $FACTS_USAGE" ]] || { echo "$c: $stderr"; return 1; }
+  done
+  for c in $'m365-mail 2026-09-30\nInjected' 'm365-mail [x]' 'm365-mail carol@example.org' 'm365-mail https://example.org/x' \
+    'm365-mail AKIAABCDEFGHIJKLMNOP'; do
+    run --separate-stderr facts --kind brief --source "$c" < "$M365_FIXTURES/facts-backfill.txt"
+    [ "$status" -eq 4 ] && [ -z "$output" ] || { echo "$c: $status $output $stderr"; return 1; }
+    ! grep -qE 'Injected|carol@|https|AKIA' <<< "$stderr" || { echo "$c: echoed: $stderr"; return 1; }
+  done
+  [ "$stderr" = "facts: --source matches secret pattern aws-access-key $FACTS_USAGE" ] || { echo "$stderr"; return 1; }
+  [ "$(inbox_snapshot)" = "$before" ]
+  run --separate-stderr facts --kind brief --source "$FACTS_SOURCE" < /dev/null
+  [ "$status" -eq 0 ] && [ -z "$output" ] && [ "$stderr" = 'facts: 0 accepted, 0 refused, 0 duplicates dropped, 0 cut to 240' ] ||
+    { echo "$status $output $stderr"; return 1; }
+  [ ! -e "$USER_DIR/inbox/m365-brief-2026-09-30.md" ] && [ "$(inbox_snapshot)" = "$before" ]
+  run --separate-stderr env -u ZYGGY_TENANT "$M365/facts.sh" --kind brief --source "$FACTS_SOURCE" < "$M365_FIXTURES/facts-backfill.txt"
+  [ "$status" -eq 3 ] && [ "$stderr" = 'facts: configuration error: ZYGGY_TENANT is not set' ] || { echo "$status $stderr"; return 1; }
+  [ "$(inbox_snapshot)" = "$before" ]
+  ZYGGY_HOOKS=off run --separate-stderr facts --kind brief --source "$FACTS_SOURCE" < "$M365_FIXTURES/facts-backfill.txt"
+  [ "$status" -eq 0 ] && [ "$stderr" = 'facts: 4 accepted, 0 refused, 0 duplicates dropped, 0 cut to 240' ] || { echo "$status $stderr"; return 1; }
+}
+
+@test "parse: report.docx in the run directory -> exit 0; stdout = the text with the secret line withheld and control characters removed; stderr \"parse: report.docx 29 lines, 1 withheld\"; the input deleted; markitdown got the file; a missing file -> 5; ZYGGY_HOOKS=off accepted" {
+  install_markitdown_stub
+  printf 'PK fake docx bytes\n' > "$ZYGGY_M365_RUN_DIR/report.docx"
+  run --separate-stderr parse "$ZYGGY_M365_RUN_DIR/report.docx"
+  [ "$status" -eq 0 ] && [ "$stderr" = 'parse: report.docx 29 lines, 1 withheld' ] || { echo "$status $stderr"; return 1; }
+  [ "$output" = "$(sed 's/^Access for the reporting tool: password: hunter2secret$/[line withheld: matches secret pattern credential-assignment]/' \
+    "$M365_FIXTURES/parsed-report.docx.txt" | tr -d '\007')" ] || { echo "$output"; return 1; }
+  ! grep -qF hunter2secret <<< "$output$stderr"
+  ! grep -q $'\a' <<< "$output"
+  [ ! -e "$ZYGGY_M365_RUN_DIR/report.docx" ]
+  grep -qx "argv=$ZYGGY_M365_RUN_DIR/report.docx" "$MARKITDOWN_STUB_LOG"
+  ZYGGY_HOOKS=off run --separate-stderr parse "$ZYGGY_M365_RUN_DIR/missing.docx"
+  [ "$status" -eq 5 ] && [ "$stderr" = 'parse: refused: missing.docx is not a regular file' ] || { echo "$status $stderr"; return 1; }
+  printf 'PK fake docx bytes\n' > "$ZYGGY_M365_RUN_DIR/report.docx"
+  ZYGGY_HOOKS=off run --separate-stderr parse "$ZYGGY_M365_RUN_DIR/report.docx"
+  [ "$status" -eq 0 ] && [ ! -e "$ZYGGY_M365_RUN_DIR/report.docx" ]
+}
+
+@test "parse: big.pdf -> the text cut at 20000 bytes followed by [cut at 20000 bytes]; the input deleted" {
+  install_markitdown_stub
+  printf '%%PDF fake\n' > "$ZYGGY_M365_RUN_DIR/big.pdf"
+  "$M365/parse.sh" "$ZYGGY_M365_RUN_DIR/big.pdf" > "$BATS_TEST_TMPDIR/parse.out" 2> "$BATS_TEST_TMPDIR/parse.err"
+  { head -c 20000 "$M365_FIXTURES/parsed-big.pdf.txt"; printf '\n[cut at 20000 bytes]\n'; } > "$BATS_TEST_TMPDIR/parse.expected"
+  assert_bytes_equal "$BATS_TEST_TMPDIR/parse.out" "$BATS_TEST_TMPDIR/parse.expected"
+  [ "$(cat "$BATS_TEST_TMPDIR/parse.err")" = 'parse: big.pdf 241 lines, 0 withheld, cut at 20000 bytes' ] || { cat "$BATS_TEST_TMPDIR/parse.err"; return 1; }
+  [ ! -e "$ZYGGY_M365_RUN_DIR/big.pdf" ]
+}
+
+@test "parse: a file outside the run directory, a symlink inside pointing outside, ../ and a symlinked directory -> exit 5 refused: not in the run directory; outside files untouched, the inside symlink removed, markitdown never ran" {
+  install_markitdown_stub
+  local out="$BATS_TEST_TMPDIR/outside" c
+  mkdir -p "$out"
+  printf 'keep me\n' > "$out/report.docx"
+  ln -s ../outside/report.docx "$ZYGGY_M365_RUN_DIR/link.docx"
+  ln -s ../outside "$ZYGGY_M365_RUN_DIR/sub"
+  for c in "$out/report.docx" "$ZYGGY_M365_RUN_DIR/link.docx" "$ZYGGY_M365_RUN_DIR/../outside/report.docx" \
+    "$ZYGGY_M365_RUN_DIR/sub/report.docx" ../outside/report.docx /etc/passwd; do
+    # shellcheck disable=SC2016 # expanded by the child shell
+    run --separate-stderr bash -c 'cd "$ZYGGY_M365_RUN_DIR" && exec "$M365/parse.sh" "$1"' _ "$c"
+    [ "$status" -eq 5 ] && [ -z "$output" ] && [ "$stderr" = 'parse: refused: not in the run directory' ] || { echo "$c: $status $output $stderr"; return 1; }
+    [ "$(cat "$out/report.docx")" = 'keep me' ] || { echo "$c: outside file touched"; return 1; }
+  done
+  [ ! -L "$ZYGGY_M365_RUN_DIR/link.docx" ] && [ -L "$ZYGGY_M365_RUN_DIR/sub" ]
+  [ -f /etc/passwd ] && [ ! -e "$MARKITDOWN_STUB_LOG" ]
+}
+
+@test "parse: over file_max_bytes -> exit 5 named with the limit; .exe .zip .jpg and no extension -> exit 5 type not parsable; every allowed type (docx xlsx pptx pdf txt md csv json html htm, any case) reaches markitdown; the input deleted in every case" {
+  install_markitdown_stub
+  local ext
+  truncate -s 15728641 "$ZYGGY_M365_RUN_DIR/huge.pdf"
+  run --separate-stderr parse "$ZYGGY_M365_RUN_DIR/huge.pdf"
+  [ "$status" -eq 5 ] && [ "$stderr" = 'parse: refused: huge.pdf is 15728641 bytes (limit 15728640)' ] || { echo "$status $stderr"; return 1; }
+  [ ! -e "$ZYGGY_M365_RUN_DIR/huge.pdf" ]
+  for ext in exe zip jpg; do
+    printf 'x' > "$ZYGGY_M365_RUN_DIR/file.$ext"
+    run --separate-stderr parse "$ZYGGY_M365_RUN_DIR/file.$ext"
+    [ "$status" -eq 5 ] && [ "$stderr" = "parse: refused: type .$ext not parsable" ] || { echo "$ext: $status $stderr"; return 1; }
+    [ ! -e "$ZYGGY_M365_RUN_DIR/file.$ext" ]
+  done
+  printf 'x' > "$ZYGGY_M365_RUN_DIR/README"
+  run --separate-stderr parse "$ZYGGY_M365_RUN_DIR/README"
+  [ "$status" -eq 5 ] && [ "$stderr" = 'parse: refused: type (none) not parsable' ] || { echo "$status $stderr"; return 1; }
+  [ ! -e "$MARKITDOWN_STUB_LOG" ]
+  for ext in docx xlsx pptx pdf txt md csv json html htm DOCX Pdf; do
+    printf 'x' > "$ZYGGY_M365_RUN_DIR/unknown.$ext"
+    run --separate-stderr parse "$ZYGGY_M365_RUN_DIR/unknown.$ext"
+    # the stub has no text for these names: the type passed and markitdown failed
+    [ "$status" -eq 6 ] && [[ "$stderr" == "parse: markitdown failed ("* ]] || { echo "$ext: $status $stderr"; return 1; }
+    [ ! -e "$ZYGGY_M365_RUN_DIR/unknown.$ext" ]
+  done
+  [ -z "$(find "$ZYGGY_M365_RUN_DIR" -mindepth 1)" ]
+}
+
+@test "parse: markitdown failure -> exit 6 with its first stderr line; MARKITDOWN_STUB_SLEEP=5 + ZYGGY_PARSE_TIMEOUT=1 (stub mode) -> exit 6 timed out after 1 s; ZYGGY_PARSE_TIMEOUT ignored outside stub mode; the input deleted" {
+  install_markitdown_stub
+  printf 'x' > "$ZYGGY_M365_RUN_DIR/notes.txt"
+  run --separate-stderr parse "$ZYGGY_M365_RUN_DIR/notes.txt"
+  [ "$status" -eq 6 ] && [ -z "$output" ] || { echo "$status $output $stderr"; return 1; }
+  [ "$stderr" = 'parse: markitdown failed (markitdown: UnsupportedFormatException: could not convert notes.txt)' ] || { echo "$stderr"; return 1; }
+  [ ! -e "$ZYGGY_M365_RUN_DIR/notes.txt" ]
+  printf 'x' > "$ZYGGY_M365_RUN_DIR/report.docx"
+  SECONDS=0
+  MARKITDOWN_STUB_SLEEP=5 ZYGGY_PARSE_TIMEOUT=1 run --separate-stderr parse "$ZYGGY_M365_RUN_DIR/report.docx"
+  [ "$status" -eq 6 ] && [ -z "$output" ] && [ "$stderr" = 'parse: markitdown timed out after 1 s' ] || { echo "$status $output $stderr"; return 1; }
+  [ "$SECONDS" -lt 4 ] && [ ! -e "$ZYGGY_M365_RUN_DIR/report.docx" ]
+  printf 'x' > "$ZYGGY_M365_RUN_DIR/report.docx"
+  MARKITDOWN_STUB_SLEEP=2 ZYGGY_PARSE_TIMEOUT=1 run --separate-stderr env -u ZYGGY_M365_STUB "$M365/parse.sh" "$ZYGGY_M365_RUN_DIR/report.docx"
+  [ "$status" -eq 0 ] && [ "$stderr" = 'parse: report.docx 29 lines, 1 withheld' ] || { echo "$status $stderr"; return 1; }
+  [ ! -e "$ZYGGY_M365_RUN_DIR/report.docx" ]
+}
+
+@test "parse: ZYGGY_M365_RUN_DIR unset or not a directory -> 3; markitdown missing or m365.json invalid -> 3 and the input deleted; no argument or two -> 4" {
+  install_markitdown_stub
+  printf 'x' > "$ZYGGY_M365_RUN_DIR/report.docx"
+  run --separate-stderr env -u ZYGGY_M365_RUN_DIR "$M365/parse.sh" "$ZYGGY_M365_RUN_DIR/report.docx"
+  [ "$status" -eq 3 ] && [ "$stderr" = 'parse: configuration error: ZYGGY_M365_RUN_DIR is not set' ] || { echo "$status $stderr"; return 1; }
+  ZYGGY_M365_RUN_DIR="$BATS_TEST_TMPDIR/nope" run --separate-stderr parse "$BATS_TEST_TMPDIR/nope/report.docx"
+  [ "$status" -eq 3 ] && [[ "$stderr" == 'parse: configuration error: ZYGGY_M365_RUN_DIR '*' is not a directory' ]] || { echo "$status $stderr"; return 1; }
+  [ -e "$ZYGGY_M365_RUN_DIR/report.docx" ]
+  PATH="$(path_without markitdown)" run --separate-stderr parse "$ZYGGY_M365_RUN_DIR/report.docx"
+  [ "$status" -eq 3 ] && [[ "$stderr" == 'parse: markitdown not found'* ]] || { echo "$status $stderr"; return 1; }
+  [ ! -e "$ZYGGY_M365_RUN_DIR/report.docx" ]
+  printf 'x' > "$ZYGGY_M365_RUN_DIR/report.docx"
+  printf '{' > "$ZYGGY_M365_CONFIG"
+  run --separate-stderr parse "$ZYGGY_M365_RUN_DIR/report.docx"
+  [ "$status" -eq 3 ] && [[ "$stderr" == 'parse: configuration error: '*'is not valid JSON' ]] || { echo "$status $stderr"; return 1; }
+  [ ! -e "$ZYGGY_M365_RUN_DIR/report.docx" ]
+  run --separate-stderr parse
+  [ "$status" -eq 4 ] && [ "$stderr" = 'parse: no file given (usage: parse.sh <file inside ZYGGY_M365_RUN_DIR>)' ] || { echo "$status $stderr"; return 1; }
+  run --separate-stderr parse a.docx b.docx
+  [ "$status" -eq 4 ] || { echo "$status $stderr"; return 1; }
+  [ ! -e "$MARKITDOWN_STUB_LOG" ]
 }

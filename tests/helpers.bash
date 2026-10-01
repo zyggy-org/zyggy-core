@@ -192,3 +192,16 @@ install_m365_server_stub() { # install_m365_server_stub [mode]
   printf '%s' "${1:-ok}" > "$d/server-stub.mode"
   export PATH="$d:$PATH" SERVER_STUB_LOG="$d/server-stub.log"
 }
+
+# The MarkItDown stub (tests/fixtures/m365/markitdown-stub.sh) as markitdown-stub/markitdown, first on PATH, with the
+# parsed texts (tests/fixtures/m365/parsed-*.txt) beside it; log: markitdown-stub/markitdown-stub.log. A run directory
+# $BATS_TEST_TMPDIR/run is exported as ZYGGY_M365_RUN_DIR (parse.sh parses only files inside it).
+install_markitdown_stub() {
+  local d="$BATS_TEST_TMPDIR/markitdown-stub"
+  mkdir -p "$d/fixtures" "$BATS_TEST_TMPDIR/run"
+  cp "$FIXTURES/m365/markitdown-stub.sh" "$d/markitdown"
+  chmod +x "$d/markitdown"
+  cp "$FIXTURES"/m365/parsed-*.txt "$d/fixtures/"
+  export PATH="$d:$PATH" MARKITDOWN_STUB_LOG="$d/markitdown-stub.log" ZYGGY_M365_RUN_DIR="$BATS_TEST_TMPDIR/run"
+  unset MARKITDOWN_STUB_SLEEP ZYGGY_PARSE_TIMEOUT
+}

@@ -1,0 +1,11 @@
+Carol (accounts payable, Example Org) asked for the payment date of invoice 2026-41.
+
+- starts with dash
+Mail carol@example.org about the invoice
+See https://example.org/x
+Call +32 470 12 34 56
+Token ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789
+Alice promised Example Org the Q4 integration plan by mid-October.
+Carol (accounts payable, Example Org) asked for the payment date of invoice 2026-41.
+The ops team moved the weekly delivery review to Thursday mornings.
+Example Org renewed the support contract with Acme for three more years, starting in January, with the same service levels, a quarterly review meeting, a named account manager on their side, and a yearly price adjustment that follows the national index; the legal team still has to sign the final version.
