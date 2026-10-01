@@ -178,3 +178,17 @@ install_curl_stub() {
   : > "$d/curl-stub.scenario"
   export PATH="$d:$PATH" CURL_STUB_DIR="$d" CURL_STUB_LOG="$d/curl-stub.log" ZYGGY_M365_STUB=1 ZYGGY_RETRY_SCALE=0
 }
+
+# The MCP server stub (tests/fixtures/m365/ms-365-mcp-server-stub.sh) as $HOME/.local/bin/ms-365-mcp-server, where
+# the pinned server is installed, with $HOME/.local/bin on PATH. mcp-wrapper.sh starts it in a cleared environment,
+# so the stub reads its mode (default ok; notools, badregex, leaky) and fixtures (the pinned tools/list and the
+# fixture access token) from beside itself and logs to $HOME/.local/bin/server-stub.log (SERVER_STUB_LOG).
+install_m365_server_stub() { # install_m365_server_stub [mode]
+  local d="$HOME/.local/bin"
+  mkdir -p "$d/fixtures"
+  cp "$FIXTURES/m365/ms-365-mcp-server-stub.sh" "$d/ms-365-mcp-server"
+  chmod +x "$d/ms-365-mcp-server"
+  cp "$FIXTURES/m365/tools-list-0.157.2.json" "$FIXTURES/graph/token-ok.json" "$d/fixtures/"
+  printf '%s' "${1:-ok}" > "$d/server-stub.mode"
+  export PATH="$d:$PATH" SERVER_STUB_LOG="$d/server-stub.log"
+}

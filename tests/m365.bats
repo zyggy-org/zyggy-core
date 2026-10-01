@@ -1457,3 +1457,142 @@ expected_enabled() {
   [ "$status" -eq 6 ] && [ "$(last_line)" = "m365: not found (d1)" ] || { echo "$status $output"; return 1; }
   [ ! -e "$EXECUTIONS" ] && [ "$(row_status p1)" = pending ]
 }
+
+# --- mcp-wrapper.sh: the server start (Step 4, AC-34, AC-43, AC-44) ---------------------------------------------
+
+# Step 1's ENABLED_TOOLS, verbatim (plan 23 "Probe findings").
+STEP1_REGEX='^(create-shared-mailbox-draft|create-shared-mailbox-reply-draft|download-bytes-to-file|get-drive-delta|get-drive-item|get-drive-root-item|get-shared-mailbox-message|get-sharepoint-site-drive-by-id|list-drive-item-versions|list-folder-files|list-shared-mailbox-folder-messages|list-shared-mailbox-messages|list-sharepoint-site-drives|search-onedrive-files)$'
+SERVER_ENV_NAMES='ENABLED_TOOLS HOME LC_ALL MS365_MCP_CLIENT_ID MS365_MCP_OAUTH_TOKEN MS365_MCP_ORG_MODE MS365_MCP_TENANT_ID MS365_MCP_TOKEN_CACHE_PATH MS365_MCP_USE_KEYTAR NODE_OPTIONS PATH'
+AUTH_LINE='auth tools registered outside the filter: list-accounts login logout remove-account select-account verify-login (denied by settings)'
+
+wrapper() {
+  "$M365/mcp-wrapper.sh" "$@"
+}
+
+server_log() { # the server stub's log, or nothing
+  local f="$HOME/.local/bin/server-stub.log"
+  if [ -f "$f" ]; then cat "$f"; fi
+}
+
+@test "wrapper: ZYGGY_TENANT unset / m365.json invalid -> exit 3, no request, server not started" {
+  install_m365_server_stub
+  local before
+  before="$(state_snapshot)"
+  unset ZYGGY_TENANT
+  run --separate-stderr wrapper < /dev/null
+  [ "$status" -eq 3 ] && [ "$stderr" = "m365: configuration error: ZYGGY_TENANT is not set" ] || { echo "$status $stderr"; return 1; }
+  [ -z "$output" ] && [ -z "$(server_log)" ] && [ "$(request_count)" -eq 0 ]
+  export ZYGGY_TENANT=acme
+  cfg '.tenant_id = "x"'
+  run --separate-stderr wrapper < /dev/null
+  [ "$status" -eq 3 ] && [ "$stderr" = "m365: configuration error: tenant_id is not a GUID" ] || { echo "$status $stderr"; return 1; }
+  [ -z "$output" ] && [ -z "$(server_log)" ] && [ "$(request_count)" -eq 0 ]
+  cfg '.tenant_id = "11111111-1111-4111-8111-111111111111" | .consent.ttl_minutes = 0'
+  run --separate-stderr wrapper --probe < /dev/null
+  [ "$status" -eq 3 ] && [ -z "$(server_log)" ] && [ "$(request_count)" -eq 0 ]
+  [ "$(state_snapshot)" = "$before" ]
+}
+
+@test "wrapper: an unknown argument -> exit 4 with the usage, nothing started" {
+  install_m365_server_stub
+  run --separate-stderr wrapper --http < /dev/null
+  [ "$status" -eq 4 ] && [ "$stderr" = "m365: unexpected argument '--http' (usage: mcp-wrapper.sh [--probe])" ] || { echo "$status $stderr"; return 1; }
+  [ -z "$(server_log)" ] && [ "$(request_count)" -eq 0 ]
+}
+
+@test "wrapper: no ms-365-mcp-server -> exit 3 'not found'; one outside \$HOME/.local (also via a symlink) -> exit 3 'not under'; no request" {
+  run --separate-stderr wrapper < /dev/null
+  [ "$status" -eq 3 ] || { echo "$status $stderr"; return 1; }
+  [ "$stderr" = 'm365: ms-365-mcp-server not found — runbook 13 "Install or upgrade the MCP server"' ] || { echo "$stderr"; return 1; }
+  [ "$(request_count)" -eq 0 ]
+  mkdir -p "$BATS_TEST_TMPDIR/elsewhere"
+  cp "$FIXTURES/m365/ms-365-mcp-server-stub.sh" "$BATS_TEST_TMPDIR/elsewhere/ms-365-mcp-server"
+  chmod +x "$BATS_TEST_TMPDIR/elsewhere/ms-365-mcp-server"
+  PATH="$BATS_TEST_TMPDIR/elsewhere:$PATH" run --separate-stderr wrapper < /dev/null
+  [ "$status" -eq 3 ] || { echo "$status $stderr"; return 1; }
+  [ "$stderr" = "m365: ms-365-mcp-server at $BATS_TEST_TMPDIR/elsewhere/ms-365-mcp-server is not under $HOME/.local — runbook 13 \"Install or upgrade the MCP server\"" ] ||
+    { echo "$stderr"; return 1; }
+  [ ! -e "$BATS_TEST_TMPDIR/elsewhere/server-stub.log" ] && [ "$(request_count)" -eq 0 ]
+  mkdir -p "$HOME/.local/bin"
+  ln -s "$BATS_TEST_TMPDIR/elsewhere/ms-365-mcp-server" "$HOME/.local/bin/ms-365-mcp-server"
+  PATH="$HOME/.local/bin:$PATH" run --separate-stderr wrapper < /dev/null
+  [ "$status" -eq 3 ] && [[ "$stderr" == *" is not under $HOME/.local "* ]] || { echo "$status $stderr"; return 1; }
+  [ ! -e "$BATS_TEST_TMPDIR/elsewhere/server-stub.log" ] && [ "$(request_count)" -eq 0 ]
+}
+
+@test "wrapper: graph.sh token failing (invalid_client) -> exit 6, one stderr line, the server never started" {
+  install_m365_server_stub
+  scenario 'oauth2/v2.0/token:400:token-invalid-client.json'
+  run --separate-stderr wrapper < /dev/null
+  [ "$status" -eq 6 ] || { echo "$status $stderr"; return 1; }
+  [ "$stderr" = 'm365: auth failed (invalid_client) — runbook 13 "Certificate rejected"' ] || { echo "$stderr"; return 1; }
+  [ -z "$output" ] && [ -z "$(server_log)" ]
+  # a missing key is graph.sh's exit 3, propagated
+  rm -f "$ZYGGY_M365_KEY_FILE"
+  run --separate-stderr wrapper --probe < /dev/null
+  [ "$status" -eq 3 ] && [ "$stderr" = "m365: key: not found in credentials directory or file" ] || { echo "$status $stderr"; return 1; }
+  [ -z "$(server_log)" ]
+}
+
+@test "wrapper: the server runs in a cleared environment of exactly the eleven names, argv --org-mode only, token=match, the values as contracted; stdout untouched" {
+  install_m365_server_stub
+  local log name
+  MS365_MCP_HTTP=1 MS365_MCP_EXPECTED_USERNAME=x NODE_OPTIONS=--inspect GH_TOKEN=x CREDENTIALS_DIRECTORY=/x \
+    ZYGGY_HOOKS=off MS365_MCP_READ_ONLY=1 run --separate-stderr wrapper < /dev/null
+  [ "$status" -eq 0 ] || { echo "$status $stderr"; return 1; }
+  # MCP speaks on stdout: the wrapper writes nothing there itself; graph.sh's key line passes through on stderr once
+  [ -z "$output" ] && [ "$stderr" = "key: file" ] || { echo "out: $output / err: $stderr"; return 1; }
+  log="$(server_log)"
+  [ "$(grep -c '^argv=' <<< "$log")" -eq 1 ] && grep -qx 'argv=--org-mode' <<< "$log" || { echo "$log"; return 1; }
+  [ "$(grep '^env=' <<< "$log" | cut -d= -f2 | tr '\n' ' ')" = "$SERVER_ENV_NAMES " ] || { echo "$log"; return 1; }
+  grep -qx 'token=match' <<< "$log"
+  for name in "NODE_OPTIONS=--max-old-space-size=512" "MS365_MCP_ORG_MODE=1" "MS365_MCP_USE_KEYTAR=0" \
+    "MS365_MCP_CLIENT_ID=$CLIENT" "MS365_MCP_TENANT_ID=$TENANT" "LC_ALL=C" "HOME=$HOME" \
+    "PATH=/usr/bin:/bin:$HOME/.local/bin" "MS365_MCP_TOKEN_CACHE_PATH=$STATE/never-written.json"; do
+    grep -qxF "value=$name" <<< "$log" || { echo "missing value=$name"; echo "$log"; return 1; }
+  done
+  [ "$(grep '^value=ENABLED_TOOLS=' <<< "$log")" = "value=ENABLED_TOOLS=$STEP1_REGEX" ] || { echo "$log"; return 1; }
+  ! grep -qE 'EXPECTED_USERNAME|ALLOWED_SCOPES|MS365_MCP_HTTP|READ_ONLY|GH_TOKEN|CREDENTIALS_DIRECTORY|ZYGGY_' <<< "$log"
+  [ ! -e "$STATE/never-written.json" ]
+  # one token request, nothing else
+  [ "$(urls)" = "POST $TOKEN_URL" ] || { urls; return 1; }
+}
+
+@test "wrapper --probe: tools: 14, the enabled names sorted, the six auth tools reported outside the filter, the env names; exit 0" {
+  install_m365_server_stub
+  run --separate-stderr wrapper --probe < /dev/null
+  [ "$status" -eq 0 ] || { echo "$status $stderr / $output"; return 1; }
+  [ "$stderr" = "key: file" ] || { echo "$stderr"; return 1; }
+  local expected
+  expected="$(printf 'tools: 14\n'; cat "$ENABLED"; printf '%s\n' "$AUTH_LINE" "env: $SERVER_ENV_NAMES")"
+  [ "$output" = "$expected" ] || { diff <(printf '%s\n' "$expected") <(printf '%s\n' "$output"); return 1; }
+  # the handshake the server saw, and the token it got
+  [ "$(grep '^rpc=' "$SERVER_STUB_LOG" | tr '\n' ' ')" = "rpc=initialize rpc=notifications/initialized rpc=tools/list " ] ||
+    { cat "$SERVER_STUB_LOG"; return 1; }
+  grep -qx 'token=match' "$SERVER_STUB_LOG"
+  grep -qx 'argv=--org-mode' "$SERVER_STUB_LOG"
+}
+
+@test "wrapper --probe: mode notools -> exit 6 'offered 0 tools'; badregex -> exit 6 'server rejected ENABLED_TOOLS'; leaky -> exit 6 naming a tool outside the filter" {
+  install_m365_server_stub notools
+  run --separate-stderr wrapper --probe < /dev/null
+  [ "$status" -eq 6 ] && [ -z "$output" ] || { echo "$status $output"; return 1; }
+  [ "$stderr" = "$(printf 'key: file\nm365: server offered 0 tools — runbook 13 "Install or upgrade the MCP server"')" ] || { echo "$stderr"; return 1; }
+  printf badregex > "$HOME/.local/bin/server-stub.mode"
+  run --separate-stderr wrapper --probe < /dev/null
+  [ "$status" -eq 6 ] && [ -z "$output" ] || { echo "$status $output"; return 1; }
+  [ "$stderr" = "$(printf 'key: file\nm365: server rejected ENABLED_TOOLS')" ] || { echo "$stderr"; return 1; }
+  printf leaky > "$HOME/.local/bin/server-stub.mode"
+  run --separate-stderr wrapper --probe < /dev/null
+  [ "$status" -eq 6 ] && [ -z "$output" ] || { echo "$status $output"; return 1; }
+  [[ "$stderr" == *'m365: server offered tools outside ENABLED_TOOLS beyond the six auth tools ('*'accept-calendar-event'*') — runbook 13 "Install or upgrade the MCP server"' ]] ||
+    { echo "$stderr"; return 1; }
+}
+
+@test "wrapper: ZYGGY_HOOKS=off is accepted (the brief run starts the server)" {
+  install_m365_server_stub
+  ZYGGY_HOOKS=off run --separate-stderr wrapper < /dev/null
+  [ "$status" -eq 0 ] && grep -qx 'token=match' "$SERVER_STUB_LOG" || { echo "$status $stderr"; return 1; }
+  ZYGGY_HOOKS=off run --separate-stderr wrapper --probe < /dev/null
+  [ "$status" -eq 0 ] && [ "${output%%$'\n'*}" = "tools: 14" ] || { echo "$status $output $stderr"; return 1; }
+}

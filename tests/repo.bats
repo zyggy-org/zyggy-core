@@ -16,8 +16,10 @@ load helpers
   # the browser plugin's server is headed by default; every instance runs it headless with an in-memory profile;
   # every Bash command starts in the project directory, so a cd into a clone never persists (spec 32)
   jq -e '.env == {"PLAYWRIGHT_MCP_HEADLESS":"true","PLAYWRIGHT_MCP_BROWSER":"chromium","PLAYWRIGHT_MCP_ISOLATED":"true","CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR":"1"}' "$s"
-  # the model's file tools never read the GitHub credential and never edit a clone (spec 32)
-  jq -e '.permissions == {"deny":["Read(~/.config/zyggy/**)","Edit(~/.cache/zyggy/repos/**)"]}' "$s"
+  # the model's file tools never read the GitHub credential and never edit a clone (spec 32); the m365 rules that
+  # follow them are asserted by the m365 tests below (spec 23)
+  jq -e '.permissions | keys == ["deny"]' "$s"
+  jq -e '.permissions.deny[0:2] == ["Read(~/.config/zyggy/**)","Edit(~/.cache/zyggy/repos/**)"]' "$s"
   jq -e '.hooks | keys == ["SessionStart","Stop"]' "$s"
   jq -e '.hooks.SessionStart | length == 1' "$s"
   jq -e '.hooks.SessionStart[0].matcher == "startup|resume|clear|compact"' "$s"
@@ -129,15 +131,18 @@ scripts() { # every shell script under .claude/, relative to the repo root
   ! grep -v -i 'never' <<< "$output"
 }
 
-@test "repo: the gh stub, the git spy and the curl stub start with the template shebang and set -euo pipefail, are LF and executable in the index, and ci.yml shellchecks all three" {
+@test "repo: the gh stub, the git spy, the curl stub and the MCP server stub start with the template shebang and set -euo pipefail, are LF and executable in the index, and ci.yml shellchecks all four" {
   local f
   cd "$REPO_ROOT"
-  for f in tests/fixtures/github/gh-stub.sh tests/fixtures/github/git-spy.sh tests/fixtures/graph/curl-stub.sh; do
+  for f in tests/fixtures/github/gh-stub.sh tests/fixtures/github/git-spy.sh tests/fixtures/graph/curl-stub.sh \
+    tests/fixtures/m365/ms-365-mcp-server-stub.sh; do
     [ "$(head -n 1 "$f")" = "#!/usr/bin/env bash" ] || { echo "$f: shebang"; return 1; }
     head -n 3 "$f" | grep -qx 'set -euo pipefail'
     [ "$(git ls-files -s -- "$f" | cut -d' ' -f1)" = 100755 ] || { echo "$f: mode"; return 1; }
     [ "$(git ls-files --eol -- "$f" | awk '{ print $1 }')" = i/lf ] || { echo "$f: eol"; return 1; }
-    grep -qF "$f" .github/workflows/ci.yml || { echo "$f: ci.yml"; return 1; }
+    # the m365 fixture scripts are shellchecked through the tests/fixtures/m365/*.sh glob
+    grep -qF "$f" .github/workflows/ci.yml || grep -qF "$(dirname "$f")/*.sh" .github/workflows/ci.yml ||
+      { echo "$f: ci.yml"; return 1; }
   done
 }
 
@@ -291,7 +296,7 @@ hygiene_words() { # hygiene_words <root> <csv>
 
 @test "repo: shellcheck -S style is clean on hooks, skill scripts and helpers" {
   cd "$REPO_ROOT"
-  run shellcheck -S style .claude/hooks/*.sh .claude/skills/*/*.sh tests/*.bash tests/fixtures/github/gh-stub.sh tests/fixtures/github/git-spy.sh tests/fixtures/graph/curl-stub.sh tests/fixtures/m365/*.bash
+  run shellcheck -S style .claude/hooks/*.sh .claude/skills/*/*.sh tests/*.bash tests/fixtures/github/gh-stub.sh tests/fixtures/github/git-spy.sh tests/fixtures/graph/curl-stub.sh tests/fixtures/m365/*.sh tests/fixtures/m365/*.bash
   [ "$status" -eq 0 ] || { echo "$output"; return 1; }
 }
 
@@ -334,4 +339,75 @@ GIT_EXEMPT=(.claude/skills/github-clone/clone.sh)
   grep -q 'logged-in' "$REPO_ROOT/.claude/rules/security.md"
   grep -q 'headless' "$REPO_ROOT/.claude/rules/security.md"
   grep -q 'CLAUDE.md' "$REPO_ROOT/.claude/rules/operations.md"
+}
+
+# --- the m365 connector's settings contract (spec 23 AC-45, plan 23 Step 4) ---------------------------------------
+
+M365_TOOLS="$REPO_ROOT/tests/fixtures/m365"
+M365_LIB="$REPO_ROOT/.claude/skills/m365/m365-lib.sh"
+
+m365_lib_value() { # m365_lib_value <bash expression> → printed by a shell that sourced the two libraries
+  bash -c 'source "$1" && source "$2" && eval "printf \"%s\\n\" $3"' _ "$HOOKS/lib.sh" "$M365_LIB" "$1"
+}
+
+@test "repo: permissions.deny = the three path rules, the two m365 Bash rules, then mcp__m365__ + every line of excluded-tools.txt (330), in that order" {
+  local s="$REPO_ROOT/.claude/settings.json"
+  jq -e '.permissions.deny[0:5] == ["Read(~/.config/zyggy/**)","Edit(~/.cache/zyggy/repos/**)","Edit(~/.local/state/zyggy/**)","Bash(.claude/skills/m365/graph.sh *)","Bash(.claude/skills/m365/m365-approve.sh *)"]' "$s"
+  [ "$(wc -l < "$M365_TOOLS/excluded-tools.txt")" -eq 330 ]
+  diff <(jq -r '.permissions.deny[5:][]' "$s") <(sed 's/^/mcp__m365__/' "$M365_TOOLS/excluded-tools.txt")
+  [ "$(jq '.permissions.deny | length' "$s")" -eq 335 ]
+  [ "$(jq '.permissions.deny | unique | length' "$s")" -eq 335 ]
+}
+
+@test "repo: the deny list names graph-batch and the six auth tools the server registers outside ENABLED_TOOLS" {
+  local s="$REPO_ROOT/.claude/settings.json" t
+  for t in graph-batch login logout verify-login list-accounts select-account remove-account; do
+    jq -e --arg t "mcp__m365__$t" '.permissions.deny | index($t) != null' "$s" > /dev/null || { echo "not denied: $t"; return 1; }
+  done
+}
+
+@test "repo: every /me tool of the pinned version is denied, and no enabled tool is" {
+  local s="$REPO_ROOT/.claude/settings.json" me
+  me="$(jq -r '.tools[] | select(.description | test("^[A-Z]+ /me(/|\\(| |$)")) | .name' "$M365_TOOLS/tools-list-0.157.2.json")"
+  [ "$(grep -c . <<< "$me")" -gt 100 ] || { echo "too few /me tools: $me"; return 1; }
+  run comm -23 <(LC_ALL=C sort <<< "$me") <(jq -r '.permissions.deny[]' "$s" | sed -n 's/^mcp__m365__//p' | LC_ALL=C sort)
+  [ -z "$output" ] || { echo "/me tools not denied: $output"; return 1; }
+  run comm -12 <(LC_ALL=C sort "$M365_TOOLS/enabled-tools.txt") <(jq -r '.permissions.deny[]' "$s" | sed -n 's/^mcp__m365__//p' | LC_ALL=C sort)
+  [ -z "$output" ] || { echo "enabled and denied: $output"; return 1; }
+}
+
+@test "repo: no enabled tool name sends, moves, deletes, updates, forwards or replies" {
+  run grep -nE 'send|move|delete|update|forward|reply-(shared|mail|all)' "$M365_TOOLS/enabled-tools.txt"
+  [ "$status" -eq 1 ] || { echo "$output"; return 1; }
+}
+
+@test "repo: m365-lib.sh's ENABLED_TOOLS is Step 1's regex, = ^( + enabled-tools.txt joined by | + )\$; its two arrays are the fixture lists" {
+  local step1='^(create-shared-mailbox-draft|create-shared-mailbox-reply-draft|download-bytes-to-file|get-drive-delta|get-drive-item|get-drive-root-item|get-shared-mailbox-message|get-sharepoint-site-drive-by-id|list-drive-item-versions|list-folder-files|list-shared-mailbox-folder-messages|list-shared-mailbox-messages|list-sharepoint-site-drives|search-onedrive-files)$'
+  local regex
+  regex="$(m365_lib_value '"$ZY_M365_ENABLED_TOOLS"')"
+  [ "$regex" = "$step1" ] || { echo "$regex"; return 1; }
+  [ "$regex" = "^($(paste -sd'|' "$M365_TOOLS/enabled-tools.txt"))$" ] || { echo "$regex"; return 1; }
+  diff <(m365_lib_value '"${ZY_M365_TOOLS_ENABLED[@]}"') "$M365_TOOLS/enabled-tools.txt"
+  diff <(m365_lib_value '"${ZY_M365_TOOLS_EXCLUDED[@]}"') "$M365_TOOLS/excluded-tools.txt"
+  diff <(m365_lib_value '"${ZY_M365_AUTH_TOOLS[@]}"') <(printf '%s\n' list-accounts login logout remove-account select-account verify-login)
+}
+
+@test "repo: .mcp.json declares exactly the m365 server, started through mcp-wrapper.sh by bash, no env, no GUID, in jq --indent 2 layout" {
+  local m="$REPO_ROOT/.mcp.json"
+  jq -e . "$m" > /dev/null
+  cmp "$m" <(jq --indent 2 . "$m")
+  jq -e 'keys == ["mcpServers"] and (.mcpServers | keys == ["m365"])' "$m"
+  jq -e '.mcpServers.m365 | keys == ["args","command"]' "$m"
+  jq -e '.mcpServers.m365.command == "bash"' "$m"
+  jq -e '.mcpServers.m365.args == ["-c", "exec \"${CLAUDE_PROJECT_DIR:-.}/.claude/skills/m365/mcp-wrapper.sh\""]' "$m"
+  run grep -nE '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-' "$m"
+  [ "$status" -eq 1 ]
+}
+
+@test "repo: mcp-wrapper.sh never names --http, --login, --read-only, npx, EXPECTED_USERNAME or ALLOWED_SCOPES, and clears the environment once" {
+  local w="$REPO_ROOT/.claude/skills/m365/mcp-wrapper.sh"
+  run grep -nE -- '--http|--login|--read-only|npx|EXPECTED_USERNAME|ALLOWED_SCOPES' "$w"
+  [ "$status" -eq 1 ] || { echo "$output"; return 1; }
+  [ "$(grep -c 'env -i' "$w")" -eq 1 ]
+  grep -qF -- '--org-mode' "$w"
 }
