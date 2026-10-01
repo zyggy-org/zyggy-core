@@ -2,7 +2,8 @@
 # m365 connector (spec 23): the pinned server's app-only tool partition and the fixtures (plan 23 Step 1,
 # AC-45 half, AC-46); graph.sh — key pair, app-only token, Graph reads, snapshots (Step 2, AC-30..AC-33, AC-43,
 # AC-44); state.sh and the consent files, graph.sh's approved-only write verbs on a pseudo-terminal (Step 3, AC-32,
-# AC-37, AC-40, AC-47). Fixture lists are generated from the pinned package's endpoints.json, never typed; the consent
+# AC-37, AC-40, AC-47); the server wrapper (Step 4); propose.sh and the m365-approve.sh consent terminal (Step 5,
+# AC-35, AC-36, AC-44, AC-47). Fixture lists are generated from the pinned package's endpoints.json, never typed; the consent
 # hashes are computed from the fixture snapshots, never typed. curl is a stub, openssl is real (a throw-away key pair
 # per test), the terminal is `script`. No network.
 
@@ -1595,4 +1596,354 @@ server_log() { # the server stub's log, or nothing
   [ "$status" -eq 0 ] && grep -qx 'token=match' "$SERVER_STUB_LOG" || { echo "$status $stderr"; return 1; }
   ZYGGY_HOOKS=off run --separate-stderr wrapper --probe < /dev/null
   [ "$status" -eq 0 ] && [ "${output%%$'\n'*}" = "tools: 14" ] || { echo "$status $output $stderr"; return 1; }
+}
+
+# --- propose.sh and the m365-approve.sh consent terminal (Step 5) -----------------------------------------------------
+
+PROPOSE_TAIL=' — review with m365-approve.sh on the VM'
+ULID_RE='[0-9A-HJKMNP-TV-Z]{26}'
+
+propose() {
+  "$M365/propose.sh" "$@"
+}
+
+approve_on_pty() { # approve_on_pty <answers file: a name under tests/fixtures/m365, or a path> [args…]
+  local answers="$1"
+  shift
+  [[ "$answers" == /* ]] || answers="$M365_FIXTURES/$answers"
+  run_on_pty "$answers" "$M365/m365-approve.sh" "$@"
+}
+
+answers() { # answers <char>… → an answers file in the test directory, one per line
+  printf '%s\n' "$@" > "$BATS_TEST_TMPDIR/answers.txt"
+  printf '%s' "$BATS_TEST_TMPDIR/answers.txt"
+}
+
+# A golden with the computed hashes put in: @H1@ etc. (full) or, with "8", their first eight characters.
+golden() { # golden <file under tests/expected> [8]
+  local s n=64
+  [ "${2:-}" != 8 ] || n=8
+  s="$(cat "$EXPECTED/$1")"
+  s="${s//@H1@/${H1:0:$n}}"
+  s="${s//@H2@/${H2:0:$n}}"
+  printf '%s' "${s//@H3@/${H3:0:$n}}"
+}
+
+fixture_snapshot() { # fixture_snapshot <row id> → that fixture row's snapshot object
+  jq -c --arg id "$1" 'select(.id == $id) | .snapshot' "$M365_FIXTURES/proposals-pending.jsonl"
+}
+
+screen_before_first_prompt() { # the pty output up to and including the first answered prompt line
+  sed -n '1,/^\[y\]es \/ \[n\]o \/ \[s\]kip \/ \[q\]uit: /p' <<< "$output"
+}
+
+@test "propose: send-draft d1 --reason … -> exit 0, one pending row (600) whose snapshot and hash are graph.sh snapshot's, origin session, not flagged; the stdout line; token, snapshot and message-sender requests, never a body; ZYGGY_HOOKS=off proposes the same" {
+  local id gets
+  "$STATE_SH" set replied 2026-09-30 m1
+  run --separate-stderr propose send-draft d1 --reason "Carol asked for the invoice date"
+  [ "$status" -eq 0 ] || { echo "$status $output $stderr"; return 1; }
+  [[ "$output" =~ ^proposed:\ ($ULID_RE)\ send-draft\ \"RE:\ Invoice\ 2026-41\"$PROPOSE_TAIL$ ]] || { echo "$output"; return 1; }
+  id="${BASH_REMATCH[1]}"
+  [ -z "$stderr" ] || { echo "stderr: $stderr"; return 1; }
+  [ "$(stat -c %a "$STATE")" = 700 ] && [ "$(stat -c %a "$PROPOSALS")" = 600 ]
+  [ "$(wc -l < "$PROPOSALS")" -eq 1 ]
+  jq -e --arg id "$id" --arg h "$H1" --argjson s "$(fixture_snapshot p1)" '.id == $id and .ts == "2026-09-30T10:00:00Z"
+    and .action == "send-draft" and .target_id == "d1" and .snapshot == $s and .snapshot_hash == $h
+    and .reason == "Carol asked for the invoice date" and .origin == "session" and .status == "pending"
+    and .recipient_outside_policy == false and .recipient_policy == ["alice@acme.example", "carol@example.org"]
+    and (has("folder") | not) and (keys | length) == 11' "$PROPOSALS" || { cat "$PROPOSALS"; return 1; }
+  # Graph only: the snapshot, the Draft's conversation, the replied-to message's sender — no body ($select=…body)
+  gets="$(urls | grep '^GET ')"
+  [ "$gets" = "$(printf '%s\n' "GET $GRAPH_URL/users/$UPN/messages/d1?\$select=id,subject,toRecipients,ccRecipients,bccRecipients,from,receivedDateTime,parentFolderId,changeKey,isDraft" \
+    "GET $GRAPH_URL/users/$UPN/messages/d1?\$select=from,replyTo,conversationId" "GET $GRAPH_URL/users/$UPN/messages/m1?\$select=from,replyTo,conversationId")" ] ||
+    { urls; return 1; }
+  [ "$(urls | grep -vc "^POST $TOKEN_URL\$")" -eq 3 ]
+  # the row's snapshot is byte for byte graph.sh snapshot's canonical line
+  [ "$(graph snapshot draft d1 2> /dev/null | sed -n 1p)" = "$(jq -c '.snapshot' "$PROPOSALS")" ]
+  # proposing is allowed unattended, without a terminal (the brief run)
+  reset_consent
+  "$STATE_SH" set replied 2026-09-30 m1
+  ZYGGY_HOOKS=off run --separate-stderr propose send-draft d1 --reason "Carol asked for the invoice date" < /dev/null
+  [ "$status" -eq 0 ] && [[ "$output" =~ ^proposed:\ $ULID_RE\ send-draft ]] || { echo "$status $output $stderr"; return 1; }
+  jq -e --arg h "$H1" '.snapshot_hash == $h and .status == "pending"' "$PROPOSALS"
+}
+
+@test "propose: origin is \"brief <date>\" when brief.sh exports ZYGGY_M365_ORIGIN (\"brief 2026-09-30\" or \"brief\"), else session; any other value -> exit 4" {
+  ZYGGY_M365_ORIGIN="brief 2026-09-30" run --separate-stderr propose delete m1 --reason "Newsletter"
+  [ "$status" -eq 0 ] || { echo "$status $stderr"; return 1; }
+  [ "$(jq -r .origin "$PROPOSALS")" = "brief 2026-09-30" ]
+  reset_consent
+  ZYGGY_M365_ORIGIN=brief run --separate-stderr propose delete m1 --reason "Newsletter"
+  [ "$(jq -r .origin "$PROPOSALS")" = "brief 2026-09-30" ]
+  reset_consent
+  ZYGGY_M365_ORIGIN=session run --separate-stderr propose delete m1 --reason "Newsletter"
+  [ "$(jq -r .origin "$PROPOSALS")" = session ]
+  reset_consent
+  ZYGGY_M365_ORIGIN="anything" run --separate-stderr propose delete m1 --reason "Newsletter"
+  [ "$status" -eq 4 ] && [ "$stderr" = "m365-propose: ZYGGY_M365_ORIGIN must be 'brief [<date>]' or 'session'" ] || { echo "$status $stderr"; return 1; }
+  [ ! -e "$PROPOSALS" ]
+}
+
+@test "propose: move m1 archive -> folder archive; move m1 \"Projects/2026\" -> folder kept verbatim; delete m1 -> action delete; snapshots of the message, never flagged; a second send-draft d1 -> \"proposed: <same id> (duplicate)\", no new row" {
+  local id
+  run --separate-stderr propose move m1 archive --reason "Keep the thread with the other invoices"
+  [ "$status" -eq 0 ] && [[ "$output" =~ ^proposed:\ $ULID_RE\ move\ \"Invoice\ 2026-41\"$PROPOSE_TAIL$ ]] || { echo "$status $output $stderr"; return 1; }
+  jq -e --arg h "$H3" --argjson s "$(fixture_snapshot p3)" '.action == "move" and .target_id == "m1" and .folder == "archive"
+    and .snapshot == $s and .snapshot_hash == $h and .recipient_outside_policy == false and (has("recipient_policy") | not)' "$PROPOSALS"
+  ! grep -q 'from,replyTo,conversationId' "$CURL_STUB_LOG"
+  reset_consent
+  run --separate-stderr propose move m1 "Projects/2026" --reason x
+  [ "$status" -eq 0 ] || { echo "$status $stderr"; return 1; }
+  [ "$(jq -r .folder "$PROPOSALS")" = "Projects/2026" ]
+  reset_consent
+  run --separate-stderr propose delete m1 --reason x
+  [ "$status" -eq 0 ] && [[ "$output" =~ ^proposed:\ $ULID_RE\ delete\ \"Invoice\ 2026-41\" ]] || { echo "$status $output"; return 1; }
+  jq -e --arg h "$H2" '.action == "delete" and .snapshot_hash == $h and (has("folder") | not)' "$PROPOSALS"
+  # dedup by action + target while the row is pending
+  run --separate-stderr propose send-draft d1 --reason "first"
+  id="$(jq -r 'select(.action == "send-draft") | .id' "$PROPOSALS")"
+  : > "$CURL_STUB_LOG"
+  run --separate-stderr propose send-draft d1 --reason "second"
+  [ "$status" -eq 0 ] && [ "$output" = "proposed: $id (duplicate)" ] || { echo "$status $output $stderr"; return 1; }
+  [ "$(wc -l < "$PROPOSALS")" -eq 2 ] && [ "$(request_count)" -eq 0 ]
+  # once the row is no longer pending, the same action may be proposed again
+  "$STATE_SH" mark "$id" refused
+  run --separate-stderr propose send-draft d1 --reason "third"
+  [ "$status" -eq 0 ] && [ "$(wc -l < "$PROPOSALS")" -eq 3 ] || { echo "$status $output"; return 1; }
+  # ULID-like ids differ
+  [ "$(jq -r .id "$PROPOSALS" | sort -u | wc -l)" -eq 3 ]
+}
+
+@test "propose: a recipient outside {mailbox, the replied-to sender} -> recorded and flagged; not a draft -> 4; 404 -> 6; forward/send-all -> 4; recipient/body/subject options -> 4; reason > 500, URL, e-mail, secret -> 4 (never echoed); control chars stripped; delete not allowed -> 4; nothing written when refused" {
+  local long a o r
+  "$STATE_SH" set replied 2026-09-30 m1
+  scenario 'messages/d1\?\$select=id,subject,toRecipients:200:snapshot-d1-outside.json'
+  run --separate-stderr propose send-draft d1 --reason "Carol asked for the invoice date"
+  [ "$status" -eq 0 ] || { echo "$status $stderr"; return 1; }
+  [[ "$output" == *"$PROPOSE_TAIL (recipient outside policy)" ]] || { echo "$output"; return 1; }
+  jq -e '.recipient_outside_policy == true and .snapshot.to == ["carol@example.org", "mallory@external.example"]' "$PROPOSALS"
+  # with no replied-to message recorded the policy is the mailbox alone: carol is outside too
+  reset_consent
+  run --separate-stderr propose send-draft d1 --reason "Carol asked"
+  [ "$status" -eq 0 ] && [[ "$output" == *"(recipient outside policy)" ]] || { echo "$output"; return 1; }
+  jq -e '.recipient_policy == ["alice@acme.example"]' "$PROPOSALS"
+  reset_consent
+  scenario 'messages/d1\?\$select=id,subject,toRecipients:200:snapshot-d1-sent.json'
+  run --separate-stderr propose send-draft d1 --reason x
+  [ "$status" -eq 4 ] && [ "$stderr" = "m365-propose: d1 is not a draft" ] || { echo "$status $stderr"; return 1; }
+  [ ! -e "$PROPOSALS" ]
+  scenario 'messages/d1\?\$select=id,subject,toRecipients:404:graph-not-found.json'
+  run --separate-stderr propose send-draft d1 --reason x
+  [ "$status" -eq 6 ] && [ "$stderr" = "m365-propose: not found (d1)" ] || { echo "$status $stderr"; return 1; }
+  [ ! -e "$PROPOSALS" ]
+  : > "$CURL_STUB_LOG"
+  for a in forward send-all reply; do
+    run --separate-stderr propose "$a" m1 --reason x
+    [ "$status" -eq 4 ] && [[ "$stderr" == "m365-propose: unknown action '$a' (only send-draft, move and delete exist) (usage: "* ]] || { echo "$a: $status $stderr"; return 1; }
+  done
+  for o in --to --to=bob@example.org --cc --bcc --body --body=hi --subject --recipients; do
+    run --separate-stderr propose send-draft d1 "$o" x --reason x
+    [ "$status" -eq 4 ] && [ "$stderr" = "m365-propose: no recipient, body or subject parameter exists — the proposal snapshots the Draft as Graph holds it" ] ||
+      { echo "$o: $status $stderr"; return 1; }
+  done
+  long="$(printf 'a%.0s' {1..501})"
+  run --separate-stderr propose delete m1 --reason "$long"
+  [ "$status" -eq 4 ] && [ "$stderr" = "m365-propose: the reason is longer than 500 characters" ] || { echo "$status $stderr"; return 1; }
+  for r in "see https://evil.example/x" "visit www.example.org now" "forward to mallory@external.example"; do
+    run --separate-stderr propose delete m1 --reason "$r"
+    [ "$status" -eq 4 ] && [[ "$stderr" == "m365-propose: the reason contains "* ]] || { echo "$r: $status $stderr"; return 1; }
+  done
+  run --separate-stderr propose delete m1 --reason "the key AKIAABCDEFGHIJKLMNOP is in it"
+  [ "$status" -eq 4 ] && [ "$stderr" = "m365-propose: the reason matches secret pattern aws-access-key (not recorded)" ] || { echo "$status $stderr"; return 1; }
+  [ "$(request_count)" -eq 0 ] && [ ! -e "$PROPOSALS" ]
+  run --separate-stderr propose delete m1 --reason $'News\x01letter\tfrom\nDave\x1b[31m'
+  [ "$status" -eq 0 ] || { echo "$status $stderr"; return 1; }
+  [ "$(jq -r .reason "$PROPOSALS")" = "Newsletter from Dave[31m" ]
+  reset_consent
+  cfg '.consent.allowed_actions = ["send-draft", "move"]'
+  run --separate-stderr propose delete m1 --reason x
+  [ "$status" -eq 4 ] && [ "$stderr" = "m365-propose: action delete not allowed by consent.allowed_actions" ] || { echo "$status $stderr"; return 1; }
+  [ ! -e "$PROPOSALS" ] && [ "$(request_count)" -eq 0 ]
+}
+
+@test "propose: ZYGGY_TENANT unset / m365.json invalid -> exit 3; no --reason, no action, bad id, move without folder, empty reason -> exit 4; nothing written, no request" {
+  ZYGGY_TENANT='' run --separate-stderr propose delete m1 --reason x
+  [ "$status" -eq 3 ] || { echo "$status $stderr"; return 1; }
+  cfg '.consent.ttl_minutes = 0'
+  run --separate-stderr propose delete m1 --reason x
+  [ "$status" -eq 3 ] && [ "$stderr" = "m365-propose: configuration error: .consent.ttl_minutes must be an integer 1..1440" ] || { echo "$status $stderr"; return 1; }
+  install_m365_fixture_config
+  run --separate-stderr propose delete m1
+  [ "$status" -eq 4 ] && [ "$stderr" = "m365-propose: no --reason given (usage: propose.sh send-draft <draft-id> --reason <text> | move <message-id> <folder> --reason <text> | delete <message-id> --reason <text>)" ] ||
+    { echo "$status $stderr"; return 1; }
+  run --separate-stderr propose
+  [ "$status" -eq 4 ]
+  run --separate-stderr propose delete 'm1/../x' --reason x
+  [ "$status" -eq 4 ]
+  run --separate-stderr propose move m1 --reason x
+  [ "$status" -eq 4 ] && [[ "$stderr" == "m365-propose: move needs <message-id> <folder> (usage: "* ]] || { echo "$status $stderr"; return 1; }
+  run --separate-stderr propose delete m1 --reason "   "
+  [ "$status" -eq 4 ] && [[ "$stderr" == "m365-propose: the reason is empty (usage: "* ]]
+  [ ! -e "$PROPOSALS" ] && [ "$(request_count)" -eq 0 ]
+}
+
+@test "approve: no terminal (< /dev/null, stdout to a file) -> exit 5 refused: no terminal; ZYGGY_HOOKS=off under the pty -> exit 5 refused: unattended run (checked first); --list without a tty -> the pending rows byte-equal to expected/m365-proposals-list.txt, no body, no request, nothing changed" {
+  local sums
+  seed_fixture proposals-pending.jsonl "$PROPOSALS"
+  sums="$(md5sum "$PROPOSALS")"
+  status=0
+  "$M365/m365-approve.sh" < /dev/null > "$BATS_TEST_TMPDIR/approve.out" 2> "$BATS_TEST_TMPDIR/approve.err" || status=$?
+  [ "$status" -eq 5 ] && [ ! -s "$BATS_TEST_TMPDIR/approve.out" ] || { echo "$status"; cat "$BATS_TEST_TMPDIR/approve.out"; return 1; }
+  [ "$(cat "$BATS_TEST_TMPDIR/approve.err")" = "m365-approve: refused: no terminal" ]
+  # a terminal on one side only is not a terminal
+  run run_on_pty /dev/null bash -c '"$0" > /dev/null' "$M365/m365-approve.sh"
+  [ "$status" -eq 5 ] && [ "$(last_line)" = "m365-approve: refused: no terminal" ] || { echo "$status $output"; return 1; }
+  ZYGGY_HOOKS=off run approve_on_pty /dev/null
+  [ "$status" -eq 5 ] && [ "$output" = "m365-approve: refused: unattended run (ZYGGY_HOOKS=off)" ] || { echo "$status $output"; return 1; }
+  ZYGGY_HOOKS=off run --separate-stderr "$M365/m365-approve.sh" < /dev/null
+  [ "$status" -eq 5 ] && [ "$stderr" = "m365-approve: refused: unattended run (ZYGGY_HOOKS=off)" ]
+  run --separate-stderr "$M365/m365-approve.sh" --list < /dev/null
+  [ "$status" -eq 0 ] && [ -z "$stderr" ] || { echo "$status $stderr"; return 1; }
+  [ "$output" = "$(golden m365-proposals-list.txt 8)" ] || { diff <(printf '%s\n' "$output") <(golden m365-proposals-list.txt 8); return 1; }
+  run --separate-stderr "$M365/m365-approve.sh" --bogus < /dev/null
+  [ "$status" -eq 4 ] && [ "$stderr" = "m365-approve: unexpected argument '--bogus' (usage: m365-approve.sh [--list])" ]
+  [ "$(request_count)" -eq 0 ] && [ "$(md5sum "$PROPOSALS")" = "$sums" ] && [ ! -e "$APPROVALS" ]
+}
+
+@test "approve: under the pty with p1 (send-draft), p2 (delete), p3 (move) pending and answers y, n, s: the screen before the first prompt is expected/m365-approve-screen.txt; y -> approval {p1, H1, ts, tty} then executed: send-draft H1 (202); p2 shown as a soft delete with the preview, n -> refused; p3 shown, s -> pending; exit 0; the body only on the terminal" {
+  seed_fixture proposals-pending.jsonl "$PROPOSALS"
+  run approve_on_pty answers-y-n.txt
+  [ "$status" -eq 0 ] || { echo "$status $output"; return 1; }
+  [ "$(screen_before_first_prompt)" = "$(golden m365-approve-screen.txt)" ] ||
+    { diff <(screen_before_first_prompt) <(golden m365-approve-screen.txt); return 1; }
+  # y: the approval is bound to the hash shown, then graph.sh executed it on this terminal
+  [ "$(wc -l < "$APPROVALS")" -eq 1 ] && [ "$(stat -c %a "$APPROVALS")" = 600 ]
+  jq -e --arg h "$H1" '.row_id == "p1" and .hash_at_approval == $h and .ts == "2026-09-30T10:00:00Z" and (.tty | test("^pts/[0-9]+$"))
+    and (keys | length) == 4' "$APPROVALS" || { cat "$APPROVALS"; return 1; }
+  grep -qxF "executed: send-draft $H1 (202)" <<< "$output"
+  [ "$(urls | grep -c "^POST $GRAPH_URL/users/$UPN/messages/d1/send\$")" -eq 1 ]
+  ! grep -q 'messages/m1/move' "$CURL_STUB_LOG"
+  [ "$(row_status p1)" = executed ]
+  jq -e --arg h "$H1" '.row_id == "p1" and .hash == $h and .http_status == 202' "$EXECUTIONS"
+  # n: the soft delete, the message preview, refused, nothing executed
+  grep -qxF '  action:   delete — soft delete → Deleted Items (never a hard delete)' <<< "$output"
+  grep -qxF '  body (preview, first 500 characters):' <<< "$output"
+  grep -qF 'Hi Alice, when is the invoice due?' <<< "$output"
+  grep -qxF 'refused: p2 — nothing executed' <<< "$output"
+  [ "$(row_status p2)" = refused ]
+  # s: the move is shown and stays pending
+  grep -qxF '  action:   move → archive' <<< "$output"
+  grep -qxF 'skipped: p3 — stays pending' <<< "$output"
+  [ "$(row_status p3)" = pending ]
+  [ "$(wc -l < "$EXECUTIONS")" -eq 1 ]
+  [ "$(last_line)" = "m365-approve: executed 1, refused 1, skipped 1, expired 0, not executed 0" ]
+  # graph.sh's key line stays off the screen; the body was on the terminal (pty.out) and nowhere else
+  ! grep -q '^key: ' <<< "$output"
+  grep -qF 'BODYTEXT-NEVER-STORED' "$BATS_TEST_TMPDIR/pty.out"
+}
+
+@test "approve: the Draft changed since the proposal -> CHANGED since proposal (subject edited) with the current values; y binds the CURRENT hash and graph.sh executes against it" {
+  local current
+  seed_proposal p1
+  current="$(hash_of "$(jq -c '.subject = "RE: Invoice 2026-41 (final)" | .changeKey = "CK2"' <<< "$(fixture_snapshot p1)")")"
+  [ "$current" != "$H1" ]
+  # the approve session's snapshot, then graph.sh's re-check before the POST
+  scenario 'messages/d1\?\$select=id,subject,toRecipients:200:snapshot-d1-changed.json'
+  scenario 'messages/d1\?\$select=id,subject,toRecipients:200:snapshot-d1-changed.json'
+  run approve_on_pty answers-y.txt
+  [ "$status" -eq 0 ] || { echo "$status $output"; return 1; }
+  grep -qxF '  CHANGED since proposal (subject edited) — the values below are the current ones; y approves them' <<< "$output" || { echo "$output"; return 1; }
+  grep -qxF "  hash:     $current" <<< "$output"
+  grep -qxF '  subject:  RE: Invoice 2026-41 (final)' <<< "$output"
+  jq -e --arg h "$current" '.row_id == "p1" and .hash_at_approval == $h' "$APPROVALS"
+  grep -qxF "executed: send-draft $current (202)" <<< "$output"
+  jq -e --arg h "$current" '.row_id == "p1" and .hash == $h and .http_status == 202' "$EXECUTIONS"
+  [ "$(row_status p1)" = executed ]
+}
+
+@test "approve: a row pending for more than 7 days -> listed stale, expired at start, no prompt; a Draft no longer a draft -> expired, no prompt; q at the first prompt -> exit 0, nothing changed; a flagged row -> RECIPIENT OUTSIDE POLICY: mallory@external.example before the prompt" {
+  local sums
+  seed_proposal p1 '.ts = "2026-09-20T09:00:00Z"'
+  run --separate-stderr "$M365/m365-approve.sh" --list < /dev/null
+  [ "$output" = "p1 pending send-draft RE: Invoice 2026-41 brief 2026-09-30 #${H1:0:8} stale" ] || { echo "$output"; return 1; }
+  run approve_on_pty /dev/null
+  [ "$status" -eq 0 ] || { echo "$status $output"; return 1; }
+  grep -qxF 'p1 expired: pending for more than 7 days' <<< "$output"
+  grep -qxF 'm365-approve: no pending proposals' <<< "$output"
+  ! grep -qF '[y]es' <<< "$output"
+  [ "$(row_status p1)" = expired ]
+  # the Draft was sent elsewhere: expired without a prompt
+  reset_consent
+  seed_proposal p1
+  scenario 'messages/d1\?\$select=id,subject,toRecipients:200:snapshot-d1-sent.json'
+  run approve_on_pty /dev/null
+  [ "$status" -eq 0 ] || { echo "$status $output"; return 1; }
+  grep -qxF '  send-draft d1: no longer a draft — expired' <<< "$output"
+  ! grep -qF '[y]es' <<< "$output"
+  [ "$(row_status p1)" = expired ] && [ ! -e "$APPROVALS" ]
+  # q at the first prompt
+  reset_consent
+  seed_fixture proposals-pending.jsonl "$PROPOSALS"
+  sums="$(md5sum "$PROPOSALS")"
+  run approve_on_pty "$(answers q)"
+  [ "$status" -eq 0 ] || { echo "$status $output"; return 1; }
+  grep -qxF 'quit — the remaining proposals stay pending' <<< "$output"
+  [ "$(md5sum "$PROPOSALS")" = "$sums" ] && [ ! -e "$APPROVALS" ] && [ ! -e "$EXECUTIONS" ]
+  ! grep -qE 'messages/d1/send|messages/m1/move' "$CURL_STUB_LOG"
+  # a flagged proposal, made by propose.sh, shown by the approve session with the outsider named
+  reset_consent
+  "$STATE_SH" set replied 2026-09-30 m1
+  scenario 'messages/d1\?\$select=id,subject,toRecipients:200:snapshot-d1-outside.json'
+  run --separate-stderr propose send-draft d1 --reason "Carol asked for the invoice date"
+  [ "$status" -eq 0 ] || { echo "$status $stderr"; return 1; }
+  scenario 'messages/d1\?\$select=id,subject,toRecipients:200:snapshot-d1-outside.json'
+  run approve_on_pty answers-s-q.txt
+  [ "$status" -eq 0 ] || { echo "$status $output"; return 1; }
+  ! grep -qF 'CHANGED' <<< "$output"
+  grep -qxF '  RECIPIENT OUTSIDE POLICY: mallory@external.example' <<< "$output" || { echo "$output"; return 1; }
+  [ "$(sed -n '/RECIPIENT OUTSIDE POLICY/{n;p;}' <<< "$output")" = '[y]es / [n]o / [s]kip / [q]uit: s' ] || { echo "$output"; return 1; }
+  [ "$(jq -r .status "$PROPOSALS")" = pending ]
+}
+
+@test "approve: y but graph.sh refuses (allowed_actions narrowed after the proposal) -> its refusal line, the approval stays recorded, the row stays pending; y and Graph answers 403 -> failed: 403 — runbook, row failed" {
+  seed_proposal p1
+  cfg '.consent.allowed_actions = ["move"]'
+  run approve_on_pty answers-y.txt
+  [ "$status" -eq 0 ] || { echo "$status $output"; return 1; }
+  grep -qxF 'm365: action send-draft not allowed by consent.allowed_actions' <<< "$output" || { echo "$output"; return 1; }
+  grep -qxF 'not executed — your approval is recorded and p1 stays as it is; fix the cause and run m365-approve.sh again within 60 min' <<< "$output"
+  jq -e --arg h "$H1" '.row_id == "p1" and .hash_at_approval == $h' "$APPROVALS"
+  [ "$(row_status p1)" = pending ] && [ ! -e "$EXECUTIONS" ]
+  ! grep -q 'messages/d1/send' "$CURL_STUB_LOG"
+  [ "$(last_line)" = "m365-approve: executed 0, refused 0, skipped 0, expired 0, not executed 1" ]
+  install_m365_fixture_config
+  reset_consent
+  seed_proposal p1
+  scenario 'messages/d1/send:403:graph-forbidden.json'
+  run approve_on_pty answers-y.txt
+  [ "$status" -eq 0 ] || { echo "$status $output"; return 1; }
+  grep -qxF 'failed: 403 — runbook 13 "Scope or grant missing"' <<< "$output" || { echo "$output"; return 1; }
+  [ "$(row_status p1)" = failed ]
+  jq -e '.row_id == "p1" and .http_status == 403' "$EXECUTIONS"
+}
+
+@test "unit shape (AC-47): with ZYGGY_HOOKS=off and no tty (stdin /dev/null, stdout a file) propose.sh proposes; graph.sh send-draft --approved <valid H1> -> exit 5 refused: unattended run (before the tty check); m365-approve.sh -> exit 5 refused: unattended run; nothing executed" {
+  local actions
+  seed_proposal p1
+  seed_fixture approvals-p1.jsonl "$APPROVALS"
+  # what the morning-brief run's model can do: the run's child has ZYGGY_HOOKS=off and no terminal
+  # shellcheck disable=SC2016 # expanded by the child shell
+  actions='"$M365/propose.sh" delete m1 --reason "Newsletter"; echo "propose=$?"
+    "$M365/graph.sh" send-draft --approved "$H1"; echo "graph=$?"
+    "$M365/m365-approve.sh"; echo "approve=$?"'
+  H1="$H1" ZYGGY_HOOKS=off bash -c "$actions" < /dev/null > "$BATS_TEST_TMPDIR/unit.out" 2> "$BATS_TEST_TMPDIR/unit.err"
+  grep -qx 'propose=0' "$BATS_TEST_TMPDIR/unit.out" || { cat "$BATS_TEST_TMPDIR/unit.out" "$BATS_TEST_TMPDIR/unit.err"; return 1; }
+  grep -qE "^proposed: $ULID_RE delete \"Invoice 2026-41\"$PROPOSE_TAIL\$" "$BATS_TEST_TMPDIR/unit.out"
+  grep -qx 'graph=5' "$BATS_TEST_TMPDIR/unit.out"
+  grep -qx 'approve=5' "$BATS_TEST_TMPDIR/unit.out"
+  [ "$(cat "$BATS_TEST_TMPDIR/unit.err")" = "$(printf '%s\n' 'm365: refused: unattended run (ZYGGY_HOOKS=off)' 'm365-approve: refused: unattended run (ZYGGY_HOOKS=off)')" ] ||
+    { cat "$BATS_TEST_TMPDIR/unit.err"; return 1; }
+  jq -s -e --arg h "$H2" 'length == 2 and (.[1] | .action == "delete" and .snapshot_hash == $h and .status == "pending")' "$PROPOSALS"
+  [ "$(row_status p1)" = pending ] && [ ! -e "$EXECUTIONS" ] && [ "$(wc -l < "$APPROVALS")" -eq 1 ]
+  ! grep -qE 'messages/d1/send|messages/m1/move' "$CURL_STUB_LOG"
 }

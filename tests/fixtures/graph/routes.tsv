@@ -9,6 +9,7 @@ GET	/users/alice@acme\.example/mailFolders/sentitems/messages\?\$filter=sentDate
 GET	/users/alice@acme\.example/drive\?	200	user-drive.json	-
 GET	/users/alice@acme\.example/messages/m1\?\$select=from,replyTo,conversationId$	200	message-m1.json	-
 GET	/users/alice@acme\.example/messages/m2\?\$select=from,replyTo,conversationId$	200	message-m2.json	-
+GET	/users/alice@acme\.example/messages/d1\?\$select=from,replyTo,conversationId$	200	snapshot-d1.json	-
 GET	/users/alice@acme\.example/messages/d1\?\$select=id,subject,body$	200	body-d1.json	-
 GET	/users/alice@acme\.example/messages/m1\?\$select=id,subject,body$	200	body-m1.json	-
 GET	/users/alice@acme\.example/messages/d1\?\$select=id,subject,toRecipients	200	snapshot-d1.json	-
