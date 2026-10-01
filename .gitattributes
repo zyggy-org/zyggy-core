@@ -7,3 +7,4 @@ tests/fixtures/** -text
 tests/fixtures/github/gh-stub.sh text eol=lf
 tests/fixtures/github/git-spy.sh text eol=lf
 tests/fixtures/graph/curl-stub.sh text eol=lf
+tests/fixtures/m365/pty.bash text eol=lf

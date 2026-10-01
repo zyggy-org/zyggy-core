@@ -2,7 +2,8 @@
 set -euo pipefail
 # Central's Microsoft 365 application identity, in one script (spec 23): generates the key pair on this machine,
 # mints app-only access tokens with a certificate client assertion, reads Graph on /users/<mailbox>, /drives and
-# /sites, and (Step 3) executes one consented send, move or soft delete against an approved, hash-matching row.
+# /sites, and executes one consented send, move or soft delete against an approved, unexpired, hash-matching row
+# on an attended terminal — the only write path anywhere (D6).
 # usage: graph.sh cert-init [--rotate|--commit] | token [--key new] [--alg PS256|RS256]
 #        | check [--counts] [--other-mailbox <upn>] [--drive <id>] | mail-folders | drives | drafts-since <ISO>
 #        | message-sender <id> | snapshot draft|message <id> | get draft|message <id> | sent-since <ISO>
@@ -10,7 +11,7 @@ set -euo pipefail
 # Exit 0 · 3 configuration or key · 4 usage · 5 refused · 6 identity or Graph failure.
 # The private key is handed to openssl by path and never read into a variable. The access token leaves this script
 # only on stdout (`token`) and in a 0600 header file handed to curl. curl runs in a cleared environment with
-# --proto =https and a hard timeout; the personal (me) endpoints are never requested; a hard DELETE never exists.
+# --proto =https and a hard timeout; the personal (me) endpoints are never requested; a hard delete never exists.
 # shellcheck source=../../hooks/lib.sh
 source "$(dirname "${BASH_SOURCE[0]}")/../../hooks/lib.sh"
 # shellcheck source=m365-lib.sh
@@ -25,6 +26,10 @@ readonly ZY_M365_SNAPSHOT_SELECT='id,subject,toRecipients,ccRecipients,bccRecipi
 readonly ZY_M365_DRAFTS_SELECT='id,subject,toRecipients,ccRecipients,bccRecipients,conversationId,createdDateTime,changeKey,body'
 readonly ZY_M365_SENT_SELECT='id,subject,toRecipients,sentDateTime,internetMessageId'
 readonly ZY_M365_PREFER_TEXT='Prefer: outlook.body-content-type="text"'
+# Graph's well-known mail folder names: a move row may name one and it is passed to Graph as-is.
+readonly ZY_M365_WELL_KNOWN_FOLDERS=' archive clutter conflicts conversationhistory deleteditems drafts inbox junkemail localfailures msgfolderroot outbox recoverableitemsdeletions scheduled searchfolders sentitems serverfailures syncissues '
+# A write's failing statuses are recorded and marked, not died on: every 4xx but 401 (re-minted once) and every 5xx.
+readonly ZY_M365_WRITE_TOLERATE='40[02-9]|4[1-9][0-9]|5[0-9][0-9]'
 
 die() { # die <exit code> <message>
   zy_die "$@"
@@ -127,6 +132,7 @@ case "$verb" in
     arg="$2"
     ;;
   send-draft | move | delete)
+    [[ " $* " != *" --hard "* ]] || usage "delete --hard: a hard delete never exists; delete is a move to deleteditems"
     if [ $# -ne 2 ] || [ "$1" != --approved ]; then
       usage "$verb needs exactly --approved <hash> (nothing leaves the mailbox without an approved row)"
     fi
@@ -136,10 +142,18 @@ case "$verb" in
   *) usage "unknown verb '$verb'" ;;
 esac
 
-# --- 2. the attended-only verb, the principal, the tools, the configuration, the curl seam ---------------------------
+# --- 2. the attended-only verbs, the principal, the tools, the configuration, the curl seam --------------------------
 
 if [ "$verb" = cert-init ] && zy_hooks_off; then
   die 5 "refused: unattended run (ZYGGY_HOOKS=off)"
+fi
+# The write verbs' first two preconditions, before the configuration is even read: an attended environment (the
+# unit runs with ZYGGY_HOOKS=off) and a terminal on stdin and stdout (the unit, a pipe and claude -p have none).
+if [ -n "$approved" ]; then
+  if zy_hooks_off; then
+    die 5 "refused: unattended run (ZYGGY_HOOKS=off)"
+  fi
+  zy_m365_tty || die 5 "refused: no terminal"
 fi
 
 zy_require_config
@@ -180,8 +194,20 @@ retry_after() {
   grep -i '^Retry-After:' "$hdrs" | tr -d '\r' | awk 'NR == 1 { print $2 }' | grep -E '^[0-9]+$' || true
 }
 
+# The exit-6 message for the last failed response: 403, exhausted throttling, or anything else with the body's code.
+graph_error() {
+  local code
+  code="$(jq -r '.error.code // empty' "$body" 2> /dev/null || true)"
+  case "$HTTP_STATUS" in
+    403) printf 'forbidden (%s) — runbook 13 "Scope or grant missing"' "${code:-403}" ;;
+    429 | 503) printf 'throttled (%s) after %s retries — runbook 13 "Throttling"' "$HTTP_STATUS" "$ZY_M365_RETRIES" ;;
+    *) printf 'Graph request failed (%s%s)' "$HTTP_STATUS" "${code:+ $code}" ;;
+  esac
+}
+
 # One exchange with retries on 429/503 (Retry-After, else 2^n seconds, 5 at most). Returns 0 on 2xx or a tolerated
-# status (ERE in $1, "-" for none), 1 otherwise; HTTP_STATUS holds the status. A transport failure is exit 6.
+# status (ERE in $1, "-" for none; a tolerated 429/503 is returned once the retries are spent), 1 otherwise;
+# HTTP_STATUS holds the status. A transport failure is exit 6.
 http() { # http <tolerated-status-ERE> <method> <url> [curl arguments…]
   local tolerate="$1" method="$2" url="$3" attempt=0 wait line
   shift 3
@@ -197,7 +223,8 @@ http() { # http <tolerated-status-ERE> <method> <url> [curl arguments…]
       429 | 503)
         attempt=$((attempt + 1))
         if [ "$attempt" -gt "$ZY_M365_RETRIES" ]; then
-          die 6 "throttled ($HTTP_STATUS) after $ZY_M365_RETRIES retries — runbook 13 \"Throttling\""
+          [[ ! "$HTTP_STATUS" =~ ^($tolerate)$ ]] || return 0
+          die 6 "$(graph_error)"
         fi
         wait="$(retry_after)"
         [ -n "$wait" ] || wait=$((1 << attempt))
@@ -249,14 +276,14 @@ build_assertion() {
 # Mint a one-hour app-only access token: POST client_credentials with the assertion on stdin. Sets token and the
 # 0600 header file curl reads; identity failures are exit 6 with the runbook entry named.
 mint_token() {
-  local err
+  local err stdin_before="$HTTP_STDIN"
   build_assertion
   HTTP_STDIN="$work/assertion"
   http '4[0-9][0-9]' POST "$ZY_M365_LOGIN/$M365_TENANT_ID/oauth2/v2.0/token" \
     --data-urlencode grant_type=client_credentials --data-urlencode "scope=$ZY_M365_SCOPE" \
     --data-urlencode "client_id=$M365_CLIENT_ID" --data-urlencode "client_assertion_type=$ZY_M365_ASSERTION_TYPE" \
     --data-urlencode client_assertion@- || die 6 "token request failed ($HTTP_STATUS)"
-  HTTP_STDIN=/dev/null
+  HTTP_STDIN="$stdin_before"
   rm -f "$work/assertion"
   if [ "$HTTP_STATUS" != 200 ]; then
     if grep -qs AADSTS700024 "$body"; then
@@ -274,7 +301,7 @@ mint_token() {
 # A Graph request with the Bearer header from the header file; one re-mint on 401; 403 and every other failure
 # exit 6 unless tolerated (ERE in $1, e.g. "403|404").
 graph_call() { # graph_call <tolerated-status-ERE> <method> <url> [curl arguments…]
-  local tolerate="$1" reminted=0 code
+  local tolerate="$1" reminted=0
   shift
   while :; do
     if http "$tolerate|401" "$@" -H "@$auth_file" -H 'Accept: application/json'; then
@@ -288,11 +315,7 @@ graph_call() { # graph_call <tolerated-status-ERE> <method> <url> [curl argument
       fi
       return 0
     fi
-    code="$(jq -r '.error.code // empty' "$body" 2> /dev/null || true)"
-    case "$HTTP_STATUS" in
-      403) die 6 "forbidden (${code:-403}) — runbook 13 \"Scope or grant missing\"" ;;
-      *) die 6 "Graph request failed ($HTTP_STATUS${code:+ $code})" ;;
-    esac
+    die 6 "$(graph_error)"
   done
 }
 
@@ -429,34 +452,163 @@ run_check() {
   fi
 }
 
-run_snapshot() {
-  local snapshot canonical
-  load_message "$arg" "$ZY_M365_SNAPSHOT_SELECT"
-  snapshot="$(jq -c --arg kind "$kind" '{kind: $kind, id: (.id // ""), subject: (.subject // ""),
+# The current snapshot of one mail object → SNAPSHOT_CANONICAL (the lib's canonical line, no body) and
+# SNAPSHOT_HASH (the lib's hash of it): recipients and sender lower-cased and sorted, so case and order never
+# change the hash. The body is never selected here.
+SNAPSHOT_CANONICAL=""
+SNAPSHOT_HASH=""
+load_snapshot() { # load_snapshot <draft|message> <id>
+  local snapshot
+  load_message "$2" "$ZY_M365_SNAPSHOT_SELECT"
+  snapshot="$(jq -c --arg kind "$1" '{kind: $kind, id: (.id // ""), subject: (.subject // ""),
     to: ([.toRecipients[]?.emailAddress.address // empty | ascii_downcase] | sort),
     cc: ([.ccRecipients[]?.emailAddress.address // empty | ascii_downcase] | sort),
     bcc: ([.bccRecipients[]?.emailAddress.address // empty | ascii_downcase] | sort),
     from: ((.from.emailAddress.address // "") | ascii_downcase), receivedDateTime: (.receivedDateTime // ""),
     parentFolderId: (.parentFolderId // ""), changeKey: (.changeKey // ""), isDraft: (.isDraft // false)}' "$body")"
-  canonical="$(zy_m365_canonical "$snapshot")"
-  printf '%s\nhash: %s\n' "$canonical" "$(zy_m365_hash "$canonical")"
+  SNAPSHOT_CANONICAL="$(zy_m365_canonical "$snapshot")"
+  SNAPSHOT_HASH="$(zy_m365_hash "$SNAPSHOT_CANONICAL")"
 }
 
-# --- 3. the write verbs: Step 3 lands here ---------------------------------------------------------------------------
+# --- 3. the consented execution: the only write path -------------------------------------------------------------------
 
-# The consented execution of send-draft, move or delete against an approved, unexpired, hash-matching row on an
-# attended terminal (Step 3). Until then no row is ever approved: every call is refused before the key is read.
-write_verb() { # write_verb <verb> <hash>
-  die 5 "no approval for row"
+# Preconditions in the Contracts' order, each a refusal (exit 5) with nothing read or requested beyond what the
+# step needs; m365-approve.sh and the runbook quote these messages:
+#   (1) ZYGGY_HOOKS=off                      → refused: unattended run           (section 2, before the configuration)
+#   (2) stdin or stdout is not a tty         → refused: no terminal              (section 2)
+#   (3) no approval row bound to the hash    → no approval for row <id>
+#   (4) the row is executed, failed, refused or expired (or an execution with 2xx exists) → row <id> already executed …
+#   (5) the approval is older than consent.ttl_minutes → approval for <id> expired (ttl <n> min)
+#   (6) the row's action differs from the verb, or the verb is outside consent.allowed_actions
+#   (7) only now the key is read and a token minted: the current snapshot's hash must equal the approved one
+#       (a draft that was sent → <id> is no longer a draft; else object changed since approval)
+#   (8) one POST — send, or move with a destination (deleteditems for delete; a hard delete does not exist)
+#   (9) one executions.jsonl row {row_id, hash, verb, http_status, ts}, the status mark (executed | failed) and the
+#       result line, or exit 6 with the Graph failure named (a failed row is re-approvable).
+state_sh="$ZY_M365_SKILL_DIR/state.sh"
+
+# The approval that binds <hash>: the newest whose proposal is a <verb> row, else the newest (its row then names the
+# refusal). Sets APPROVAL (json) and APPROVAL_ROW_ID; exit 5 when there is none.
+APPROVAL=""
+APPROVAL_ROW_ID=""
+select_approval() { # select_approval <verb> <hash>
+  local candidate id row
+  local -a candidates=()
+  mapfile -t candidates < <(zy_m365_approvals "$2")
+  if [ "${#candidates[@]}" -eq 0 ]; then
+    id=""
+    if [ -s "$ZY_M365_PROPOSALS" ]; then
+      id="$(jq -r -n --arg h "$2" 'first(inputs | select(.snapshot_hash == $h) | .id) // empty' "$ZY_M365_PROPOSALS")"
+    fi
+    die 5 "no approval for row${id:+ $id}"
+  fi
+  APPROVAL="${candidates[0]}"
+  for candidate in "${candidates[@]}"; do
+    id="$(jq -r '.row_id // empty' <<< "$candidate")"
+    [[ "$id" =~ $ZY_M365_ROW_ID_RE ]] || continue
+    row="$(zy_m365_row "$id")"
+    if [ -n "$row" ] && [ "$(jq -r '.action // empty' <<< "$row")" = "$1" ]; then
+      APPROVAL="$candidate"
+      break
+    fi
+  done
+  APPROVAL_ROW_ID="$(jq -r '.row_id // empty' <<< "$APPROVAL")"
+  [[ "$APPROVAL_ROW_ID" =~ $ZY_M365_ROW_ID_RE ]] || die 5 "approval for $2 names no proposal"
 }
 
-case "$verb" in
-  send-draft | move | delete) write_verb "$verb" "$approved" ;;
-esac
+# The destination of a move row: a well-known name as-is, else a display name or id resolved through the folder
+# list → DESTINATION; an unknown or missing folder marks the row failed and exits 5.
+DESTINATION=""
+resolve_destination() { # resolve_destination <row id> <folder>
+  if [ -z "$2" ]; then
+    "$state_sh" mark "$1" failed
+    die 5 "row $1 names no folder"
+  fi
+  if [[ "$ZY_M365_WELL_KNOWN_FOLDERS" == *" $2 "* ]]; then
+    DESTINATION="$2"
+    return 0
+  fi
+  load_folders
+  DESTINATION="$(jq -r --arg n "$2" 'first(.[] | select(.displayName == $n or .id == $n) | .id) // empty' "$work/folders.json")"
+  if [ -z "$DESTINATION" ]; then
+    "$state_sh" mark "$1" failed
+    die 5 "folder $2 not found"
+  fi
+}
+
+execute() { # execute <verb> <hash>
+  local verb="$1" hash="$2" row row_id status ts ts_epoch age action target kind
+  # (3)
+  select_approval "$verb" "$hash"
+  row_id="$APPROVAL_ROW_ID"
+  row="$(zy_m365_row "$row_id")"
+  [ -n "$row" ] || die 5 "no proposal $row_id for the approval"
+  # (4)
+  status="$(jq -r '.status // empty' <<< "$row")"
+  if [ "$status" = executed ] || zy_m365_executed "$row_id"; then
+    die 5 "row $row_id already executed"
+  fi
+  case "$status" in
+    pending | approved) ;;
+    failed) die 5 "row $row_id failed earlier — re-approve it with m365-approve.sh" ;;
+    refused | expired) die 5 "row $row_id $status" ;;
+    *) die 5 "row $row_id has an unknown status" ;;
+  esac
+  # (5)
+  ts="$(jq -r '.ts // empty' <<< "$APPROVAL")"
+  if [[ ! "$ts" =~ $ZY_M365_ISO_RE ]] || ! ts_epoch="$(date -u -d "$ts" +%s 2> /dev/null)"; then
+    die 5 "approval for $row_id has no valid timestamp"
+  fi
+  age=$(($(zy_date UTC +%s) - ts_epoch))
+  [ "$age" -le $((M365_CONSENT_TTL_MINUTES * 60)) ] || die 5 "approval for $row_id expired (ttl $M365_CONSENT_TTL_MINUTES min)"
+  # (6)
+  action="$(jq -r '.action // empty' <<< "$row")"
+  [ "$action" = "$verb" ] || die 5 "row $row_id is a ${action:-nameless} proposal, not $verb"
+  [[ " $M365_CONSENT_ALLOWED_ACTIONS " == *" $verb "* ]] || die 5 "action $verb not allowed by consent.allowed_actions"
+  target="$(jq -r '.target_id // empty' <<< "$row")"
+  [[ "$target" =~ $ZY_M365_ID_RE ]] || die 5 "row $row_id has no valid target id"
+  # (7)
+  zy_m365_read_key "$key_variant"
+  printf 'key: %s\n' "$M365_KEY_SRC" >&2
+  mint_token
+  kind="$(zy_m365_kind_of "$verb")"
+  load_snapshot "$kind" "$target"
+  if [ "$SNAPSHOT_HASH" != "$hash" ]; then
+    if [ "$kind" = draft ] && [ "$(jq -r '.isDraft' <<< "$SNAPSHOT_CANONICAL")" != true ]; then
+      die 5 "$target is no longer a draft"
+    fi
+    die 5 "object changed since approval (hash mismatch) — re-run m365-approve.sh"
+  fi
+  # (8)
+  if [ "$verb" = send-draft ]; then
+    graph_call "$ZY_M365_WRITE_TOLERATE" POST "$(mailbox_url)/messages/$target/send"
+  else
+    if [ "$verb" = delete ]; then
+      DESTINATION=deleteditems
+    else
+      resolve_destination "$row_id" "$(jq -r '.folder // empty' <<< "$row")"
+    fi
+    jq -nc --arg d "$DESTINATION" '{destinationId: $d}' > "$work/post-body"
+    HTTP_STDIN="$work/post-body"
+    graph_call "$ZY_M365_WRITE_TOLERATE" POST "$(mailbox_url)/messages/$target/move" -H 'Content-Type: application/json' --data @-
+    HTTP_STDIN=/dev/null
+  fi
+  # (9)
+  zy_m365_consent_append "$ZY_M365_EXECUTIONS" "$(jq -nc --arg r "$row_id" --arg h "$hash" --arg v "$verb" \
+    --argjson s "$HTTP_STATUS" --arg t "$(zy_now_utc)" '{row_id: $r, hash: $h, verb: $v, http_status: $s, ts: $t}')"
+  if [[ "$HTTP_STATUS" =~ ^2[0-9][0-9]$ ]]; then
+    "$state_sh" mark "$row_id" executed
+    printf 'executed: %s %s (%s)\n' "$verb" "$hash" "$HTTP_STATUS"
+  else
+    "$state_sh" mark "$row_id" failed
+    die 6 "$(graph_error)"
+  fi
+}
 
 # --- 4. the key, then the verb -----------------------------------------------------------------------------------------
 
-if [ "$verb" != cert-init ]; then
+# The write verbs read the key inside execute, once the approval checks have passed.
+if [ "$verb" != cert-init ] && [ -z "$approved" ]; then
   zy_m365_read_key "$key_variant"
   printf 'key: %s\n' "$M365_KEY_SRC" >&2
 fi
@@ -500,7 +652,8 @@ case "$verb" in
     ;;
   snapshot)
     mint_token
-    run_snapshot
+    load_snapshot "$kind" "$arg"
+    printf '%s\nhash: %s\n' "$SNAPSHOT_CANONICAL" "$SNAPSHOT_HASH"
     ;;
   get)
     # The body text goes to stdout only (for the approve terminal); the response file lives in the work directory
@@ -509,4 +662,5 @@ case "$verb" in
     load_message "$arg" id,subject,body -H "$ZY_M365_PREFER_TEXT"
     jq -r '.body.content // ""' "$body"
     ;;
+  send-draft | move | delete) execute "$verb" "$approved" ;;
 esac

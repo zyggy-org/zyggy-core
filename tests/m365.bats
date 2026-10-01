@@ -1,10 +1,13 @@
 #!/usr/bin/env bats
 # m365 connector (spec 23): the pinned server's app-only tool partition and the fixtures (plan 23 Step 1,
 # AC-45 half, AC-46); graph.sh — key pair, app-only token, Graph reads, snapshots (Step 2, AC-30..AC-33, AC-43,
-# AC-44). Fixture lists are generated from the pinned package's endpoints.json, never typed. curl is a stub, openssl is
-# real (a throw-away key pair per test). No network.
+# AC-44); state.sh and the consent files, graph.sh's approved-only write verbs on a pseudo-terminal (Step 3, AC-32,
+# AC-37, AC-40, AC-47). Fixture lists are generated from the pinned package's endpoints.json, never typed; the consent
+# hashes are computed from the fixture snapshots, never typed. curl is a stub, openssl is real (a throw-away key pair
+# per test), the terminal is `script`. No network.
 
 load helpers
+load fixtures/m365/pty
 
 setup() {
   setup_memory
@@ -30,6 +33,14 @@ setup() {
   TOKEN_URL="https://login.microsoftonline.com/$TENANT/oauth2/v2.0/token"
   GRAPH_URL=https://graph.microsoft.com/v1.0
   UPN=alice@acme.example
+  STATE_SH="$M365/state.sh"
+  PROPOSALS="$STATE/proposals.jsonl"
+  APPROVALS="$STATE/approvals.jsonl"
+  EXECUTIONS="$STATE/executions.jsonl"
+  # the consent hashes, computed from the fixture snapshots (jq -S -c, sha256sum of the line) — never typed
+  H1="$(fixture_hash p1)"
+  H2="$(fixture_hash p2)"
+  H3="$(fixture_hash p3)"
   expect_token_on_stdout=0
   export M365 STATE
 }
@@ -47,7 +58,10 @@ teardown() {
   fi
   ! grep -rqsE --exclude='m365-app.key*' --exclude=m365-app-key --exclude-dir=fixtures "$leak" "$BATS_TEST_TMPDIR" ||
     { echo "token or key in a test file"; return 1; }
-  ! grep -rqsF --exclude-dir=fixtures BODYTEXT-NEVER-STORED "$BATS_TEST_TMPDIR" || { echo "body text persisted"; return 1; }
+  # pty.out is the terminal: a body may legitimately appear there (never in a file the scripts write)
+  ! grep -rqsF --exclude-dir=fixtures --exclude=pty.out BODYTEXT-NEVER-STORED "$BATS_TEST_TMPDIR" || { echo "body text persisted"; return 1; }
+  # the three consent files hold no body, no key, no token
+  ! grep -qsE "$leak|BODYTEXT-NEVER-STORED" "$STATE"/*.jsonl || { echo "secret or body in a consent file"; return 1; }
 }
 
 # --- helpers ------------------------------------------------------------------------------------------------
@@ -160,6 +174,72 @@ x5t() { # x5t <sha1|sha256> [cer] → base64url of the DER digest
 
 fingerprint() { # fingerprint <sha1|sha256> [cer] → hex without colons
   openssl x509 -in "${2:-$ZYGGY_M365_CER_FILE}" -noout -fingerprint "-$1" | cut -d= -f2 | tr -d :
+}
+
+# --- consent helpers (the three files live in $STATE, 600 in a 700 directory) ----------------------------------
+
+hash_of() { # hash_of <snapshot json> → the lib's definition: jq -S -c, sha256sum of the line
+  printf '%s\n' "$(jq -S -c . <<< "$1")" | sha256sum | cut -c1-64
+}
+
+fixture_hash() { # fixture_hash <row id> → hash of that row's snapshot in proposals-pending.jsonl
+  hash_of "$(jq -c --arg id "$1" 'select(.id == $id) | .snapshot' "$FIXTURES/m365/proposals-pending.jsonl")"
+}
+
+consent_append() { # consent_append <file> <json line> — as the scripts do it
+  (umask 077 && mkdir -p "$STATE")
+  chmod 700 "$STATE"
+  (umask 077 && printf '%s\n' "$2" >> "$1")
+  chmod 600 "$1"
+}
+
+# seed_fixture <fixture jsonl> <target file>: every row, @H1@/@H2@/@H3@ replaced by the computed hashes
+seed_fixture() {
+  local line
+  while IFS= read -r line || [ -n "$line" ]; do
+    line="${line//@H1@/$H1}"
+    line="${line//@H2@/$H2}"
+    line="${line//@H3@/$H3}"
+    consent_append "$2" "$line"
+  done < "$M365_FIXTURES/$1"
+}
+
+# seed_proposal <row id> [<jq edit>]: one row of proposals-pending.jsonl into proposals.jsonl, optionally edited
+seed_proposal() {
+  local row
+  row="$(jq -c --arg id "$1" 'select(.id == $id)' "$M365_FIXTURES/proposals-pending.jsonl")"
+  row="${row//@H1@/$H1}"
+  row="${row//@H2@/$H2}"
+  row="${row//@H3@/$H3}"
+  [ -z "${2:-}" ] || row="$(jq -c "$2" <<< "$row")"
+  consent_append "$PROPOSALS" "$row"
+}
+
+seed_approval() { # seed_approval <row id> <hash> [<ts>]
+  consent_append "$APPROVALS" "$(jq -nc --arg r "$1" --arg h "$2" --arg t "${3:-2026-09-30T09:50:00Z}" \
+    '{row_id: $r, hash_at_approval: $h, ts: $t, tty: "pts/0"}')"
+}
+
+row_status() { # row_status <row id>
+  jq -r --arg id "$1" 'select(.id == $id) | .status' "$PROPOSALS"
+}
+
+executions() { # the executions.jsonl rows, or nothing
+  if [ -f "$EXECUTIONS" ]; then cat "$EXECUTIONS"; fi
+}
+
+reset_consent() { # a fresh state dir, stub log and scenario between cases
+  rm -rf "$STATE"
+  : > "$CURL_STUB_LOG"
+  : > "$CURL_STUB_DIR/curl-stub.scenario"
+}
+
+pty_graph() { # graph.sh on a pseudo-terminal; stdout = everything the tty showed, status = graph.sh's
+  run_on_pty /dev/null "$GRAPH" "$@"
+}
+
+last_line() {
+  printf '%s\n' "$output" | sed '/^$/d' | tail -n 1
 }
 
 USAGE='(usage: graph.sh cert-init [--rotate|--commit] | token [--key new] [--alg PS256|RS256] | check [--counts] [--other-mailbox <upn>] [--drive <id>] | mail-folders | drives | drafts-since <ISO> | message-sender <id> | snapshot draft|message <id> | get draft|message <id> | sent-since <ISO> | send-draft|move|delete --approved <hash>)'
@@ -300,10 +380,12 @@ expected_enabled() {
     11111111-1111-4111-8111-111111111111 22222222-2222-4222-8222-222222222222 33333333-3333-4333-8333-333333333333 \
     aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb cccccccc-cccc-4ccc-8ccc-cccccccccccc \
     dddddddd-dddd-4ddd-8ddd-dddddddddddd)" ] || { echo "unexpected GUID: $output"; return 1; }
-  # the machine-path alternatives are composed so that this file passes the same hygiene check (repo.bats)
+  # the machine-path alternatives are composed so that this file passes the same hygiene check (repo.bats);
+  # the consent fixtures carry the Graph snapshots' RFC 2606 addresses (@example.org, @acme.example) — allowed
   local s='/' paths
   paths="${s}srv${s}|${s}home${s}|${s}Users${s}|${s}root${s}|[A-Za-z]:\\\\"
-  run grep -rnE "@[a-z0-9-]+\.(com|be|org|net)\b|sharepoint\.com|onmicrosoft|$paths" "$M365_FIXTURES"
+  run bash -c 'grep -rnE "$1" "$2" | grep -vE "@example\.(com|org|net)\b"' _ \
+    "@[a-z0-9-]+\.(com|be|org|net)\b|sharepoint\.com|onmicrosoft|$paths" "$M365_FIXTURES"
   [ "$status" -eq 1 ] || { echo "real-looking value: $output"; return 1; }
   run grep -rnE "sharepoint\.com|onmicrosoft|$paths" "$GRAPH_FIXTURES"
   [ "$status" -eq 1 ] || { echo "real-looking value: $output"; return 1; }
@@ -332,7 +414,7 @@ expected_enabled() {
   output=""
 }
 
-@test "graph: unknown verbs and malformed arguments -> exit 4 with the usage table, no request; send-draft|move|delete without --approved -> 4; delete --hard -> 4; --approved <hash> -> 5 no approval for row (Step 3 implements it)" {
+@test "graph: unknown verbs and malformed arguments -> exit 4 with the usage table, no request; send-draft|move|delete without --approved -> 4; delete --hard -> 4; --approved <hash> without a tty -> 5 refused: no terminal" {
   local before hash c
   before="$(state_snapshot)"
   local -a cases=(
@@ -355,12 +437,12 @@ expected_enabled() {
     assert_refused 4 "m365: * (usage: graph.sh *" "$before" || { echo "case: graph $c"; return 1; }
     grep -qF -- "$USAGE" <<< "$stderr" || { echo "usage text differs for: $c -> $stderr"; return 1; }
   done
-  # the write verbs are parsed here and dispatch to the Step 3 function, which in this step refuses every row
+  # the write verbs parse here; without a terminal they refuse before any approval lookup (Step 3)
   hash="$(printf 'f%.0s' {1..64})"
   for c in "send-draft --approved $hash" "move --approved $hash" "delete --approved $hash"; do
     # shellcheck disable=SC2086
-    run --separate-stderr graph $c
-    assert_refused 5 "m365: no approval for row" "$before" || { echo "case: graph $c"; return 1; }
+    run --separate-stderr graph $c < /dev/null
+    assert_refused 5 "m365: refused: no terminal" "$before" || { echo "case: graph $c"; return 1; }
   done
 }
 
@@ -938,6 +1020,440 @@ expected_enabled() {
   [ "$status" -eq 1 ]
   run grep -nE -- '-X (PATCH|PUT|DELETE)' "$GRAPH"
   [ "$status" -eq 1 ]
-  run grep -n 'set -x' "$GRAPH" "$lib"
+  run grep -n 'set -x' "$GRAPH" "$lib" "$STATE_SH"
   [ "$status" -eq 1 ]
+  # one POST site each for send and move; DELETE and --hard appear only in the usage refusal; the hooks guard
+  # exists twice (cert-init and the write verbs); consent rows are appended by the lib's one flock helper and
+  # rewritten by state.sh mark only — graph.sh never touches the files itself
+  [ "$(grep -c '/send' "$GRAPH")" -eq 1 ]
+  [ "$(grep -c '/move' "$GRAPH")" -eq 1 ]
+  run grep -nE 'DELETE|--hard' "$GRAPH"
+  [ "$status" -eq 0 ] && [ "$(printf '%s\n' "$output" | wc -l)" -eq 1 ] && grep -q 'usage' <<< "$output" || { echo "$output"; return 1; }
+  [ "$(grep -c 'zy_hooks_off' "$GRAPH")" -eq 2 ]
+  [ "$(grep -c 'flock' "$lib")" -eq 1 ]
+  [ "$(grep -c 'flock' "$STATE_SH")" -eq 1 ]
+  run grep -nE 'flock|\.jsonl"? *>>|> *"\$ZY_M365_(PROPOSALS|APPROVALS|EXECUTIONS)' "$GRAPH"
+  [ "$status" -eq 1 ] || { echo "$output"; return 1; }
+}
+
+# --- the pseudo-terminal (Step 3) ---------------------------------------------------------------------------------
+
+@test "pty: script is available in the container and on CI; run_on_pty lends the command a tty on stdin and stdout and returns its status" {
+  command -v script || { echo "script (bsdutils/util-linux) is missing — assumption 22"; return 1; }
+  run run_on_pty /dev/null bash -c 'if [ -t 0 ] && [ -t 1 ]; then echo tty-ok; else echo no-tty; fi; echo "err-line" >&2'
+  [ "$status" -eq 0 ] || { echo "$output"; return 1; }
+  grep -qx tty-ok <<< "$output" || { echo "$output"; return 1; }
+  grep -qx err-line <<< "$output"
+  run run_on_pty /dev/null bash -c 'exit 7'
+  [ "$status" -eq 7 ]
+  # the no-tty shape the unit and claude -p have
+  run bash -c 'if [ -t 0 ] && [ -t 1 ]; then echo tty-ok; else echo no-tty; fi' < /dev/null
+  [ "$output" = no-tty ]
+}
+
+# --- state.sh: the named keys ---------------------------------------------------------------------------------------
+
+@test "state: get mail-watermark (absent) -> now - 24 h; set/get; file 600 in a 700 dir, no .tmp; bad values, unknown key, path argument -> exit 4; drive-token holds a timestamp; backfill-watermark; replied appends and dedups; ZYGGY_TENANT unset -> 3" {
+  local before c
+  before="$(state_snapshot)"
+  run --separate-stderr "$STATE_SH" get mail-watermark
+  [ "$status" -eq 0 ] && [ "$output" = 2026-09-29T10:00:00Z ] || { echo "$status $output $stderr"; return 1; }
+  [ "$(state_snapshot)" = "$before" ]
+  run --separate-stderr "$STATE_SH" set mail-watermark 2026-09-30T08:00:00Z
+  [ "$status" -eq 0 ] && [ -z "$output" ] && [ -z "$stderr" ] || { echo "$status $output $stderr"; return 1; }
+  [ "$(stat -c %a "$STATE")" = 700 ]
+  [ "$(stat -c %a "$STATE/mail-watermark")" = 600 ]
+  [ "$(cat "$STATE/mail-watermark")" = 2026-09-30T08:00:00Z ]
+  [ -z "$(find "$STATE" -name '*.tmp')" ]
+  run "$STATE_SH" get mail-watermark
+  [ "$output" = 2026-09-30T08:00:00Z ]
+  before="$(state_snapshot)"
+  local -a bad=(
+    "set mail-watermark not-a-date" "set mail-watermark 2026-09-30" "set mail-watermark /etc/passwd"
+    "set mail-watermark" "set mail-watermark 2026-09-30T08:00:00Z extra" "set nonsense x" "get nonsense" "reset nonsense"
+    "get drive-token ../x" "get drive-token" "get drive-token a/b" "set drive-token d1 opaque-abc" "set drive-token d1"
+    "get backfill-watermark" "set backfill-watermark inbox 2026-09-30" "get replied 2026-9-30" "set replied 2026-09-30"
+    "set replied 2026-09-30 m1 m2" "get mail-watermark extra" "list" "list drafts" "mark" "x"
+  )
+  for c in "${bad[@]}"; do
+    # shellcheck disable=SC2086 # the case is a command line
+    run --separate-stderr "$STATE_SH" $c
+    [ "$status" -eq 4 ] && [ -z "$output" ] || { echo "case '$c': $status $output"; return 1; }
+    [ "$(printf '%s\n' "$stderr" | wc -l)" -eq 1 ] && [[ "$stderr" == "m365-state: "* ]] || { echo "case '$c': $stderr"; return 1; }
+    [ "$(state_snapshot)" = "$before" ] || { echo "case '$c' wrote something"; return 1; }
+  done
+  run --separate-stderr "$STATE_SH" set mail-watermark "$(printf '2026-09-30T08:00:00Z\nx')"
+  [ "$status" -eq 4 ] && [[ "$stderr" == "m365-state: invalid value for mail-watermark"* ]]
+  run --separate-stderr "$STATE_SH" set mail-watermark "$(printf 'a%.0s' {1..5000})"
+  [ "$status" -eq 4 ] && [[ "$stderr" == "m365-state: invalid value for mail-watermark"* ]]
+  run --separate-stderr "$STATE_SH" get drive-token "$(printf 'a%.0s' {1..201})"
+  [ "$status" -eq 4 ]
+  [ "$(cat "$STATE/mail-watermark")" = 2026-09-30T08:00:00Z ]
+  # drive-token: a timestamp (the probe found no delta-token argument), per drive
+  run "$STATE_SH" get drive-token 'b!onedrive0001'
+  [ "$status" -eq 0 ] && [ -z "$output" ]
+  run "$STATE_SH" set drive-token 'b!onedrive0001' 2026-09-29T00:00:00Z
+  [ "$status" -eq 0 ]
+  [ "$(stat -c %a "$STATE/drive-b!onedrive0001.token")" = 600 ]
+  run "$STATE_SH" get drive-token 'b!onedrive0001'
+  [ "$output" = 2026-09-29T00:00:00Z ]
+  run "$STATE_SH" reset drive-token 'b!onedrive0001'
+  [ "$status" -eq 0 ] && [ ! -e "$STATE/drive-b!onedrive0001.token" ]
+  run "$STATE_SH" get drive-token 'b!onedrive0001'
+  [ "$status" -eq 0 ] && [ -z "$output" ]
+  # backfill-watermark per folder
+  run "$STATE_SH" set backfill-watermark inbox 2026-09-01T00:00:00Z
+  [ "$status" -eq 0 ] && [ "$(cat "$STATE/backfill-inbox.watermark")" = 2026-09-01T00:00:00Z ]
+  run "$STATE_SH" get backfill-watermark inbox
+  [ "$output" = 2026-09-01T00:00:00Z ]
+  run "$STATE_SH" reset backfill-watermark inbox
+  [ ! -e "$STATE/backfill-inbox.watermark" ]
+  # replied <date>: ids appended once each
+  run "$STATE_SH" get replied 2026-09-30
+  [ "$status" -eq 0 ] && [ -z "$output" ]
+  "$STATE_SH" set replied 2026-09-30 m1
+  "$STATE_SH" set replied 2026-09-30 m2
+  "$STATE_SH" set replied 2026-09-30 m1
+  run "$STATE_SH" get replied 2026-09-30
+  [ "$output" = "$(printf 'm1\nm2')" ] || { echo "$output"; return 1; }
+  [ "$(stat -c %a "$STATE/replied-2026-09-30.ids")" = 600 ]
+  run "$STATE_SH" reset replied 2026-09-30
+  [ ! -e "$STATE/replied-2026-09-30.ids" ]
+  [ -z "$(find "$STATE" -name '*.tmp')" ]
+  run --separate-stderr env -u ZYGGY_TENANT "$STATE_SH" get mail-watermark
+  [ "$status" -eq 3 ] && [ "$stderr" = "m365-state: configuration error: ZYGGY_TENANT is not set" ] || { echo "$stderr"; return 1; }
+  XDG_STATE_HOME=/proc/none run --separate-stderr "$STATE_SH" set mail-watermark 2026-09-30T08:00:00Z
+  [ "$status" -eq 3 ] && [[ "$stderr" == "m365-state: "*"/proc/none/zyggy/m365"* ]] || { echo "$status $stderr"; return 1; }
+}
+
+@test "state: list proposals (empty) -> no proposals; seeded -> one line per row (id status action subject<=60 origin #hash8) oldest first, no body, no full hash; --status filters; mark rewrites one row atomically (600, others byte-identical); bad status or id -> 4" {
+  local before
+  run --separate-stderr "$STATE_SH" list proposals
+  [ "$status" -eq 0 ] && [ "$output" = "no proposals" ] || { echo "$status $output $stderr"; return 1; }
+  run "$STATE_SH" list proposals --status pending
+  [ "$status" -eq 0 ] && [ "$output" = "no proposals" ]
+  # seeded out of order: the listing is by ts, oldest first
+  seed_proposal p3
+  seed_proposal p1
+  seed_proposal p2
+  run --separate-stderr "$STATE_SH" list proposals
+  [ "$status" -eq 0 ] || { echo "$stderr"; return 1; }
+  [ "$output" = "$(printf '%s\n' \
+    "p1 pending send-draft RE: Invoice 2026-41 brief 2026-09-30 #${H1:0:8}" \
+    "p2 pending delete Invoice 2026-41 session #${H2:0:8}" \
+    "p3 pending move Invoice 2026-41 session #${H3:0:8}")" ] || { echo "$output"; return 1; }
+  ! grep -qF "$H1" <<< "$output"
+  ! grep -qiE 'carol|alice|BODYTEXT' <<< "$output"
+  run "$STATE_SH" list proposals --status pending
+  [ "$(printf '%s\n' "$output" | wc -l)" -eq 3 ]
+  run "$STATE_SH" list proposals --status executed
+  [ "$status" -eq 0 ] && [ "$output" = "no proposals" ]
+  # a long subject is cut to 60 characters
+  reset_consent
+  seed_proposal p1 ".snapshot.subject = \"$(printf 'S%.0s' {1..80})\""
+  run "$STATE_SH" list proposals
+  [ "$output" = "p1 pending send-draft $(printf 'S%.0s' {1..60}) brief 2026-09-30 #${H1:0:8}" ] || { echo "$output"; return 1; }
+  reset_consent
+  seed_fixture proposals-pending.jsonl "$PROPOSALS"
+  before="$(state_snapshot)"
+  local -a bad=("list proposals --status bogus" "list proposals --status" "list proposals extra" "mark p1 bogus" "mark zz executed" "mark p1" "mark" "mark 'p 1' executed")
+  local c
+  for c in "${bad[@]}"; do
+    # shellcheck disable=SC2086
+    run --separate-stderr "$STATE_SH" $c
+    [ "$status" -eq 4 ] && [ -z "$output" ] && [[ "$stderr" == "m365-state: "* ]] || { echo "case '$c': $status $output $stderr"; return 1; }
+    [ "$(state_snapshot)" = "$before" ] || { echo "case '$c' wrote something"; return 1; }
+  done
+  run --separate-stderr "$STATE_SH" mark zz executed
+  [ "$stderr" = "m365-state: no proposal zz" ] || { echo "$stderr"; return 1; }
+  # mark: the one row changes, the two others stay byte-identical, the file stays 600 with no .tmp beside it
+  sed -n '2,3p' "$PROPOSALS" > "$BATS_TEST_TMPDIR/others-before"
+  run --separate-stderr "$STATE_SH" mark p1 executed
+  [ "$status" -eq 0 ] && [ -z "$output" ] && [ -z "$stderr" ] || { echo "$status $output $stderr"; return 1; }
+  [ "$(row_status p1)" = executed ]
+  sed -n '2,3p' "$PROPOSALS" > "$BATS_TEST_TMPDIR/others-after"
+  cmp "$BATS_TEST_TMPDIR/others-before" "$BATS_TEST_TMPDIR/others-after"
+  [ "$(wc -l < "$PROPOSALS")" -eq 3 ]
+  [ "$(stat -c %a "$PROPOSALS")" = 600 ]
+  [ -z "$(find "$STATE" -name '*.tmp')" ]
+  jq -e --arg h "$H1" '.id == "p1" and .snapshot_hash == $h and .reason == "Carol asked for the invoice date"' <<< "$(sed -n 1p "$PROPOSALS")" > /dev/null
+  run "$STATE_SH" list proposals --status executed
+  [ "$output" = "p1 executed send-draft RE: Invoice 2026-41 brief 2026-09-30 #${H1:0:8}" ]
+  run "$STATE_SH" list proposals --status pending
+  [ "$(printf '%s\n' "$output" | wc -l)" -eq 2 ]
+  for c in approved failed refused expired pending; do
+    run "$STATE_SH" mark p2 "$c"
+    [ "$status" -eq 0 ] && [ "$(row_status p2)" = "$c" ] || { echo "mark $c"; return 1; }
+  done
+  # the lib's append helper creates the state dir 700 and the file 600 on first write
+  reset_consent
+  bash -c 'source "$1"; source "$2"; zy_m365_consent_append "$3" "{\"a\":1}"; zy_m365_consent_append "$3" "{\"a\":2}"' _ \
+    "$HOOKS/lib.sh" "$M365/m365-lib.sh" "$EXECUTIONS"
+  [ "$(stat -c %a "$STATE")" = 700 ] && [ "$(stat -c %a "$EXECUTIONS")" = 600 ]
+  [ "$(cat "$EXECUTIONS")" = "$(printf '{"a":1}\n{"a":2}')" ]
+  # the fixture hashes bind to the Graph fixtures: H1 is what graph.sh snapshot draft d1 prints
+  run --separate-stderr graph snapshot draft d1
+  [ "$(printf '%s\n' "$output" | sed -n 2p)" = "hash: $H1" ] || { echo "$output"; return 1; }
+  run --separate-stderr graph snapshot message m1
+  [ "$(printf '%s\n' "$output" | sed -n 2p)" = "hash: $H2" ] && [ "$H2" = "$H3" ]
+}
+
+# --- graph.sh write verbs: the refusals, in the Contracts' order ---------------------------------------------------
+
+@test "graph: send-draft --approved H1 with ZYGGY_HOOKS=off (under the pty) -> exit 5 refused: unattended run, no request, executions.jsonl absent — before the tty and approval checks" {
+  seed_proposal p1
+  seed_fixture approvals-p1.jsonl "$APPROVALS"
+  ZYGGY_HOOKS=off run pty_graph send-draft --approved "$H1"
+  [ "$status" -eq 5 ] || { echo "$status: $output"; return 1; }
+  [ "$(last_line)" = "m365: refused: unattended run (ZYGGY_HOOKS=off)" ] || { echo "$output"; return 1; }
+  ! grep -q 'executed:' <<< "$output"
+  [ "$(request_count)" -eq 0 ]
+  [ ! -e "$EXECUTIONS" ]
+  # the same with nothing seeded: unattended wins over "no approval"
+  reset_consent
+  ZYGGY_HOOKS=off run pty_graph move --approved "$H3"
+  [ "$status" -eq 5 ] && [ "$(last_line)" = "m365: refused: unattended run (ZYGGY_HOOKS=off)" ]
+  ZYGGY_HOOKS=off run pty_graph delete --approved "$H2"
+  [ "$status" -eq 5 ] && [ "$(last_line)" = "m365: refused: unattended run (ZYGGY_HOOKS=off)" ]
+  [ "$(request_count)" -eq 0 ] && [ ! -e "$EXECUTIONS" ]
+}
+
+@test "graph: send-draft --approved H1 without a tty (approval seeded; < /dev/null, stdout to a file) -> exit 5 refused: no terminal, no request — the unit and claude -p shape" {
+  local before
+  seed_proposal p1
+  seed_fixture approvals-p1.jsonl "$APPROVALS"
+  before="$(state_snapshot)"
+  run --separate-stderr graph send-draft --approved "$H1" < /dev/null
+  assert_refused 5 "m365: refused: no terminal" "$before"
+  "$GRAPH" send-draft --approved "$H1" < /dev/null > "$BATS_TEST_TMPDIR/no-tty.out" 2> "$BATS_TEST_TMPDIR/no-tty.err" || status=$?
+  [ "$status" -eq 5 ] && [ ! -s "$BATS_TEST_TMPDIR/no-tty.out" ] && [ "$(cat "$BATS_TEST_TMPDIR/no-tty.err")" = "m365: refused: no terminal" ]
+  # a tty on stdin only, or on stdout only, is not a terminal either
+  run run_on_pty /dev/null bash -c '"$0" send-draft --approved "$1" > /dev/null' "$GRAPH" "$H1"
+  [ "$status" -eq 5 ] && [ "$(last_line)" = "m365: refused: no terminal" ] || { echo "$status $output"; return 1; }
+  run run_on_pty /dev/null bash -c '"$0" send-draft --approved "$1" < /dev/null' "$GRAPH" "$H1"
+  [ "$status" -eq 5 ] && [ "$(last_line)" = "m365: refused: no terminal" ] || { echo "$status $output"; return 1; }
+  [ "$(request_count)" -eq 0 ] && [ ! -e "$EXECUTIONS" ]
+  [ "$(row_status p1)" = pending ]
+}
+
+@test "graph: under the pty: no approval -> no approval for row p1; executed row -> already executed; expired approval -> expired (ttl 60 min); action not allowed; hash mismatch -> object changed, approval untouched; sent draft -> no longer a draft; wrong verb for the row; no POST anywhere" {
+  local sums
+  # (3) a pending row without an approval; an unknown hash names no row
+  seed_proposal p1
+  run pty_graph send-draft --approved "$H1"
+  [ "$status" -eq 5 ] && [ "$(last_line)" = "m365: no approval for row p1" ] || { echo "$status $output"; return 1; }
+  [ "$(request_count)" -eq 0 ]
+  run pty_graph send-draft --approved "$(printf 'f%.0s' {1..64})"
+  [ "$status" -eq 5 ] && [ "$(last_line)" = "m365: no approval for row" ] || { echo "$status $output"; return 1; }
+  # (4) the row was executed already (single use)
+  reset_consent
+  seed_fixture proposals-executed.jsonl "$PROPOSALS"
+  seed_fixture approvals-p1.jsonl "$APPROVALS"
+  seed_fixture executions-p1.jsonl "$EXECUTIONS"
+  run pty_graph send-draft --approved "$H1"
+  [ "$status" -eq 5 ] && [ "$(last_line)" = "m365: row p1 already executed" ] || { echo "$status $output"; return 1; }
+  [ "$(wc -l < "$EXECUTIONS")" -eq 1 ]
+  reset_consent
+  seed_proposal p1 '.status = "refused"'
+  seed_fixture approvals-p1.jsonl "$APPROVALS"
+  run pty_graph send-draft --approved "$H1"
+  [ "$status" -eq 5 ] && [ "$(last_line)" = "m365: row p1 refused" ] || { echo "$status $output"; return 1; }
+  # (5) the approval is older than consent.ttl_minutes (120 min at ZYGGY_NOW, ttl 60)
+  reset_consent
+  seed_proposal p1
+  seed_fixture approvals-p1-expired.jsonl "$APPROVALS"
+  run pty_graph send-draft --approved "$H1"
+  [ "$status" -eq 5 ] && [ "$(last_line)" = "m365: approval for p1 expired (ttl 60 min)" ] || { echo "$status $output"; return 1; }
+  # a longer TTL in the configuration makes the same approval valid again (then the next check speaks)
+  cfg '.consent.ttl_minutes = 180 | .consent.allowed_actions = ["move"]'
+  run pty_graph send-draft --approved "$H1"
+  [ "$status" -eq 5 ] && [ "$(last_line)" = "m365: action send-draft not allowed by consent.allowed_actions" ] || { echo "$status $output"; return 1; }
+  # (6) the verb must be the row's action
+  install_m365_fixture_config
+  reset_consent
+  seed_proposal p1
+  seed_fixture approvals-p1.jsonl "$APPROVALS"
+  run pty_graph move --approved "$H1"
+  [ "$status" -eq 5 ] && [ "$(last_line)" = "m365: row p1 is a send-draft proposal, not move" ] || { echo "$status $output"; return 1; }
+  run pty_graph delete --approved "$H1"
+  [ "$status" -eq 5 ] && [ "$(last_line)" = "m365: row p1 is a send-draft proposal, not delete" ]
+  [ "$(request_count)" -eq 0 ] || { echo "a request before the approval checks: $(urls)"; return 1; }
+  [ ! -e "$EXECUTIONS" ]
+  # (7) the current snapshot differs from the approved hash: token + snapshot were the only requests
+  sums="$(md5sum "$APPROVALS" "$PROPOSALS")"
+  scenario 'messages/d1\?:200:snapshot-d1-changed.json'
+  run pty_graph send-draft --approved "$H1"
+  [ "$status" -eq 5 ] || { echo "$status $output"; return 1; }
+  [ "$(last_line)" = "m365: object changed since approval (hash mismatch) — re-run m365-approve.sh" ] || { echo "$output"; return 1; }
+  grep -qx 'key: file' <<< "$output"
+  [ "$(urls)" = "$(printf '%s\n' "POST $TOKEN_URL" "GET $GRAPH_URL/users/$UPN/messages/d1?\$select=id,subject,toRecipients,ccRecipients,bccRecipients,from,receivedDateTime,parentFolderId,changeKey,isDraft")" ] ||
+    { urls; return 1; }
+  [ "$(md5sum "$APPROVALS" "$PROPOSALS")" = "$sums" ]
+  : > "$CURL_STUB_LOG"
+  scenario 'messages/d1\?:200:snapshot-d1-sent.json'
+  run pty_graph send-draft --approved "$H1"
+  [ "$status" -eq 5 ] && [ "$(last_line)" = "m365: d1 is no longer a draft" ] || { echo "$status $output"; return 1; }
+  [ "$(urls | grep -c '^POST ')" -eq 1 ]
+  [ "$(md5sum "$APPROVALS" "$PROPOSALS")" = "$sums" ]
+  [ ! -e "$EXECUTIONS" ]
+  ! grep -q 'executed:' <<< "$output"
+  ! grep -qE 'messages/d1/send|messages/m1/move' "$CURL_STUB_LOG"
+}
+
+# --- graph.sh write verbs: the executions ----------------------------------------------------------------------------
+
+@test "graph: under the pty, approval H1 valid, snapshot unchanged, 202 on POST …/messages/d1/send -> executed: send-draft H1 (202); executions.jsonl (600) gained the row; p1 executed; exactly token, snapshot, POST; a second call -> already executed" {
+  seed_proposal p1
+  seed_fixture approvals-p1.jsonl "$APPROVALS"
+  run pty_graph send-draft --approved "$H1"
+  [ "$status" -eq 0 ] || { echo "$status: $output"; return 1; }
+  [ "$(last_line)" = "executed: send-draft $H1 (202)" ] || { echo "$output"; return 1; }
+  grep -qx 'key: file' <<< "$output"
+  [ "$(urls)" = "$(printf '%s\n' "POST $TOKEN_URL" \
+    "GET $GRAPH_URL/users/$UPN/messages/d1?\$select=id,subject,toRecipients,ccRecipients,bccRecipients,from,receivedDateTime,parentFolderId,changeKey,isDraft" \
+    "POST $GRAPH_URL/users/$UPN/messages/d1/send")" ] || { urls; return 1; }
+  [ "$(requests | grep -c "method=POST url=$GRAPH_URL/users/$UPN/messages/d1/send .* bearer=present .* destinationId=absent")" -eq 1 ]
+  [ "$(stat -c %a "$STATE")" = 700 ]
+  [ "$(stat -c %a "$EXECUTIONS")" = 600 ]
+  [ "$(stat -c %a "$PROPOSALS")" = 600 ]
+  [ "$(executions)" = "{\"row_id\":\"p1\",\"hash\":\"$H1\",\"verb\":\"send-draft\",\"http_status\":202,\"ts\":\"2026-09-30T10:00:00Z\"}" ] || { executions; return 1; }
+  [ "$(row_status p1)" = executed ]
+  [ "$(wc -l < "$PROPOSALS")" -eq 1 ]
+  [ "$(wc -l < "$APPROVALS")" -eq 1 ]
+  [ -z "$(find "$STATE" -name '*.tmp')" ]
+  # the approval is used up with the row
+  : > "$CURL_STUB_LOG"
+  run pty_graph send-draft --approved "$H1"
+  [ "$status" -eq 5 ] && [ "$(last_line)" = "m365: row p1 already executed" ] || { echo "$status $output"; return 1; }
+  [ "$(request_count)" -eq 0 ]
+  [ "$(wc -l < "$EXECUTIONS")" -eq 1 ]
+}
+
+@test "graph: move --approved H3 valid -> POST …/messages/m1/move destinationId=archive (well-known, as-is) -> 201 executed: move H3 (201); a display name Archive resolves to its folder id; an unknown folder -> exit 5 folder not found, row failed, no POST" {
+  seed_proposal p3
+  seed_approval p3 "$H3"
+  run pty_graph move --approved "$H3"
+  [ "$status" -eq 0 ] || { echo "$status: $output"; return 1; }
+  [ "$(last_line)" = "executed: move $H3 (201)" ] || { echo "$output"; return 1; }
+  [ "$(urls)" = "$(printf '%s\n' "POST $TOKEN_URL" \
+    "GET $GRAPH_URL/users/$UPN/messages/m1?\$select=id,subject,toRecipients,ccRecipients,bccRecipients,from,receivedDateTime,parentFolderId,changeKey,isDraft" \
+    "POST $GRAPH_URL/users/$UPN/messages/m1/move")" ] || { urls; return 1; }
+  [ "$(requests | grep -c 'method=POST .*messages/m1/move .* destinationId=archive$')" -eq 1 ] || { requests; return 1; }
+  [ "$(executions)" = "{\"row_id\":\"p3\",\"hash\":\"$H3\",\"verb\":\"move\",\"http_status\":201,\"ts\":\"2026-09-30T10:00:00Z\"}" ] || { executions; return 1; }
+  [ "$(row_status p3)" = executed ]
+  # a display name is resolved through the folder list (Archive is AQMkArchive0001 in the fixtures)
+  reset_consent
+  seed_proposal p3 '.folder = "Archive"'
+  seed_approval p3 "$H3"
+  run pty_graph move --approved "$H3"
+  [ "$status" -eq 0 ] && [ "$(last_line)" = "executed: move $H3 (201)" ] || { echo "$status $output"; return 1; }
+  [ "$(requests | grep -c 'method=POST .*messages/m1/move .* destinationId=AQMkArchive0001$')" -eq 1 ] || { requests; return 1; }
+  grep -qF "GET $GRAPH_URL/users/$UPN/mailFolders?\$top=100" <(urls)
+  # a folder id is accepted as-is too
+  reset_consent
+  seed_proposal p3 '.folder = "AQMkArchive0001"'
+  seed_approval p3 "$H3"
+  run pty_graph move --approved "$H3"
+  [ "$status" -eq 0 ]
+  [ "$(requests | grep -c 'destinationId=AQMkArchive0001$')" -eq 1 ]
+  # an unknown folder: refused, the row failed, nothing moved
+  reset_consent
+  seed_proposal p3 '.folder = "Nowhere"'
+  seed_approval p3 "$H3"
+  run pty_graph move --approved "$H3"
+  [ "$status" -eq 5 ] && [ "$(last_line)" = "m365: folder Nowhere not found" ] || { echo "$status $output"; return 1; }
+  [ "$(row_status p3)" = failed ]
+  [ ! -e "$EXECUTIONS" ]
+  ! grep -q 'messages/m1/move' "$CURL_STUB_LOG"
+  # a row without a folder cannot be moved
+  reset_consent
+  seed_proposal p3 'del(.folder)'
+  seed_approval p3 "$H3"
+  run pty_graph move --approved "$H3"
+  [ "$status" -eq 5 ] && [ "$(last_line)" = "m365: row p3 names no folder" ] || { echo "$status $output"; return 1; }
+  [ "$(row_status p3)" = failed ]
+}
+
+@test "graph: delete --approved H2 valid -> POST …/messages/m1/move destinationId=deleteditems (the stub asserts it) -> 201 executed: delete H2 (201); DELETE never issued (stub exit 97 never fires); two rows on one object pick the row of the verb" {
+  seed_proposal p2
+  seed_proposal p3
+  seed_approval p3 "$H3"
+  seed_approval p2 "$H2"
+  run pty_graph delete --approved "$H2"
+  [ "$status" -eq 0 ] || { echo "$status: $output"; return 1; }
+  [ "$(last_line)" = "executed: delete $H2 (201)" ] || { echo "$output"; return 1; }
+  [ "$(urls)" = "$(printf '%s\n' "POST $TOKEN_URL" \
+    "GET $GRAPH_URL/users/$UPN/messages/m1?\$select=id,subject,toRecipients,ccRecipients,bccRecipients,from,receivedDateTime,parentFolderId,changeKey,isDraft" \
+    "POST $GRAPH_URL/users/$UPN/messages/m1/move")" ] || { urls; return 1; }
+  [ "$(requests | grep -c 'method=POST .*messages/m1/move .* destinationId=deleteditems$')" -eq 1 ] || { requests; return 1; }
+  ! grep -q 'method=DELETE' "$CURL_STUB_LOG"
+  ! grep -q 'stub:' <<< "$output"
+  [ "$(executions)" = "{\"row_id\":\"p2\",\"hash\":\"$H2\",\"verb\":\"delete\",\"http_status\":201,\"ts\":\"2026-09-30T10:00:00Z\"}" ] || { executions; return 1; }
+  [ "$(row_status p2)" = executed ]
+  [ "$(row_status p3)" = pending ]
+  # the other row on the same object still executes against its own approval
+  : > "$CURL_STUB_LOG"
+  run pty_graph move --approved "$H3"
+  [ "$status" -eq 0 ] && [ "$(last_line)" = "executed: move $H3 (201)" ] || { echo "$status $output"; return 1; }
+  [ "$(row_status p3)" = executed ]
+  [ "$(wc -l < "$EXECUTIONS")" -eq 2 ]
+  # the same hash again, for a verb no pending row carries: the newest approval's row speaks
+  run pty_graph delete --approved "$H2"
+  [ "$status" -eq 5 ] && [ "$(last_line)" = "m365: row p2 already executed" ] || { echo "$status $output"; return 1; }
+}
+
+@test "graph: send-draft valid but 403 -> exit 6 forbidden … \"Scope or grant missing\", executions row 403, p1 failed; a failed row refuses until marked pending and re-approved, then the send succeeds; 6x429 -> exit 6 failed; 2x429 then 202 -> executed" {
+  seed_proposal p1
+  seed_fixture approvals-p1.jsonl "$APPROVALS"
+  scenario 'messages/d1/send:403:graph-forbidden.json'
+  run pty_graph send-draft --approved "$H1"
+  [ "$status" -eq 6 ] || { echo "$status: $output"; return 1; }
+  [ "$(last_line)" = 'm365: forbidden (ErrorAccessDenied) — runbook 13 "Scope or grant missing"' ] || { echo "$output"; return 1; }
+  ! grep -q 'executed:' <<< "$output"
+  [ "$(executions)" = "{\"row_id\":\"p1\",\"hash\":\"$H1\",\"verb\":\"send-draft\",\"http_status\":403,\"ts\":\"2026-09-30T10:00:00Z\"}" ] || { executions; return 1; }
+  [ "$(row_status p1)" = failed ]
+  [ "$(urls | grep -c 'messages/d1/send$')" -eq 1 ]
+  # failed: refused until the owner re-approves
+  : > "$CURL_STUB_LOG"
+  run pty_graph send-draft --approved "$H1"
+  [ "$status" -eq 5 ] && [ "$(last_line)" = "m365: row p1 failed earlier — re-approve it with m365-approve.sh" ] || { echo "$status $output"; return 1; }
+  [ "$(request_count)" -eq 0 ]
+  "$STATE_SH" mark p1 pending
+  seed_approval p1 "$H1" 2026-09-30T09:58:00Z
+  run pty_graph send-draft --approved "$H1"
+  [ "$status" -eq 0 ] && [ "$(last_line)" = "executed: send-draft $H1 (202)" ] || { echo "$status $output"; return 1; }
+  [ "$(wc -l < "$EXECUTIONS")" -eq 2 ]
+  [ "$(jq -r .http_status "$EXECUTIONS" | paste -sd,)" = "403,202" ]
+  [ "$(row_status p1)" = executed ]
+  # throttled six times: exit 6, failed, one row with 429
+  reset_consent
+  seed_proposal p1
+  seed_fixture approvals-p1.jsonl "$APPROVALS"
+  local i
+  for i in 1 2 3 4 5 6; do scenario 'messages/d1/send:429:-:retry-after-2.hdr'; done
+  run pty_graph send-draft --approved "$H1"
+  [ "$status" -eq 6 ] || { echo "$status: $output"; return 1; }
+  [ "$(last_line)" = 'm365: throttled (429) after 5 retries — runbook 13 "Throttling"' ] || { echo "$output"; return 1; }
+  [ "$(urls | grep -c 'messages/d1/send$')" -eq 6 ]
+  [ "$(jq -r .http_status "$EXECUTIONS")" = 429 ]
+  [ "$(row_status p1)" = failed ]
+  # throttled twice, then accepted
+  reset_consent
+  seed_proposal p1
+  seed_fixture approvals-p1.jsonl "$APPROVALS"
+  scenario 'messages/d1/send:429:-:retry-after-2.hdr'
+  scenario 'messages/d1/send:429:-:retry-after-2.hdr'
+  run pty_graph send-draft --approved "$H1"
+  [ "$status" -eq 0 ] && [ "$(last_line)" = "executed: send-draft $H1 (202)" ] || { echo "$status $output"; return 1; }
+  [ "$(urls | grep -c 'messages/d1/send$')" -eq 3 ]
+  [ "$(jq -r .http_status "$EXECUTIONS")" = 202 ]
+  [ "$(row_status p1)" = executed ]
+  # a 404 on the target during the snapshot is a Graph failure (exit 6), nothing recorded
+  reset_consent
+  seed_proposal p1
+  seed_fixture approvals-p1.jsonl "$APPROVALS"
+  scenario 'messages/d1\?:404:graph-not-found.json'
+  run pty_graph send-draft --approved "$H1"
+  [ "$status" -eq 6 ] && [ "$(last_line)" = "m365: not found (d1)" ] || { echo "$status $output"; return 1; }
+  [ ! -e "$EXECUTIONS" ] && [ "$(row_status p1)" = pending ]
 }

@@ -291,7 +291,7 @@ hygiene_words() { # hygiene_words <root> <csv>
 
 @test "repo: shellcheck -S style is clean on hooks, skill scripts and helpers" {
   cd "$REPO_ROOT"
-  run shellcheck -S style .claude/hooks/*.sh .claude/skills/*/*.sh tests/*.bash tests/fixtures/github/gh-stub.sh tests/fixtures/github/git-spy.sh tests/fixtures/graph/curl-stub.sh
+  run shellcheck -S style .claude/hooks/*.sh .claude/skills/*/*.sh tests/*.bash tests/fixtures/github/gh-stub.sh tests/fixtures/github/git-spy.sh tests/fixtures/graph/curl-stub.sh tests/fixtures/m365/*.bash
   [ "$status" -eq 0 ] || { echo "$output"; return 1; }
 }
 

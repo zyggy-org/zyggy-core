@@ -19,3 +19,5 @@ GET	/sites/acme\.sharepoint\.example,aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa,bbbbbb
 GET	/sites/acme-my\.sharepoint\.example,cccccccc-cccc-4ccc-8ccc-cccccccccccc,dddddddd-dddd-4ddd-8ddd-dddddddddddd/drives\?	200	site-personal-drives.json	-
 GET	/drives/b!onedrive0001/root$	200	drive-root.json	-
 GET	/drives/b!ungranted0001/root$	403	graph-forbidden.json	-
+POST	/users/alice@acme\.example/messages/d1/send$	202	-	-
+POST	/users/alice@acme\.example/messages/m1/move$	201	move-ok.json	-

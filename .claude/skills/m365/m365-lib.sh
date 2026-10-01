@@ -1,21 +1,29 @@
 #!/usr/bin/env bash
 set -euo pipefail
 # Shared functions for the m365 connector scripts (spec 23). Sourced after ../../hooks/lib.sh, never executed.
-# Owns the paths (config, state dir, key, certificate), the configuration validation, the key lookup, the retry
-# clock, the curl stub guard and the one definition of the snapshot canonical form and its hash. No request is
-# made here and the private key is never read into a variable: callers hand its path to openssl.
+# Owns the paths (config, state dir, key, certificate, the three consent files), the configuration validation, the
+# key lookup, the retry clock, the curl stub guard, the one definition of the snapshot canonical form and its hash,
+# the terminal test and the consent-file readers and the one appender. No request is made here and the private key
+# is never read into a variable: callers hand its path to openssl.
 # Every m365 script prefixes its stderr lines with "m365: " (zy_die reads ZY_SELF).
 # shellcheck disable=SC2034 # read by lib.sh's zy_die and by the scripts that source this library
 ZY_SELF=m365
 
-ZY_M365_CHECKOUT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd -P)"
+ZY_M365_SKILL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+ZY_M365_CHECKOUT="$(cd "$ZY_M365_SKILL_DIR/../../.." && pwd -P)"
 ZY_M365_CONFIG="${ZYGGY_M365_CONFIG:-$ZY_M365_CHECKOUT/instance/m365.json}"
 ZY_M365_STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/zyggy/m365"
 ZY_M365_KEY_FILE="${ZYGGY_M365_KEY_FILE:-${XDG_CONFIG_HOME:-$HOME/.config}/zyggy/m365-app.key}"
 ZY_M365_CER_FILE="${ZYGGY_M365_CER_FILE:-${XDG_CONFIG_HOME:-$HOME/.config}/zyggy/m365-app.cer}"
 ZY_M365_CREDENTIAL_NAME=m365-app-key
+# The three consent files (spec 23 D6): what the model proposed, what the owner approved on a terminal, what
+# graph.sh executed. 0600, append-only (state.sh mark rewrites one status), no body text ever.
+ZY_M365_PROPOSALS="$ZY_M365_STATE_DIR/proposals.jsonl"
+ZY_M365_APPROVALS="$ZY_M365_STATE_DIR/approvals.jsonl"
+ZY_M365_EXECUTIONS="$ZY_M365_STATE_DIR/executions.jsonl"
 # shellcheck disable=SC2034 # the paths and grammars are read by the scripts that source this library
-readonly ZY_M365_CHECKOUT ZY_M365_CONFIG ZY_M365_STATE_DIR ZY_M365_KEY_FILE ZY_M365_CER_FILE ZY_M365_CREDENTIAL_NAME
+readonly ZY_M365_SKILL_DIR ZY_M365_CHECKOUT ZY_M365_CONFIG ZY_M365_STATE_DIR ZY_M365_KEY_FILE ZY_M365_CER_FILE
+readonly ZY_M365_CREDENTIAL_NAME ZY_M365_PROPOSALS ZY_M365_APPROVALS ZY_M365_EXECUTIONS
 readonly ZY_M365_GUID_RE='^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
 readonly ZY_M365_UPN_RE='^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$'
 readonly ZY_M365_DATE_RE='^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
@@ -27,6 +35,10 @@ readonly ZY_M365_ID_RE='^[A-Za-z0-9_=-]{1,512}$'
 readonly ZY_M365_DRIVE_ID_RE='^[A-Za-z0-9_!.=-]{1,512}$'
 # shellcheck disable=SC2034
 readonly ZY_M365_HASH_RE='^[0-9a-f]{64}$'
+# shellcheck disable=SC2034 # proposal ids (ULID-like from propose.sh; short names in fixtures) and the row statuses
+readonly ZY_M365_ROW_ID_RE='^[A-Za-z0-9_-]{1,64}$'
+# shellcheck disable=SC2034
+readonly ZY_M365_STATUS_RE='^(pending|approved|executed|failed|refused|expired)$'
 readonly ZY_M365_EXPIRY_WARN_DAYS=30
 
 # --- configuration ---------------------------------------------------------------------------------------
@@ -219,4 +231,62 @@ zy_m365_canonical() { # zy_m365_canonical <snapshot json>
 # SHA-256 (64 hex) of the canonical line followed by one newline, i.e. of exactly what zy_m365_canonical prints.
 zy_m365_hash() { # zy_m365_hash <canonical line>
   printf '%s\n' "$1" | sha256sum | cut -c1-64
+}
+
+# The snapshot kind an action binds to: a send-draft row snapshots a draft, a move or delete row a message.
+# propose.sh, the write verbs and m365-approve.sh must agree on it, or the hashes never match.
+zy_m365_kind_of() { # zy_m365_kind_of <action>
+  case "$1" in
+    send-draft) printf draft ;;
+    *) printf message ;;
+  esac
+}
+
+# --- the terminal and the consent files -------------------------------------------------------------------------
+
+# True on an attended terminal: stdin and stdout are a tty (the owner's SSH session; a pseudo-tty in CI). A unit,
+# a pipe and `claude -p` fail it.
+zy_m365_tty() {
+  [ -t 0 ] && [ -t 1 ]
+}
+
+# The state directory, 0700, created on first use; exit 3 when that is impossible.
+zy_m365_state_dir() {
+  if [ ! -d "$ZY_M365_STATE_DIR" ]; then
+    (umask 077 && mkdir -p "$ZY_M365_STATE_DIR") 2> /dev/null ||
+      zy_die 3 "state directory $ZY_M365_STATE_DIR cannot be created"
+  fi
+  chmod 700 "$ZY_M365_STATE_DIR"
+}
+
+# The one appender for the three consent files: 0600 (created on first write), an exclusive lock on the file for
+# the duration of the append, one JSON row per line. Callers pass a compact JSON object without body text.
+zy_m365_consent_append() { # zy_m365_consent_append <file> <json row>
+  zy_m365_state_dir
+  (
+    umask 077
+    exec 9>> "$1"
+    flock -x 9
+    printf '%s\n' "$2" >&9
+  )
+  chmod 600 "$1"
+}
+
+# The proposal row <id> as compact JSON, or nothing.
+zy_m365_row() { # zy_m365_row <row id>
+  [ -s "$ZY_M365_PROPOSALS" ] || return 0
+  jq -c -n --arg id "$1" 'first(inputs | select(.id == $id))' "$ZY_M365_PROPOSALS"
+}
+
+# Every approval row bound to <hash>, newest first (one per line), or nothing.
+zy_m365_approvals() { # zy_m365_approvals <hash>
+  [ -s "$ZY_M365_APPROVALS" ] || return 0
+  jq -c -n --arg h "$1" '[inputs | select(.hash_at_approval == $h)] | reverse | .[]' "$ZY_M365_APPROVALS"
+}
+
+# True when an execution with a 2xx status is recorded for the proposal <row id>: it ran, whatever the status says.
+zy_m365_executed() { # zy_m365_executed <row id>
+  [ -s "$ZY_M365_EXECUTIONS" ] &&
+    jq -e -n --arg id "$1" 'any(inputs; .row_id == $id and ((.http_status | tostring) | test("^2")))' \
+      "$ZY_M365_EXECUTIONS" > /dev/null
 }
