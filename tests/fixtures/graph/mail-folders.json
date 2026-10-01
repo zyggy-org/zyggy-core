@@ -1,0 +1,7 @@
+{"value":[
+{"id":"AQMkInbox0001","displayName":"Inbox","wellKnownName":"inbox","totalItemCount":1240,"unreadItemCount":12,"childFolderCount":1},
+{"id":"AQMkSentItems0001","displayName":"Sent Items","wellKnownName":"sentitems","totalItemCount":310,"unreadItemCount":0,"childFolderCount":0},
+{"id":"AQMkDeletedItems0001","displayName":"Deleted Items","wellKnownName":"deleteditems","totalItemCount":12,"unreadItemCount":0,"childFolderCount":0},
+{"id":"AQMkDrafts0001","displayName":"Drafts","wellKnownName":"drafts","totalItemCount":4,"unreadItemCount":0,"childFolderCount":0},
+{"id":"AQMkJunkEmail0001","displayName":"Junk Email","wellKnownName":"junkemail","totalItemCount":3,"unreadItemCount":3,"childFolderCount":0}
+]}

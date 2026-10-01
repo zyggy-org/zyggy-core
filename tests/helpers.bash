@@ -152,3 +152,29 @@ bare_repo_delete() { # bare_repo_delete <owner> <name> <file>
   "${g[@]}" -C "$w" commit -q -m two
   "${g[@]}" -C "$w" push -q "$BATS_TEST_TMPDIR/remote/$1/$2.git" main
 }
+
+# A throw-away application key pair (RSA 2048, CN zyggy-central, 2 days) in ${XDG_CONFIG_HOME:-$HOME/.config}/zyggy,
+# generated with real openssl per test (never committed): key 0600 in a 0700 directory, certificate 0644. Exports
+# the scripts' path overrides ZYGGY_M365_KEY_FILE / ZYGGY_M365_CER_FILE. Tests of cert-init remove the pair first.
+install_m365_keypair() {
+  local dir="${XDG_CONFIG_HOME:-$HOME/.config}/zyggy"
+  (umask 077 && mkdir -p "$dir" && openssl req -x509 -newkey rsa:2048 -nodes -days 2 -subj /CN=zyggy-central \
+    -keyout "$dir/m365-app.key" -out "$dir/m365-app.cer" 2> /dev/null)
+  chmod 644 "$dir/m365-app.cer"
+  export ZYGGY_M365_KEY_FILE="$dir/m365-app.key" ZYGGY_M365_CER_FILE="$dir/m365-app.cer"
+}
+
+# The curl stub (tests/fixtures/graph/curl-stub.sh) as graph-stub/curl, first on PATH, with a per-test copy of the
+# Graph fixtures and routes beside it (graph.sh runs curl under env -i, so the stub reads everything from its own
+# directory). Log: graph-stub/curl-stub.log; one-shot overrides: graph-stub/curl-stub.scenario (<url-ERE>:<status>
+# [:<body-file>[:<headers-file>]]); the received client assertion: graph-stub/assertion.jwt. ZYGGY_M365_STUB=1 makes
+# graph.sh refuse any other curl; ZYGGY_RETRY_SCALE=0 removes the retry sleeps.
+install_curl_stub() {
+  local d="$BATS_TEST_TMPDIR/graph-stub"
+  mkdir -p "$d/fixtures"
+  cp "$FIXTURES/graph/curl-stub.sh" "$d/curl"
+  chmod +x "$d/curl"
+  cp "$FIXTURES"/graph/*.json "$FIXTURES"/graph/*.hdr "$FIXTURES/graph/routes.tsv" "$d/fixtures/"
+  : > "$d/curl-stub.scenario"
+  export PATH="$d:$PATH" CURL_STUB_DIR="$d" CURL_STUB_LOG="$d/curl-stub.log" ZYGGY_M365_STUB=1 ZYGGY_RETRY_SCALE=0
+}

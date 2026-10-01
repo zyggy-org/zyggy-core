@@ -1,0 +1,1 @@
+{"error":"invalid_client","error_description":"AADSTS700027: The certificate with identifier used to sign the client assertion is not registered on application. Trace ID: 00000000-0000-0000-0000-000000000000","error_codes":[700027],"timestamp":"2026-09-30 10:00:00Z"}

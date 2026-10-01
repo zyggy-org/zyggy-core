@@ -67,7 +67,8 @@ snapshot() {
 }
 
 @test "remember: a 1000-character fact is accepted" {
-  run remember -- "$(printf 'a%.0s' $(seq 1 1000))"
+  # 1000 characters of words: a bare 1000-letter run is what the long-opaque-token secret pattern refuses
+  run remember -- "$(printf 'fact%03d ' $(seq 1 125))"
   [ "$status" -eq 0 ]
 }
 
@@ -127,7 +128,7 @@ snapshot() {
   patterns="$(grep -v '^#' "$HOOKS/secret-patterns.txt" | cut -f1 | sort)"
   samples="$(cut -f1 "$FIXTURES/secret-samples.txt" | sort -u)"
   [ "$patterns" = "$samples" ]
-  [ "$(printf '%s\n' "$patterns" | wc -l)" -eq 11 ]
+  [ "$(printf '%s\n' "$patterns" | wc -l)" -eq 12 ]
 }
 
 @test "remember: every benign sample -> exit 0 and appended" {

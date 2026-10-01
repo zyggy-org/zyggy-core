@@ -1,0 +1,1 @@
+{"id":"m1","subject":"Invoice 2026-41","from":{"emailAddress":{"name":"Carol","address":"Carol@example.org"}},"replyTo":[],"toRecipients":[{"emailAddress":{"name":"Alice","address":"alice@acme.example"}}],"ccRecipients":[],"bccRecipients":[],"conversationId":"c1","receivedDateTime":"2026-09-29T14:02:00Z","parentFolderId":"AQMkInbox0001","changeKey":"CKm1","isDraft":false}

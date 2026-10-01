@@ -129,10 +129,10 @@ scripts() { # every shell script under .claude/, relative to the repo root
   ! grep -v -i 'never' <<< "$output"
 }
 
-@test "repo: the gh stub and the git spy start with the template shebang and set -euo pipefail, are LF and executable in the index, and ci.yml shellchecks both" {
+@test "repo: the gh stub, the git spy and the curl stub start with the template shebang and set -euo pipefail, are LF and executable in the index, and ci.yml shellchecks all three" {
   local f
   cd "$REPO_ROOT"
-  for f in tests/fixtures/github/gh-stub.sh tests/fixtures/github/git-spy.sh; do
+  for f in tests/fixtures/github/gh-stub.sh tests/fixtures/github/git-spy.sh tests/fixtures/graph/curl-stub.sh; do
     [ "$(head -n 1 "$f")" = "#!/usr/bin/env bash" ] || { echo "$f: shebang"; return 1; }
     head -n 3 "$f" | grep -qx 'set -euo pipefail'
     [ "$(git ls-files -s -- "$f" | cut -d' ' -f1)" = 100755 ] || { echo "$f: mode"; return 1; }
@@ -291,7 +291,7 @@ hygiene_words() { # hygiene_words <root> <csv>
 
 @test "repo: shellcheck -S style is clean on hooks, skill scripts and helpers" {
   cd "$REPO_ROOT"
-  run shellcheck -S style .claude/hooks/*.sh .claude/skills/*/*.sh tests/*.bash tests/fixtures/github/gh-stub.sh tests/fixtures/github/git-spy.sh
+  run shellcheck -S style .claude/hooks/*.sh .claude/skills/*/*.sh tests/*.bash tests/fixtures/github/gh-stub.sh tests/fixtures/github/git-spy.sh tests/fixtures/graph/curl-stub.sh
   [ "$status" -eq 0 ] || { echo "$output"; return 1; }
 }
 

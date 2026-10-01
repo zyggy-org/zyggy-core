@@ -1,0 +1,4 @@
+{"value":[
+{"id":"d0","subject":"Zyggy — morning brief 2026-09-30","toRecipients":[{"emailAddress":{"name":"Alice","address":"alice@acme.example"}}],"ccRecipients":[],"bccRecipients":[],"conversationId":"c0","createdDateTime":"2026-09-30T05:30:00Z","changeKey":"CK0","isDraft":true,"body":{"contentType":"text","content":"## Mail\n- Carol asked for the invoice date.\n"}},
+{"id":"d1","subject":"RE: Invoice 2026-41","toRecipients":[{"emailAddress":{"name":"Carol","address":"carol@example.org"}}],"ccRecipients":[],"bccRecipients":[],"conversationId":"c1","createdDateTime":"2026-09-30T05:31:00Z","changeKey":"CK1","isDraft":true,"body":{"contentType":"text","content":"Dear Carol, I will call tomorrow.\n"}}
+]}

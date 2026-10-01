@@ -16,8 +16,9 @@
     "exclude_drives": [],
     "exclude_paths": []
   },
+  "consent": { "ttl_minutes": 60, "allowed_actions": ["send-draft", "move", "delete"] },
   "brief": { "mail_max_items": 60, "reply_cap": 3, "files_max_items": 20, "file_max_bytes": 15728640, "file_text_cap_bytes": 20000,
-             "max_turns": 40, "budget_usd": 3.0, "max_facts": 10, "model": "" },
+             "max_turns": 40, "budget_usd": 3.0, "max_facts": 10, "proposal_cap": 10, "model": "" },
   "mail_backfill": { "exclude_folders": ["junkemail", "deleteditems", "drafts", "outbox", "conversationhistory"], "batch_messages": 25,
                      "max_turns": 15, "budget_usd_per_batch": 0.5, "budget_usd_total": 40.0, "max_facts": 3000, "max_messages": 0, "model": "sonnet" },
   "files_backfill": { "batch_files": 10, "max_turns": 25, "file_max_bytes": 15728640, "file_text_cap_bytes": 20000,

@@ -1,0 +1,1 @@
+{"error":"unauthorized_client","error_description":"AADSTS700016: Application with the given identifier was not found in the directory acme. Trace ID: 00000000-0000-0000-0000-000000000000","error_codes":[700016],"timestamp":"2026-09-30 10:00:00Z"}

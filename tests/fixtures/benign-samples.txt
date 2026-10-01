@@ -3,3 +3,4 @@
 order number 48201937
 my password manager is 1Password
 https://example.com/docs?id=42
+opaque but short Qm9iQWxpY2VDYXJvbERhdmVFcmluRnJhbmtHcmFjZUhlaWRpSXZhbkp1ZHlNYWxsb3J5TmlhakFsaWNl

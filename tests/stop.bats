@@ -46,7 +46,8 @@ snapshot() {
 
 @test "stop: a note longer than 240 characters is cut at 240 with an ellipsis" {
   local long
-  long="$(printf 'x%.0s' $(seq 1 300))"
+  # 321 characters of words: a bare letter run is what the long-opaque-token secret pattern refuses
+  long="$(printf 'note%03d ' $(seq 1 40))x"
   run_stop "$long"
   [ "$status" -eq 0 ]
   [ -z "$output" ]
@@ -55,7 +56,9 @@ snapshot() {
 
 @test "stop: a note of exactly 240 characters is not cut" {
   local exact
-  exact="$(printf 'y%.0s' $(seq 1 240))"
+  # exactly 240 characters of words, no trailing space (stop.sh collapses whitespace)
+  exact="$(printf 'note%03d ' $(seq 1 30))"
+  exact="${exact:0:239}x"
   run_stop "$exact"
   [ "$(tail -n 1 "$DAILY")" = "- [observed] 12:00 session 0b7c3d1e: $exact" ]
 }

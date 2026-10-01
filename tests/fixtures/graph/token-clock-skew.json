@@ -1,0 +1,1 @@
+{"error":"invalid_client","error_description":"AADSTS700024: Client assertion is not within its valid time range. Current time: 2026-09-30T10:12:00Z, assertion valid from 2026-09-30T10:00:00Z, expiry time 2026-09-30T10:05:00Z. Trace ID: 00000000-0000-0000-0000-000000000000","error_codes":[700024],"timestamp":"2026-09-30 10:12:00Z"}
