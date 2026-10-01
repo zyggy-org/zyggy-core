@@ -18,6 +18,8 @@ instance's Claude Code sessions** (remote control or `claude -p` are started the
 | `.claude/hooks/secret-patterns.txt` | Secret patterns (`name<TAB>ERE[<TAB>flags]`); data, not code |
 | `.claude/skills/remember/` | The `remember` skill and `remember.sh` (owner-stated facts into `inbox/`) |
 | `.claude/skills/seed-memory/` | The owner-invoked seeding interview for a fresh memory repository |
+| `.claude/skills/github-inventory/` | The owner-invoked `github-inventory` skill and `inventory.sh`: one `[observed]` line per repository the read-only token can see, into `inbox/` |
+| `tests/fixtures/github/` | Fixture API pages and the `gh` stub (`gh-stub.sh`) — no network in CI |
 | `PROTOCOL.md` | Placeholder: the bus contract is founding-spec §4 until deliverable 15 |
 | `tests/` | `bats-core` tests, fixtures (tenant `acme`, user `alice`) and hand-derived expected outputs |
 | `.github/workflows/ci.yml` | bats, shellcheck, `jq`, LF check on `ubuntu-latest` |
@@ -48,6 +50,11 @@ instance from the template never conflicts:
   other rules
 - `.claude/rules/instance/**`
 - `.claude/skills/instance-*/**` — instance-only skills
+
+`instance/github-inventory-exclude.txt` (optional) lists the repositories the `github-inventory` skill leaves out
+of memory: one `owner/name` per line, `#` comments and blank lines ignored, surrounding spaces trimmed, matched
+case-insensitively. A malformed line makes the script exit 3. It is edited on the workstation, committed and
+pulled on the machine like every instance file.
 
 Never edit a template-owned file in an instance: change it in the template and pull it. An instance declares no
 hooks (hook lists merge across settings files, so an instance hook would run in addition to the template's).
@@ -129,8 +136,16 @@ reloads the instructions and re-runs the digest.
 | `session-start.sh identity\|index\|daily` | 0 ok, 3 configuration error, 4 unknown section | One section on stdout, capped (6,000 / 6,000 / 8,000 bytes; `ZYGGY_DIGEST_BYTES_*` override, clamped to 9,500) |
 | `stop.sh` | 0 always, 3 configuration error | Nothing on stdout; one stderr line on a refusal or the daily cap |
 | `remember.sh [--scope …] [--tag …] [--source …] -- "<fact>"` | 0 kept, 2 refused (secret), 3 configuration, 4 usage | `remembered: <path>` and the line |
+| `inventory.sh [--max <1..500>] \| inventory.sh --check` | 0 done, 3 configuration (env, memory dir, `gh`/`jq`, token file, exclusion file), 4 usage, 5 refused (unattended, `ZYGGY_HOOKS=off`), 6 GitHub request failed | `inventory: <path>` + counts line + the lines in a `<zyggy-github-inventory>` fence; `--check`: one summary line, writes nothing |
 
-`ZYGGY_HOOKS=off` silences all three; `ZYGGY_NOW` (tests only) replaces the clock.
+`ZYGGY_HOOKS=off` silences the three hook scripts and makes `inventory.sh` refuse (exit 5); `ZYGGY_NOW` (tests
+only) replaces the clock.
+
+`inventory.sh` reads the GitHub read token from `${XDG_CONFIG_HOME:-$HOME/.config}/zyggy/github-read-token`
+(mode 0600, owned by the running user, one line) and hands it to `gh` only as `GH_TOKEN` in each child's
+environment. `ZYGGY_GITHUB_TOKEN_FILE` and `ZYGGY_GITHUB_EXCLUDE_FILE` override the token and exclusion file
+paths for tests and hand runs only, never in `settings.local.json`. `gh` must be installed from GitHub's apt
+repository and never logged in (`gh auth login` is never run).
 
 ## Tests
 
@@ -139,7 +154,7 @@ shellcheck jq`; the CI image is `ubuntu-latest`):
 
 ```bash
 bats tests/
-shellcheck -S style .claude/hooks/*.sh .claude/skills/*/*.sh tests/*.bash
+shellcheck -S style .claude/hooks/*.sh .claude/skills/*/*.sh tests/*.bash tests/fixtures/github/gh-stub.sh
 jq . .claude/settings.json > /dev/null
 git ls-files --eol | grep -v 'i/lf\|i/-text\|i/none'      # must print nothing (LF, binary or empty only)
 ```
@@ -149,4 +164,5 @@ that must not occur in any template-owned file, matched case-insensitively. Set 
 repository variable; CI passes it to `bats`. Unset or empty → that one test is reported as skipped.
 
 Fixtures use tenant `acme`, user `alice`. Files under `tests/expected/` are **hand-derived** from the
-contracts and never pasted from script output; see `tests/README.md`.
+contracts and never pasted from script output; see `tests/README.md`. The `github-inventory` tests run against a
+`gh` stub (`tests/fixtures/github/gh-stub.sh`) and fixture API pages — no network in CI.

@@ -1,0 +1,110 @@
+[
+  {
+    "full_name": "alice/zyggy-experiments",
+    "owner": {
+      "login": "alice",
+      "type": "User"
+    },
+    "private": true,
+    "fork": false,
+    "archived": false,
+    "description": "Scratch repository for Zyggy hook experiments.",
+    "language": "Python",
+    "pushed_at": "2026-09-29T21:14:03Z",
+    "permissions": {
+      "admin": true,
+      "push": true,
+      "pull": true
+    }
+  },
+  {
+    "full_name": "alice/tea-journal",
+    "owner": {
+      "login": "alice",
+      "type": "User"
+    },
+    "private": false,
+    "fork": false,
+    "archived": false,
+    "description": "",
+    "language": null,
+    "pushed_at": "2026-09-20T08:00:00Z",
+    "permissions": {
+      "admin": true,
+      "push": true,
+      "pull": true
+    }
+  },
+  {
+    "full_name": "alice/marathon-tracker",
+    "owner": {
+      "login": "alice",
+      "type": "User"
+    },
+    "private": true,
+    "fork": false,
+    "archived": false,
+    "description": "Training plan tracker for the 2027 marathon: pace calculator and weekly plan export.",
+    "language": "TypeScript",
+    "pushed_at": "2026-09-12T17:45:10Z",
+    "permissions": {
+      "admin": true,
+      "push": true,
+      "pull": true
+    }
+  },
+  {
+    "full_name": "bob/house-move-planner",
+    "owner": {
+      "login": "bob",
+      "type": "User"
+    },
+    "private": true,
+    "fork": false,
+    "archived": false,
+    "description": null,
+    "language": null,
+    "pushed_at": "2026-08-30T12:00:00Z",
+    "permissions": {
+      "admin": false,
+      "push": true,
+      "pull": true
+    }
+  },
+  {
+    "full_name": "alice/dotfiles",
+    "owner": {
+      "login": "alice",
+      "type": "User"
+    },
+    "private": false,
+    "fork": true,
+    "archived": false,
+    "description": "Alice's shell and editor configuration.",
+    "language": "Shell",
+    "pushed_at": "2026-07-04T09:30:00Z",
+    "permissions": {
+      "admin": true,
+      "push": true,
+      "pull": true
+    }
+  },
+  {
+    "full_name": "alice/bats-core",
+    "owner": {
+      "login": "alice",
+      "type": "User"
+    },
+    "private": false,
+    "fork": true,
+    "archived": true,
+    "description": "Bash Automated Testing System",
+    "language": "Shell",
+    "pushed_at": "2025-11-02T06:12:00Z",
+    "permissions": {
+      "admin": true,
+      "push": false,
+      "pull": true
+    }
+  }
+]

@@ -79,3 +79,24 @@ install_git_stub() {
   printf '#!/usr/bin/env bash\ntouch "%s/git-was-called"\nexit 99\n' "$BATS_TEST_TMPDIR" > "$BATS_TEST_TMPDIR/bin/git"
   chmod +x "$BATS_TEST_TMPDIR/bin/git"
 }
+
+# The gh stub (tests/fixtures/github/gh-stub.sh) as bin/gh, first on PATH, serving a per-test copy of the
+# fixture pages and logging every call; the exclusion list points to a path that does not exist (none).
+install_gh_stub() {
+  mkdir -p "$BATS_TEST_TMPDIR/bin"
+  cp "$FIXTURES/github/gh-stub.sh" "$BATS_TEST_TMPDIR/bin/gh"
+  chmod +x "$BATS_TEST_TMPDIR/bin/gh"
+  export PATH="$BATS_TEST_TMPDIR/bin:$PATH"
+  cp -R "$FIXTURES/github" "$BATS_TEST_TMPDIR/github"
+  export GH_STUB_FIXTURES="$BATS_TEST_TMPDIR/github"
+  export GH_STUB_LOG="$BATS_TEST_TMPDIR/gh-calls.log"
+  export ZYGGY_GITHUB_EXCLUDE_FILE="$BATS_TEST_TMPDIR/no-exclusions.txt"
+  unset GH_STUB_FAIL GH_STUB_NOTICE GH_STUB_HEADERS GH_STUB_REPOS GH_TOKEN
+}
+
+# A synthetic read token (github_pat_ shape, never real) in a 0600 file named by ZYGGY_GITHUB_TOKEN_FILE.
+install_token_file() {
+  printf 'github_pat_11STUBSTUB0123456789_stubstubstubstubstubstubstubstubstub' > "$BATS_TEST_TMPDIR/token"
+  chmod 600 "$BATS_TEST_TMPDIR/token"
+  export ZYGGY_GITHUB_TOKEN_FILE="$BATS_TEST_TMPDIR/token"
+}

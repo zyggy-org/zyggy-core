@@ -1,0 +1,5 @@
+[
+  {"full_name":"alice/dotfiles","owner":{"login":"alice","type":"User"},"private":false,"fork":true,"archived":false,"description":"Alice's shell and editor configuration.","language":"Shell","pushed_at":"2026-07-04T09:30:00Z","permissions":{"admin":true,"push":true,"pull":true}},
+  {"full_name":"alice/old-site","owner":{"login":"alice","type":"User"},"private":false,"fork":false,"archived":true,"description":"The 2019 personal site, kept for the archive.","language":"HTML","pushed_at":"2026-01-15T10:00:00Z","permissions":{"admin":true,"push":false,"pull":true}},
+  {"full_name":"alice/bats-core","owner":{"login":"alice","type":"User"},"private":false,"fork":true,"archived":true,"description":"Bash Automated Testing System","language":"Shell","pushed_at":"2025-11-02T06:12:00Z","permissions":{"admin":true,"push":false,"pull":true}}
+]

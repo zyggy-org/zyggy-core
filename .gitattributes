@@ -4,3 +4,4 @@
 *.bash text eol=lf
 tests/expected/** -text
 tests/fixtures/** -text
+tests/fixtures/github/gh-stub.sh text eol=lf

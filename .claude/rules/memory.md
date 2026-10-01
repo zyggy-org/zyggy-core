@@ -16,6 +16,7 @@ The owner's memory is a git repository cloned at `memory/` in the working direct
 | `daily/YYYY-MM-DD.md` | One `[observed]` line per finished turn | the `Stop` hook (and later the dream pass) |
 | `daily/YYYY-MM.md` | Monthly roll-ups | the dream pass (later) |
 | `inbox/remember-YYYY-MM-DD.md` | Facts the owner stated | the `remember` skill |
+| `inbox/github-inventory-YYYY-MM-DD.md` | One `[observed]` line per GitHub repository the owner's account owns, replaced per day | the owner-invoked `github-inventory` skill |
 | `auto/` | Claude Code's own auto memory (`MEMORY.md` and topic files) | Claude Code |
 
 ## File format

@@ -14,7 +14,8 @@
   `.claude/settings.local.json`, installed from the instance's `instance/settings.local.json`; the live file stays
   untracked because Claude Code writes permission approvals into it. `autoMemoryDirectory` in the same
   file points Claude Code's auto memory at `memory/<tenant>/<user>/auto`.
-- `ZYGGY_HOOKS=off` disables the three scripts (the dream pass will use it). `ZYGGY_NOW` is for tests only;
+- `ZYGGY_HOOKS=off` disables the hook and skill scripts (`github-inventory` refuses with exit 5; the dream pass
+  will use it). `ZYGGY_NOW` is for tests only;
   it must never be set on this machine.
 
 ## Instruction files
@@ -36,16 +37,20 @@ set -a; . <(jq -r '.env | to_entries[] | "\(.key)=\(.value)"' .claude/settings.l
 ```
 
 Exit codes of every script: `0` ok, `2` refused (secret pattern, `remember` only), `3` configuration error
-(a `ZYGGY_*` variable is missing or the memory directory does not exist), `4` usage error or unknown section.
+(the stderr line names the cause: a `ZYGGY_*` variable, the memory directory, a missing tool or file), `4` usage
+error or unknown section,
+`5` refused — an unattended run tried `github-inventory`; `6` a GitHub request failed (`github-inventory` only).
 
 ## When something reports an error
 
 - Exit 3 from a hook or from `remember`: memory is not configured. Tell the owner, and point to the runbook
-  named in `.claude/rules/instance.md` (or the template README when there is none), entry "Hooks report
-  configuration error".
+  named in `.claude/rules/instance.md` (when there is none, tell the owner no runbook is configured here),
+  entry "Hooks report configuration error".
   Do not edit settings files to repair it.
 - A `[digest truncated: …]` line: the section was over its cap. Read the file directly if you need the rest, and
   mention it to the owner when it keeps happening (runbook entry "Digest truncated").
+- Exit 6 from `github-inventory`: a GitHub request failed. Quote the stderr line to the owner and point to the
+  runbook entry "GitHub token rejected". Do not retry with another tool.
 - `stop: note refused` on stderr: the turn's note looked like a secret and was not written. Expected; nothing to do.
 
 ## Headless runs

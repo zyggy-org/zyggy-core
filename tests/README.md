@@ -12,4 +12,10 @@ compared byte for byte (`cmp`). They are never produced by the code under test: 
 expected file is forbidden. An expected file changes only in a RED step, with the diff reviewed and the
 re-derivation against the contract noted.
 
+`expected/github-inventory*.md` are hand-derived from the line grammar of
+`_specs/31-central-github-read-inventory.md` and the fixture account in `fixtures/github/`. The
+`github-inventory` tests run against a `gh` stub (`fixtures/github/gh-stub.sh`, installed as `gh` first on
+`PATH` by `install_gh_stub`) that serves the fixture API pages, refuses every non-GET verb and unknown endpoint,
+and logs each call — no network in CI. `gh` itself must not be installed where the tests run.
+
 `.gitattributes` marks `expected/` and `fixtures/` as `-text`: their bytes are frozen and never normalised.

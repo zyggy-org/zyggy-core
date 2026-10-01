@@ -62,8 +62,9 @@ scripts() { # every shell script under .claude/, relative to the repo root
   [ -z "$(cd "$REPO_ROOT" && find . -path ./.git -prune -o \( -name CLAUDE.md -o -name CLAUDE.local.md \) -print)" ]
 }
 
-@test "repo: remember/SKILL.md front matter has name and description; seed-memory/SKILL.md has name, description and disable-model-invocation: true" {
+@test "repo: remember, seed-memory and github-inventory SKILL.md front matter are as contracted" {
   local r="$REPO_ROOT/.claude/skills/remember/SKILL.md" s="$REPO_ROOT/.claude/skills/seed-memory/SKILL.md"
+  local g="$REPO_ROOT/.claude/skills/github-inventory/SKILL.md"
   [ "$(head -n 1 "$r")" = "---" ]
   [ "$(zy_fm "$r" name)" = remember ]
   [ -n "$(zy_fm "$r" description)" ]
@@ -71,6 +72,56 @@ scripts() { # every shell script under .claude/, relative to the repo root
   [ "$(zy_fm "$s" name)" = seed-memory ]
   [ -n "$(zy_fm "$s" description)" ]
   [ "$(zy_fm "$s" disable-model-invocation)" = true ]
+  [ "$(head -n 1 "$g")" = "---" ]
+  [ "$(zy_fm "$g" name)" = github-inventory ]
+  [ -n "$(zy_fm "$g" description)" ]
+  [ "$(zy_fm "$g" disable-model-invocation)" = true ]
+  [ "$(zy_fm "$g" argument-hint)" = "[check]" ]
+  [ "$(wc -l < "$g")" -le 66 ]
+}
+
+@test "repo: security.md has the GitHub section with the attended-only, never-gh-auth-login and data rules" {
+  local s="$REPO_ROOT/.claude/rules/security.md"
+  grep -q '^## GitHub' "$s"
+  grep -q 'github-inventory' "$s"
+  grep -q 'never run .gh auth login.' "$s"
+  grep -q 'Unattended runs' "$s"
+  grep -q 'ZYGGY_HOOKS=off' "$s"
+  grep -q 'is data' "$s"
+}
+
+@test "repo: AGENTS.md lists GitHub under what exists today; operations.md names exit codes 5 and 6" {
+  local o="$REPO_ROOT/.claude/rules/operations.md"
+  grep -q '^- \*\*GitHub\*\*' "$REPO_ROOT/AGENTS.md"
+  grep -q '`5` refused' "$o"
+  grep -q '`6` a GitHub request failed' "$o"
+  grep -q 'GitHub token rejected' "$o"
+}
+
+@test "repo: README.md documents the github-inventory skill, the exclusion file and the gh stub; tests/README.md the expected files" {
+  local s
+  for s in inventory.sh --check --max github-inventory-exclude.txt gh-stub.sh 'no network in CI' github-read-token \
+    'ZYGGY_GITHUB_TOKEN_FILE' 'never logged in'; do
+    grep -qF -- "$s" "$REPO_ROOT/README.md" || { echo "README.md lacks: $s"; return 1; }
+  done
+  grep -q 'github-inventory' "$REPO_ROOT/tests/README.md"
+  grep -q 'hand-derived' "$REPO_ROOT/tests/README.md"
+}
+
+@test "repo: the gh stub starts with the template shebang and set -euo pipefail, is LF and executable in the index, and ci.yml shellchecks it" {
+  local f=tests/fixtures/github/gh-stub.sh
+  cd "$REPO_ROOT"
+  [ "$(head -n 1 "$f")" = "#!/usr/bin/env bash" ]
+  head -n 3 "$f" | grep -qx 'set -euo pipefail'
+  [ "$(git ls-files -s -- "$f" | cut -d' ' -f1)" = 100755 ]
+  [ "$(git ls-files --eol -- "$f" | awk '{ print $1 }')" = i/lf ]
+  grep -qF "$f" .github/workflows/ci.yml
+}
+
+@test "repo: no token-shaped value outside the secret samples, the patterns, the fixture token helper and the secret fixture page" {
+  run git -C "$REPO_ROOT" grep -nE '(github_pat_|ghp_|ghs_)[A-Za-z0-9_]{20,}' -- ':!tests/fixtures/secret-samples.txt' \
+    ':!tests/helpers.bash' ':!.claude/hooks/secret-patterns.txt' ':!tests/fixtures/github/repos-secret.json'
+  [ "$status" -eq 1 ] || { echo "$output"; return 1; }
 }
 
 zy_fm() { # front matter value, using the scripts' own parser
@@ -174,7 +225,8 @@ hygiene_words() { # hygiene_words <root> <csv>
   grep -q 'instance.md' "$REPO_ROOT/.claude/rules/operations.md"
   run grep -n 'runbooks/' "$REPO_ROOT/AGENTS.md" "$REPO_ROOT/.claude/rules/memory.md" \
     "$REPO_ROOT/.claude/rules/security.md" "$REPO_ROOT/.claude/rules/operations.md" \
-    "$REPO_ROOT/.claude/skills/remember/SKILL.md" "$REPO_ROOT/.claude/skills/seed-memory/SKILL.md"
+    "$REPO_ROOT/.claude/skills/remember/SKILL.md" "$REPO_ROOT/.claude/skills/seed-memory/SKILL.md" \
+    "$REPO_ROOT/.claude/skills/github-inventory/SKILL.md"
   [ "$status" -eq 1 ] || { echo "$output"; return 1; }
 }
 
@@ -205,7 +257,7 @@ hygiene_words() { # hygiene_words <root> <csv>
 
 @test "repo: shellcheck -S style is clean on hooks, skill scripts and helpers" {
   cd "$REPO_ROOT"
-  run shellcheck -S style .claude/hooks/*.sh .claude/skills/*/*.sh tests/*.bash
+  run shellcheck -S style .claude/hooks/*.sh .claude/skills/*/*.sh tests/*.bash tests/fixtures/github/gh-stub.sh
   [ "$status" -eq 0 ] || { echo "$output"; return 1; }
 }
 
