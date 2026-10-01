@@ -219,6 +219,14 @@ mv "$tmp_dest" "$dest"
 tmp_dest=""
 touch "$dest"
 
+# Over the cache bound, the oldest other clones go first; the new clone always stays.
+while [ "$(du -sm "$root" | cut -f1)" -gt "$cache_mib" ]; do
+  mapfile -t others < <(clone_dirs ! -path "$dest" -printf '%T@ %p\n' | sort -n | cut -d' ' -f2-)
+  [ "${#others[@]}" -gt 0 ] || break
+  rm -rf "${others[0]}"
+  printf 'github-clone: removed %s (cache over %s MiB)\n' "${others[0]#"$root"/}" "$cache_mib" >&2
+done
+
 sha="$(zy_git -C "$dest" rev-parse HEAD)"
 day="$(zy_git -C "$dest" log -1 --format=%cs)"
 branch="$(zy_git -C "$dest" rev-parse --abbrev-ref HEAD | tr -d '\000-\037\177')"
