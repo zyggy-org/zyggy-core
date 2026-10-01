@@ -205,3 +205,15 @@ install_markitdown_stub() {
   export PATH="$d:$PATH" MARKITDOWN_STUB_LOG="$d/markitdown-stub.log" ZYGGY_M365_RUN_DIR="$BATS_TEST_TMPDIR/run"
   unset MARKITDOWN_STUB_SLEEP ZYGGY_PARSE_TIMEOUT
 }
+
+# The claude stub (tests/fixtures/m365/claude-stub.sh) as $BATS_TEST_TMPDIR/bin/claude, first on PATH. The orchestrators
+# run it in their own environment (not under env -i): CLAUDE_STUB_LOG is its log, CLAUDE_STUB_RESULT the result file it
+# prints (default claude-result-ok.json); CLAUDE_STUB_ACTIONS, CLAUDE_STUB_SLEEP and CLAUDE_STUB_EXIT start unset.
+install_claude_stub() {
+  mkdir -p "$BATS_TEST_TMPDIR/bin"
+  cp "$FIXTURES/m365/claude-stub.sh" "$BATS_TEST_TMPDIR/bin/claude"
+  chmod +x "$BATS_TEST_TMPDIR/bin/claude"
+  export PATH="$BATS_TEST_TMPDIR/bin:$PATH" CLAUDE_STUB_LOG="$BATS_TEST_TMPDIR/claude-stub.log"
+  export CLAUDE_STUB_RESULT="$FIXTURES/m365/claude-result-ok.json"
+  unset CLAUDE_STUB_ACTIONS CLAUDE_STUB_SLEEP CLAUDE_STUB_EXIT BRIEF_ACTIONS_TRY_SEND
+}

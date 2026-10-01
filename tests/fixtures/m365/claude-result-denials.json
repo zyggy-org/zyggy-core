@@ -1,0 +1,1 @@
+{"type":"result","subtype":"success","is_error":false,"duration_ms":184000,"num_turns":12,"result":"brief 2026-09-30: mail 3, files 1, replies 1, proposals 2, facts 4","session_id":"00000000-0000-0000-0000-000000000000","total_cost_usd":0.42,"permission_denials":[{"tool_name":"mcp__m365__send-shared-mailbox-mail","tool_use_id":"toolu_01","tool_input":{}}]}

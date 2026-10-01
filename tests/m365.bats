@@ -4,9 +4,10 @@
 # AC-44); state.sh and the consent files, graph.sh's approved-only write verbs on a pseudo-terminal (Step 3, AC-32,
 # AC-37, AC-40, AC-47); the server wrapper (Step 4); propose.sh and the m365-approve.sh consent terminal (Step 5,
 # AC-35, AC-36, AC-44, AC-47); facts.sh and parse.sh, the validators (Step 6, AC-41); verify.sh, the post-run audit
-# of Drafts and Sent Items (Step 7, AC-39). Fixture lists are generated
+# of Drafts and Sent Items (Step 7, AC-39); brief.sh, the morning brief end to end against the claude stub (Step 8,
+# AC-38, AC-43, AC-44, AC-46, AC-47). Fixture lists are generated
 # from the pinned package's endpoints.json, never typed; the consent hashes are computed from the fixture snapshots,
-# never typed. curl and markitdown are stubs, openssl is real (a throw-away key pair per test), the terminal is
+# never typed. curl, claude and markitdown are stubs, openssl is real (a throw-away key pair per test), the terminal is
 # `script`. No network.
 
 load helpers
@@ -2398,4 +2399,274 @@ assert_reads_only() {
   run --separate-stderr verify 2026-09-30 "$WINDOW"
   [ "$status" -eq 3 ] && [[ "$stderr" == 'm365-verify: configuration error: '*'is not valid JSON' ]] || { echo "$status $stderr"; return 1; }
   [ "$(request_count)" -eq 0 ] && [ ! -e "$(receipt)" ]
+}
+
+# --- brief.sh: the morning brief end to end against the claude stub (Step 8, AC-38, AC-43, AC-44, AC-46, AC-47) -------
+
+BRIEF_PROMPT_HEAD='/morning-brief alice@acme.example AQMkInbox0001 b!onedrive0001 b!ops0001 b!opsarchive0001'
+BRIEF_RUN_DIR_RE='^/.+/zyggy-m365-brief-2026-09-30\.[A-Za-z0-9]{6}$'
+
+brief() {
+  "$M365/brief.sh" "$@"
+}
+
+# The morning's Graph: no Draft created since local midnight yet (the pre-flight's query from 2026-09-29T22:00:00Z),
+# drafts-ok for the audit (the brief Draft d0 to alice, the reply d1 to carol), no sent item in the window; m1 recorded
+# as replied (the model's step); the claude stub with the ok result and the two propose.sh calls as the model's actions.
+brief_setup() {
+  install_claude_stub
+  no_drafts_yet
+  serve_once 'mailFolders/sentitems/messages\?\$filter' sent-none
+  "$STATE_SH" set replied 2026-09-30 m1
+  export CLAUDE_STUB_ACTIONS="$M365_FIXTURES/brief-actions.sh"
+}
+
+# The pre-flight's Drafts query (since local midnight) answers with an empty page, once: no brief Draft of today yet.
+no_drafts_yet() {
+  serve_once 'mailFolders/drafts/messages\?\$filter=createdDateTime%20ge%202026-09-29T22' drafts-none
+}
+
+claude_calls() {
+  if [ -f "$CLAUDE_STUB_LOG" ]; then grep -cx call "$CLAUDE_STUB_LOG" || true; else echo 0; fi
+}
+
+claude_args() { # the stub's argv of its last call, one argument per line
+  awk '/^call$/ { n = 0; delete a; next } /^arg=/ { a[++n] = substr($0, 5) } END { for (i = 1; i <= n; i++) print a[i] }' \
+    "$CLAUDE_STUB_LOG"
+}
+
+brief_run_dir() { # the run directory brief.sh named in the prompt (its last word)
+  claude_args | sed -n '2p' | awk '{ print $NF }'
+}
+
+brief_jsonl_last() {
+  tail -n 1 "$STATE/brief.jsonl"
+}
+
+no_run_dirs() { # no brief run directory is left in the temp directory
+  [ -z "$(find "${TMPDIR:-/tmp}" -maxdepth 1 -name 'zyggy-m365-brief-*' 2> /dev/null)" ]
+}
+
+# The "## Proposed actions (pending your consent)" section rendered from the rows the run wrote — the spec's format,
+# with what each row carries (action, the snapshot's subject, recipients or sender, reason, the first 8 hash chars).
+render_proposals_section() {
+  printf '## Proposed actions (pending your consent)\n'
+  jq -r 'select(.status == "pending" and .origin == "brief 2026-09-30")
+    | if .action == "send-draft" then "- send reply \"\(.snapshot.subject)\" to \(.snapshot.to | join(", "))"
+      elif .action == "move" then "- move \"\(.snapshot.subject)\" from \(.snapshot.from) → \(.folder)"
+      else "- delete \"\(.snapshot.subject)\" from \(.snapshot.from) (to Deleted Items)" end
+      + " — \(.reason) — #\(.snapshot_hash[0:8])"' "$PROPOSALS"
+  printf 'Review on the VM: m365-approve.sh   (nothing is sent, moved or deleted until you approve it there)\n'
+}
+
+expected_proposals_section() {
+  sed -e "s/@H1@/${H1:0:8}/" -e "s/@H2@/${H2:0:8}/" "$EXPECTED/m365-proposals-section.txt"
+}
+
+@test "brief: happy path -> exit 0; last stdout line byte-equal to expected/m365-journal-ok.txt; key: file on stderr; brief.jsonl (600) line with proposals 2; receipt audit ok with proposals.pending 2; two pending rows of origin brief 2026-09-30 that render the golden proposals section; one remember line; the run dir gone; claude called once" {
+  local run_dir
+  brief_setup
+  run --separate-stderr brief
+  [ "$status" -eq 0 ] || { echo "$status $output $stderr"; cat "$CLAUDE_STUB_LOG"; return 1; }
+  [ "$(last_line)" = "$(cat "$EXPECTED/m365-journal-ok.txt")" ] || { echo "$output"; return 1; }
+  grep -qx 'key: file' <<< "$stderr" || { echo "$stderr"; return 1; }
+  [ "$(claude_calls)" -eq 1 ]
+  grep -qx 'propose-send-draft=0' "$CLAUDE_STUB_LOG" && grep -qx 'propose-delete=0' "$CLAUDE_STUB_LOG"
+  jq -s -e 'length == 2 and all(.[]; .origin == "brief 2026-09-30" and .status == "pending")
+    and (map(.action) == ["send-draft", "delete"])' "$PROPOSALS" || { cat "$PROPOSALS"; return 1; }
+  [ "$(render_proposals_section)" = "$(expected_proposals_section)" ] || { diff <(render_proposals_section) <(expected_proposals_section); return 1; }
+  jq -e '.date == "2026-09-30" and .mail == 3 and .files == 1 and .replies == 1 and .proposals == 2 and .facts == 4
+    and .turns == 12 and .cost == 0.42 and .audit == "ok" and .denials == [] and .key == "file" and .exit == 0' \
+    <<< "$(brief_jsonl_last)" || { cat "$STATE/brief.jsonl"; return 1; }
+  [ "$(wc -l < "$STATE/brief.jsonl")" -eq 1 ] && [ "$(stat -c %a "$STATE/brief.jsonl")" = 600 ]
+  jq -e '.audit == "ok" and .proposals.pending == 2 and .window_start == "2026-09-30T10:00:00Z"' "$STATE/brief-2026-09-30.json"
+  [ "$(grep -c '^- \[observed\] 2026-09-30 \[m365-brief 2026-09-30\]: ' "$USER_DIR/inbox/remember-2026-09-30.md")" -eq 1 ]
+  grep -qxF -- '- [observed] 2026-09-30 [m365-brief 2026-09-30]: Morning brief 2026-09-30 left as a Draft: mail 3, files 1, replies 1, proposals 2, facts 4, audit ok' \
+    "$USER_DIR/inbox/remember-2026-09-30.md"
+  run_dir="$(brief_run_dir)"
+  [[ "$run_dir" =~ $BRIEF_RUN_DIR_RE ]] || { echo "run dir: $run_dir"; return 1; }
+  [ ! -e "$run_dir" ]
+  # the audit ran: the Drafts and Sent Items of the window were read; nothing was sent, moved or deleted
+  urls | grep -qF "GET $GRAPH_URL/users/$UPN/mailFolders/drafts/messages?\$filter=createdDateTime%20ge%202026-09-30T10:00:00Z"
+  urls | grep -qF "GET $GRAPH_URL/users/$UPN/mailFolders/sentitems/messages?\$filter=sentDateTime%20ge%202026-09-30T10:00:00Z"
+  ! grep -qE 'messages/[^/ ]+/(send|move)' "$CURL_STUB_LOG"
+  [ ! -e "$EXECUTIONS" ]
+}
+
+@test "brief: the claude argv is exactly -p \"/morning-brief <mailbox> <inbox id> <drive ids> <run-dir>\" with the contracted flags, the 14 m365 tools + state/facts/parse/propose + Read(state) allowed and the 330 + graph.sh + m365-approve.sh + the outbound channels denied; the child has ZYGGY_HOOKS=off, ZYGGY_M365_ORIGIN=brief 2026-09-30, the run dir and the four keys, stdin /dev/null (no tty), the project directory as cwd, no token" {
+  local allow deny run_dir want
+  brief_setup
+  run --separate-stderr brief
+  [ "$status" -eq 0 ] || { echo "$status $output $stderr"; return 1; }
+  allow="$( {
+    sed 's/^/mcp__m365__/' "$ENABLED"
+    printf '%s\n' 'Bash(.claude/skills/m365/state.sh *)' 'Bash(.claude/skills/m365/facts.sh *)' \
+      'Bash(.claude/skills/m365/parse.sh *)' 'Bash(.claude/skills/m365/propose.sh *)' 'Read(~/.local/state/zyggy/m365/**)'
+  } | paste -sd, -)"
+  deny="$( {
+    sed 's/^/mcp__m365__/' "$EXCLUDED"
+    printf '%s\n' 'Bash(.claude/skills/m365/graph.sh *)' 'Bash(.claude/skills/m365/m365-approve.sh *)' WebFetch WebSearch \
+      mcp__plugin_playwright_playwright Edit Write NotebookEdit 'Bash(curl *)' 'Bash(wget *)' 'Bash(git *)' 'Bash(npm *)' \
+      'Bash(npx *)' 'Bash(node *)'
+  } | paste -sd, -)"
+  run_dir="$(brief_run_dir)"
+  [[ "$run_dir" =~ $BRIEF_RUN_DIR_RE ]] || { echo "run dir: $run_dir"; return 1; }
+  want="$(printf '%s\n' -p "$BRIEF_PROMPT_HEAD $run_dir" --permission-mode auto --permission-prompts none \
+    --no-session-persistence --output-format json --max-turns 40 --max-budget-usd 3.0 --allowedTools "$allow" \
+    --disallowedTools "$deny")"
+  [ "$(claude_args)" = "$want" ] || { diff <(claude_args) <(printf '%s\n' "$want") | cut -c1-300; return 1; }
+  grep -qx 'argc=17' "$CLAUDE_STUB_LOG"
+  # both lists hold every m365 tool exactly once, and nothing is both allowed and denied
+  [ "$(tr ',' '\n' <<< "$allow" | grep -c '^mcp__m365__')" -eq 14 ] && [ "$(tr ',' '\n' <<< "$deny" | grep -c '^mcp__m365__')" -eq 330 ]
+  [ -z "$(comm -12 <(tr ',' '\n' <<< "$allow" | sort) <(tr ',' '\n' <<< "$deny" | sort))" ]
+  grep -qx 'env=ZYGGY_HOOKS=off' "$CLAUDE_STUB_LOG"
+  grep -qx 'env=ZYGGY_M365_ORIGIN=brief 2026-09-30' "$CLAUDE_STUB_LOG"
+  grep -qxF "env=ZYGGY_M365_RUN_DIR=$run_dir" "$CLAUDE_STUB_LOG"
+  grep -qxF "env=ZYGGY_MEMORY_ROOT=$ZYGGY_MEMORY_ROOT" "$CLAUDE_STUB_LOG"
+  grep -qx 'env=ZYGGY_TENANT=acme' "$CLAUDE_STUB_LOG" && grep -qx 'env=ZYGGY_USER=alice' "$CLAUDE_STUB_LOG"
+  grep -qx 'env=ZYGGY_TIMEZONE=Europe/Brussels' "$CLAUDE_STUB_LOG"
+  grep -qx 'stdin=0' "$CLAUDE_STUB_LOG" && grep -qx 'tty=no' "$CLAUDE_STUB_LOG"
+  grep -qxF "cwd=$(cd "$REPO_ROOT" && pwd -P)" "$CLAUDE_STUB_LOG"
+  grep -qx 'token-in-env=no' "$CLAUDE_STUB_LOG"
+  ! grep -qF STUBACCESS "$CLAUDE_STUB_LOG"
+}
+
+@test "brief (AC-47, the orchestrator shape): the model's actions also try graph.sh send-draft --approved <valid seeded H1> -> refused inside the run (exit 5, unattended); the brief still exits 0 with the same journal line; executions.jsonl absent, no POST to …/send" {
+  brief_setup
+  seed_proposal p1
+  seed_approval p1 "$H1"
+  export BRIEF_ACTIONS_TRY_SEND="$H1"
+  run --separate-stderr brief
+  [ "$status" -eq 0 ] || { echo "$status $output $stderr"; cat "$CLAUDE_STUB_LOG"; return 1; }
+  grep -qx 'graph-send-draft=5' "$CLAUDE_STUB_LOG" || { cat "$CLAUDE_STUB_LOG"; return 1; }
+  grep -qxF 'm365: refused: unattended run (ZYGGY_HOOKS=off)' "$CLAUDE_STUB_LOG"
+  [ "$(last_line)" = "$(cat "$EXPECTED/m365-journal-ok.txt")" ] || { echo "$output"; return 1; }
+  [ ! -e "$EXECUTIONS" ] && [ "$(row_status p1)" = pending ]
+  ! grep -qE 'messages/d1/send' "$CURL_STUB_LOG"
+  ! grep -q '^executed:' <<< "$output"
+}
+
+@test "brief: a second run on the same date -> \"brief 2026-09-30: already created\", exit 0, no claude; without a receipt but with a brief Draft of today in Graph (pre-flight) -> already created, no claude" {
+  brief_setup
+  run --separate-stderr brief
+  [ "$status" -eq 0 ] || { echo "$status $output $stderr"; return 1; }
+  run --separate-stderr brief
+  [ "$status" -eq 0 ] && [ "$output" = 'brief 2026-09-30: already created' ] || { echo "$status $output $stderr"; return 1; }
+  [ "$(claude_calls)" -eq 1 ]
+  # no receipt, but Graph already holds "Zyggy — morning brief 2026-09-30" (drafts-ok's d0)
+  rm -f "$STATE/brief-2026-09-30.json"
+  run --separate-stderr brief
+  [ "$status" -eq 0 ] && [ "$output" = 'brief 2026-09-30: already created' ] || { echo "$status $output $stderr"; return 1; }
+  [ "$(claude_calls)" -eq 1 ]
+}
+
+@test "brief: invalid_client -> exit 6 before claude (one stderr line, no Graph read, no run dir); the failure is the last brief.jsonl line; cert.expires yesterday -> exit 3, no request, no claude" {
+  install_claude_stub
+  scenario 'oauth2/v2\.0/token$:400:token-invalid-client.json'
+  run --separate-stderr brief
+  [ "$status" -eq 6 ] && [ -z "$output" ] || { echo "$status $output $stderr"; return 1; }
+  [ "$(grep -v '^key: ' <<< "$stderr")" = 'm365-brief: auth failed (invalid_client) — runbook 13 "Certificate rejected"' ] || { echo "$stderr"; return 1; }
+  [ "$(claude_calls)" -eq 0 ] && [ "$(urls | grep -c '^GET ' || true)" -eq 0 ]
+  no_run_dirs
+  jq -e '.exit == 6 and .date == "2026-09-30" and (.error | startswith("auth failed (invalid_client)"))' <<< "$(brief_jsonl_last)"
+  : > "$CURL_STUB_LOG"
+  cfg '.cert.expires = "2026-09-29"'
+  run --separate-stderr brief
+  [ "$status" -eq 3 ] && [ "$stderr" = 'm365-brief: certificate expired 2026-09-29 — runbook 13 "Rotate the certificate"' ] || { echo "$status $output $stderr"; return 1; }
+  [ "$(request_count)" -eq 0 ] && [ "$(claude_calls)" -eq 0 ]
+}
+
+@test "brief: is_error -> exit 6, no receipt, no remember line, run dir removed; over the budget cap -> 6; no JSON on stdout -> 6; claude exits non-zero with no output -> 6" {
+  local f
+  brief_setup
+  export CLAUDE_STUB_RESULT="$M365_FIXTURES/claude-result-error.json"
+  run --separate-stderr brief
+  [ "$status" -eq 6 ] && [ -z "$output" ] || { echo "$status $output $stderr"; return 1; }
+  [ "$(grep -v '^key: ' <<< "$stderr")" = 'm365-brief: claude run failed (error_during_execution) — runbook 13 "Model run failed"' ] || { echo "$stderr"; return 1; }
+  [ ! -e "$STATE/brief-2026-09-30.json" ] && [ ! -e "$USER_DIR/inbox/remember-2026-09-30.md" ]
+  [ ! -e "$(brief_run_dir)" ]
+  jq -e '.exit == 6' <<< "$(brief_jsonl_last)"
+  no_drafts_yet
+  export CLAUDE_STUB_RESULT="$M365_FIXTURES/claude-result-over-budget.json"
+  run --separate-stderr brief
+  [ "$status" -eq 6 ] && [ "$(grep -v '^key: ' <<< "$stderr")" = 'm365-brief: claude run over the cap (cost 3.51 > budget 3.0, turns 38 of 40) — runbook 13 "Model run failed"' ] ||
+    { echo "$status $output $stderr"; return 1; }
+  [ ! -e "$STATE/brief-2026-09-30.json" ]
+  f="$BATS_TEST_TMPDIR/not-json.txt"
+  printf 'Error: something went wrong\n' > "$f"
+  no_drafts_yet
+  export CLAUDE_STUB_RESULT="$f"
+  run --separate-stderr brief
+  [ "$status" -eq 6 ] && [ "$(grep -v '^key: ' <<< "$stderr")" = 'm365-brief: claude returned no JSON result (exit 0) — runbook 13 "Model run failed"' ] ||
+    { echo "$status $output $stderr"; return 1; }
+  no_drafts_yet
+  export CLAUDE_STUB_RESULT="" CLAUDE_STUB_EXIT=1
+  run --separate-stderr brief
+  [ "$status" -eq 6 ] && [ "$(grep -v '^key: ' <<< "$stderr")" = 'm365-brief: claude returned no JSON result (exit 1) — runbook 13 "Model run failed"' ] ||
+    { echo "$status $output $stderr"; return 1; }
+  [ ! -e "$STATE/brief-2026-09-30.json" ]
+  no_run_dirs
+  [ "$(claude_calls)" -eq 4 ]
+}
+
+@test "brief: permission_denials -> \"…, audit ok, denials mcp__m365__send-shared-mailbox-mail, exit 0\" and the jsonl names them" {
+  brief_setup
+  export CLAUDE_STUB_RESULT="$M365_FIXTURES/claude-result-denials.json"
+  run --separate-stderr brief
+  [ "$status" -eq 0 ] || { echo "$status $output $stderr"; return 1; }
+  [ "$(last_line)" = 'brief 2026-09-30: mail 3, files 1, replies 1, proposals 2, facts 4, turns 12, cost 0.42, audit ok, denials mcp__m365__send-shared-mailbox-mail, exit 0' ] ||
+    { echo "$output"; return 1; }
+  jq -e '.denials == ["mcp__m365__send-shared-mailbox-mail"] and .exit == 0' <<< "$(brief_jsonl_last)"
+}
+
+@test "brief: the audit flags a sent item without consent (sent-items-extra) -> exit 5; journal byte-equal to expected/m365-journal-flagged.txt; receipt flagged; the remember line says audit FLAGGED" {
+  install_claude_stub
+  no_drafts_yet
+  scenario 'mailFolders/sentitems/messages\?\$filter:200:sent-items-extra.json'
+  "$STATE_SH" set replied 2026-09-30 m1
+  export CLAUDE_STUB_ACTIONS="$M365_FIXTURES/brief-actions.sh"
+  run --separate-stderr brief
+  [ "$status" -eq 5 ] || { echo "$status $output $stderr"; return 1; }
+  [ "$(last_line)" = "$(cat "$EXPECTED/m365-journal-flagged.txt")" ] || { echo "$output"; return 1; }
+  jq -e '.audit == "flagged" and (.reasons | length) == 2' "$STATE/brief-2026-09-30.json" || { cat "$STATE/brief-2026-09-30.json"; return 1; }
+  jq -e '.audit == "FLAGGED" and .exit == 5' <<< "$(brief_jsonl_last)"
+  grep -qF 'proposals 2, facts 4, audit FLAGGED' "$USER_DIR/inbox/remember-2026-09-30.md"
+}
+
+@test "brief: ZYGGY_HOOKS=off (the unit) is accepted and still writes the remember line; claude missing -> exit 3 before any request; ZYGGY_TENANT unset or m365.json invalid -> 3; any argument -> 4, nothing done" {
+  brief_setup
+  ZYGGY_HOOKS=off run --separate-stderr brief < /dev/null
+  [ "$status" -eq 0 ] && [ "$(last_line)" = "$(cat "$EXPECTED/m365-journal-ok.txt")" ] || { echo "$status $output $stderr"; return 1; }
+  grep -qF '[m365-brief 2026-09-30]: Morning brief 2026-09-30 left as a Draft' "$USER_DIR/inbox/remember-2026-09-30.md"
+  reset_consent
+  PATH="$(path_without claude)" run --separate-stderr "$M365/brief.sh"
+  [ "$status" -eq 3 ] && [ -z "$output" ] && [ "$stderr" = 'm365-brief: claude not found' ] || { echo "$status $output $stderr"; return 1; }
+  [ "$(request_count)" -eq 0 ]
+  run --separate-stderr env -u ZYGGY_TENANT "$M365/brief.sh"
+  [ "$status" -eq 3 ] && [ "$stderr" = 'm365-brief: configuration error: ZYGGY_TENANT is not set' ] || { echo "$status $stderr"; return 1; }
+  run --separate-stderr brief now
+  [ "$status" -eq 4 ] && [ -z "$output" ] && [ "$stderr" = "m365-brief: brief.sh takes no argument (usage: brief.sh)" ] || { echo "$status $output $stderr"; return 1; }
+  printf '{' > "$ZYGGY_M365_CONFIG"
+  run --separate-stderr brief
+  [ "$status" -eq 3 ] && [[ "$stderr" == 'm365-brief: configuration error: '*'is not valid JSON' ]] || { echo "$status $stderr"; return 1; }
+  [ "$(request_count)" -eq 0 ] && [ "$(claude_calls)" -eq 1 ]
+}
+
+@test "brief: SIGTERM while claude runs -> the child is stopped, the run dir removed, exit 143, no receipt" {
+  local pid i run_dir rc=0
+  brief_setup
+  export CLAUDE_STUB_SLEEP=30
+  "$M365/brief.sh" > "$BATS_TEST_TMPDIR/brief.out" 2> "$BATS_TEST_TMPDIR/brief.err" &
+  pid=$!
+  for i in $(seq 1 100); do
+    if grep -qs '^propose-delete=' "$CLAUDE_STUB_LOG"; then break; fi
+    sleep 0.1
+  done
+  run_dir="$(brief_run_dir)"
+  [ -d "$run_dir" ] || { echo "run dir: $run_dir ($i)"; cat "$BATS_TEST_TMPDIR/brief.err"; return 1; }
+  kill -TERM "$pid"
+  wait "$pid" || rc=$?
+  [ "$rc" -eq 143 ] || { echo "rc $rc"; cat "$BATS_TEST_TMPDIR/brief.err"; return 1; }
+  [ ! -e "$run_dir" ] && [ ! -e "$STATE/brief-2026-09-30.json" ]
+  grep -qx terminated "$CLAUDE_STUB_LOG"
 }

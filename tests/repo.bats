@@ -131,11 +131,12 @@ scripts() { # every shell script under .claude/, relative to the repo root
   ! grep -v -i 'never' <<< "$output"
 }
 
-@test "repo: the gh stub, the git spy, the curl stub, the MCP server stub and the MarkItDown stub start with the template shebang and set -euo pipefail, are LF and executable in the index, and ci.yml shellchecks all five" {
+@test "repo: the gh stub, the git spy, the curl stub, the MCP server stub, the MarkItDown stub, the claude stub and the brief actions start with the template shebang and set -euo pipefail, are LF and executable in the index, and ci.yml shellchecks all seven" {
   local f
   cd "$REPO_ROOT"
   for f in tests/fixtures/github/gh-stub.sh tests/fixtures/github/git-spy.sh tests/fixtures/graph/curl-stub.sh \
-    tests/fixtures/m365/ms-365-mcp-server-stub.sh tests/fixtures/m365/markitdown-stub.sh; do
+    tests/fixtures/m365/ms-365-mcp-server-stub.sh tests/fixtures/m365/markitdown-stub.sh tests/fixtures/m365/claude-stub.sh \
+    tests/fixtures/m365/brief-actions.sh; do
     [ "$(head -n 1 "$f")" = "#!/usr/bin/env bash" ] || { echo "$f: shebang"; return 1; }
     head -n 3 "$f" | grep -qx 'set -euo pipefail'
     [ "$(git ls-files -s -- "$f" | cut -d' ' -f1)" = 100755 ] || { echo "$f: mode"; return 1; }
@@ -316,12 +317,13 @@ hygiene_words() { # hygiene_words <root> <csv>
 # The one script allowed to run git: the github-clone runner, only under the clone cache (spec 32).
 GIT_EXEMPT=(.claude/skills/github-clone/clone.sh)
 
-@test "repo: no hook or skill script contains a git invocation, except the one exempt clone script" {
+@test "repo: no hook or skill script contains a git invocation, except the one exempt clone script (a Bash(git *) deny rule is not one)" {
   local f
   [ "${#GIT_EXEMPT[@]}" -eq 1 ] || { echo "only one script may be exempt: ${GIT_EXEMPT[*]}"; return 1; }
   while IFS= read -r f; do
     [ "$f" != "${GIT_EXEMPT[0]}" ] || continue
-    run bash -c 'grep -vE "^[[:space:]]*#" "$1" | grep -nE "(^|[^a-z_-])git( |\$)"' _ "$REPO_ROOT/$f"
+    # the run deny list of the m365 orchestrators names the permission rule Bash(git *): a string, not a call
+    run bash -c 'grep -vE "^[[:space:]]*#" "$1" | sed "s/Bash(git \\*)//g" | grep -nE "(^|[^a-z_-])git( |\$)"' _ "$REPO_ROOT/$f"
     [ "$status" -eq 1 ] || { echo "$f: $output"; return 1; }
   done < <(scripts)
 }
@@ -410,4 +412,23 @@ m365_lib_value() { # m365_lib_value <bash expression> → printed by a shell tha
   [ "$status" -eq 1 ] || { echo "$output"; return 1; }
   [ "$(grep -c 'env -i' "$w")" -eq 1 ]
   grep -qF -- '--org-mode' "$w"
+}
+
+@test "repo: morning-brief/SKILL.md is owner-unreachable (disable-model-invocation: true, no allowed-tools), <= 100 lines, and carries the proposals section's format lines of expected/m365-proposals-section.txt and the spec block verbatim" {
+  local s="$REPO_ROOT/.claude/skills/morning-brief/SKILL.md" g="$REPO_ROOT/tests/expected/m365-proposals-section.txt" line
+  [ "$(head -n 1 "$s")" = "---" ]
+  [ "$(zy_fm "$s" name)" = morning-brief ]
+  [ -n "$(zy_fm "$s" description)" ]
+  [ "$(zy_fm "$s" disable-model-invocation)" = true ]
+  [ -z "$(zy_fm "$s" allowed-tools)" ]
+  [ "$(wc -l < "$s")" -le 100 ]
+  # the section's head and its closing line, as the golden renders them
+  grep -qxF "$(head -n 1 "$g")" "$s"
+  grep -qxF "$(tail -n 1 "$g")" "$s"
+  # the spec's line templates for the three actions
+  for line in '- send reply "RE: <subject>" to <recipient as Graph holds it> — <reason> — #<hash8>' \
+    '- move "<subject>" from <sender> → <folder> — <reason> — #<hash8>' \
+    '- delete "<subject>" from <sender> (to Deleted Items) — <reason> — #<hash8>'; do
+    grep -qxF -- "$line" "$s" || { echo "missing: $line"; return 1; }
+  done
 }

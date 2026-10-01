@@ -1,0 +1,4 @@
+## Proposed actions (pending your consent)
+- send reply "RE: Invoice 2026-41" to carol@example.org — Carol asked for the invoice date — #@H1@
+- delete "Invoice 2026-41" from carol@example.org (to Deleted Items) — Newsletter — #@H2@
+Review on the VM: m365-approve.sh   (nothing is sent, moved or deleted until you approve it there)

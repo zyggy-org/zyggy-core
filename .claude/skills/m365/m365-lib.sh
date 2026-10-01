@@ -651,3 +651,55 @@ readonly -a ZY_M365_TOOLS_EXCLUDED=(
 # shellcheck disable=SC2034 # the six auth tools the server registers outside the filter in stdio mode (Step 1
 # finding): the settings deny list is their only defence; mcp-wrapper.sh --probe reports them
 readonly -a ZY_M365_AUTH_TOOLS=(list-accounts login logout remove-account select-account verify-login)
+
+# --- the unattended claude run (brief.sh) -------------------------------------------------------------------------
+
+# What a morning-brief run's model may use (spec 23 run allowlist): the 14 tools the server loads, the four scripts it
+# writes through (state, facts, parse, and propose — a proposal row, never an execution) and reads of the state dir.
+ZY_M365_BRIEF_ALLOW=()
+for zy_t in "${ZY_M365_TOOLS_ENABLED[@]}"; do ZY_M365_BRIEF_ALLOW+=("mcp__m365__$zy_t"); done
+ZY_M365_BRIEF_ALLOW+=('Bash(.claude/skills/m365/state.sh *)' 'Bash(.claude/skills/m365/facts.sh *)'
+  'Bash(.claude/skills/m365/parse.sh *)' 'Bash(.claude/skills/m365/propose.sh *)' 'Read(~/.local/state/zyggy/m365/**)')
+# What it may never use: every other tool of the pinned server, the executor and the consent terminal, and every
+# outbound channel (web, browser, file edits, network and package tools).
+ZY_M365_BRIEF_DENY=()
+for zy_t in "${ZY_M365_TOOLS_EXCLUDED[@]}"; do ZY_M365_BRIEF_DENY+=("mcp__m365__$zy_t"); done
+ZY_M365_BRIEF_DENY+=('Bash(.claude/skills/m365/graph.sh *)' 'Bash(.claude/skills/m365/m365-approve.sh *)' WebFetch WebSearch
+  mcp__plugin_playwright_playwright Edit Write NotebookEdit 'Bash(curl *)' 'Bash(wget *)' 'Bash(git *)' 'Bash(npm *)'
+  'Bash(npx *)' 'Bash(node *)')
+unset zy_t
+# shellcheck disable=SC2034 # read by brief.sh
+readonly -a ZY_M365_BRIEF_ALLOW ZY_M365_BRIEF_DENY
+
+# The arguments joined by <separator> (one --allowedTools / --disallowedTools value).
+zy_m365_join() { # zy_m365_join <separator> <item…>
+  local sep="$1" out=""
+  shift
+  out="$(printf "%s$sep" "$@")"
+  printf '%s' "${out%"$sep"}"
+}
+
+# ZY_M365_CLAUDE_BIN: the claude CLI on PATH, resolved once before any request; exit 3 when it is missing.
+zy_m365_claude() {
+  ZY_M365_CLAUDE_BIN="$(command -v claude)" || zy_die 3 "claude not found"
+}
+
+# One claude run in the shape of the unit (spec 23: the run can propose but never execute): the project directory
+# as working directory, ZYGGY_HOOKS=off, ZYGGY_M365_ORIGIN=<origin> ("-" for none), stdin /dev/null so the child has
+# no terminal, stdout (the JSON result) and stderr into files. The child runs in the background so a SIGTERM to the
+# caller can stop it (ZY_M365_CLAUDE_PID while it runs); the return status is claude's.
+ZY_M365_CLAUDE_PID=""
+zy_m365_run_claude() { # zy_m365_run_claude <result file> <stderr file> <origin|-> <claude arguments…>
+  local result="$1" err="$2" origin="$3" rc=0
+  local -a run_env=(-u ZYGGY_M365_ORIGIN ZYGGY_HOOKS=off)
+  shift 3
+  [ "$origin" = - ] || run_env=(ZYGGY_HOOKS=off "ZYGGY_M365_ORIGIN=$origin")
+  (
+    cd "$ZY_M365_CHECKOUT"
+    exec env "${run_env[@]}" "$ZY_M365_CLAUDE_BIN" "$@"
+  ) < /dev/null > "$result" 2> "$err" &
+  ZY_M365_CLAUDE_PID=$!
+  wait "$ZY_M365_CLAUDE_PID" || rc=$?
+  ZY_M365_CLAUDE_PID=""
+  return "$rc"
+}
