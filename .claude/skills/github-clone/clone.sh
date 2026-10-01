@@ -71,7 +71,18 @@ if [ -n "${ZYGGY_GITHUB_CLONE_BASE:-}" ]; then
   fi
 fi
 
+# Clone directories are <root>/<owner>/<name>; temp siblings start with a dot and never count.
+clone_dirs() { # clone_dirs [find tests]
+  find "$root" -mindepth 2 -maxdepth 2 -type d ! -name '.*' "$@"
+}
+
 if [ "$mode" = clean ]; then
+  n=0
+  if [ -d "$root" ]; then
+    n="$(clone_dirs | wc -l)"
+    find "$root" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+  fi
+  printf 'cleaned: %s (%s clones removed)\n' "$root" "$n"
   exit 0
 fi
 
@@ -88,5 +99,63 @@ token_mode="$(stat -c %a "$token_file")"
 token="$(tr -d '[:space:]' < "$token_file")"
 [ -n "$token" ] || die 3 "token file $token_file is empty"
 
-: "$owner" "$name" "$token" "$ZY_CLONE_MAX_MIB" "$ZY_CLONE_CACHE_MIB" "$ZY_CLONE_AGE_DAYS" "$ZY_CLONE_RATE" "$ZY_CLONE_TIMEOUT"
+# Lowered bounds are honoured only together with the test base, i.e. never in a real clone.
+max_mib="$ZY_CLONE_MAX_MIB"
+if [ -n "${ZYGGY_GITHUB_CLONE_BASE:-}" ]; then
+  max_mib="${ZYGGY_CLONE_MAX_MIB:-$max_mib}"
+fi
+
+if [ -d "$root" ]; then
+  while IFS= read -r stale; do
+    rm -rf "$stale"
+    printf 'github-clone: removed %s (older than %s days)\n' "${stale#"$root"/}" "$ZY_CLONE_AGE_DAYS" >&2
+  done < <(clone_dirs -mtime +$((ZY_CLONE_AGE_DAYS - 1)))
+  if [ "$(clone_dirs -mmin -60 | wc -l)" -ge "$ZY_CLONE_RATE" ]; then
+    die 5 "refused: clone limit reached ($ZY_CLONE_RATE per hour)"
+  fi
+fi
+
+gh_err="$(mktemp)"
+trap 'rm -f "$gh_err"' EXIT
+
+# The only place the token leaves this script for gh: the environment of one gh child.
+gh_get() { # gh_get <endpoint>
+  GH_TOKEN="$token" gh api "$1" 2> "$gh_err"
+}
+
+github_failed() { # github_failed [reason]
+  die 6 "GitHub request failed (${1:-$(head -n 1 "$gh_err")}) — see runbook \"GitHub token rejected\""
+}
+
+user_json="$(gh_get user)" || github_failed
+login="$(jq -r .login <<< "$user_json")"
+if [ "${owner,,}" != "${login,,}" ]; then
+  die 5 "refused: $owner/$name is not a repository of $login (the token's account)"
+fi
+
+if ! repo_json="$(gh_get "repos/$login/$name")"; then
+  if grep -q 'HTTP 404' "$gh_err"; then
+    github_failed "$login/$name not found or not visible to the token"
+  fi
+  github_failed
+fi
+full="$(jq -r .full_name <<< "$repo_json")"
+canon_owner="${full%%/*}"
+canon_name="${full#*/}"
+if [ "$(jq -r '.owner.login | ascii_downcase' <<< "$repo_json")" != "${login,,}" ] ||
+  [ "$(jq -r .owner.type <<< "$repo_json")" != User ]; then
+  die 5 "refused: $full is not a repository of $login (the token's account)"
+fi
+if [ "$(jq -r '.fork == true and .parent.private == true' <<< "$repo_json")" = true ]; then
+  die 5 "refused: $full is a fork of a private repository owned by $(jq -r .parent.owner.login <<< "$repo_json")"
+fi
+size_kib="$(jq -r '.size // 0' <<< "$repo_json")"
+mib=$(((size_kib + 1023) / 1024))
+if [ "$mib" -gt "$max_mib" ]; then
+  die 5 "refused: $full is $mib MiB (limit $max_mib MiB)"
+fi
+
+# Step 3 replaces this placeholder with the isolated git runner.
+: "$canon_owner" "$canon_name" "$ZY_CLONE_CACHE_MIB" "$ZY_CLONE_TIMEOUT"
+"$(command -v git)" --version > /dev/null
 exit 0

@@ -65,7 +65,7 @@ fi
 case "$endpoint" in
   user | user/repos | rate_limit) ;;
   *)
-    [[ "$endpoint" =~ ^repos/[^/]+/[^/]+/readme$ ]] || refuse 99 "unknown endpoint $endpoint"
+    [[ "$endpoint" =~ ^repos/[^/]+/[^/]+(/readme)?$ ]] || refuse 99 "unknown endpoint $endpoint"
     ;;
 esac
 
@@ -129,6 +129,17 @@ case "$endpoint" in
       exit 1
     fi
     cat "$readme"
+    ;;
+  repos/*)
+    repo="${endpoint#repos/}"
+    file="$fixtures/repo-${repo/\//-}.json"
+    file="${file,,}"
+    file="$fixtures/${file##*/}"
+    if [ ! -f "$file" ]; then
+      printf 'gh: Not Found (HTTP 404)\n' >&2
+      exit 1
+    fi
+    cat "$file"
     ;;
 esac
 

@@ -235,3 +235,128 @@ path_without() { # path_without <name>
   run --separate-stderr "$ASKPASS" "$p"
   [ "$status" -eq 1 ] && [ -z "$output" ] && [[ "$stderr" == "askpass: refused ("*")" ]]
 }
+
+# --- own-account policy, bounds and --clean (Step 2) -------------------------------------------------------------
+
+@test "clone: bob/x -> exit 5 not a repository of alice, after exactly one gh call (user); git never called" {
+  local before
+  install_git_stub
+  before="$(cache_snapshot)"
+  run --separate-stderr clone bob/x
+  [ "$status" -eq 5 ]
+  [ -z "$output" ]
+  [ "$stderr" = "github-clone: refused: bob/x is not a repository of alice (the token's account)" ]
+  [ "$(stub_endpoints)" = user ]
+  ! git_called
+  [ "$(cache_snapshot)" = "$before" ]
+}
+
+@test "clone: ALICE/Repo passes the policy; the second gh call is repos/alice/Repo" {
+  install_git_stub
+  run --separate-stderr clone ALICE/Repo
+  [ "$(stub_endpoints)" = "$(printf '%s\n' user repos/alice/Repo)" ]
+  git_called
+}
+
+@test "clone: transferred, organisation-owned, fork of a private repository or oversize -> exit 5 with its line, nothing created, git never called" {
+  local before r line
+  install_git_stub
+  before="$(cache_snapshot)"
+  for r in "alice/transferred|github-clone: refused: acme-corp/transferred is not a repository of alice (the token's account)" \
+    "alice/orgtype|github-clone: refused: alice/orgtype is not a repository of alice (the token's account)" \
+    "alice/private-fork|github-clone: refused: alice/private-fork is a fork of a private repository owned by acme-corp" \
+    "alice/huge|github-clone: refused: alice/huge is 586 MiB (limit 500 MiB)"; do
+    line="${r#*|}"
+    : > "$GH_STUB_LOG"
+    run --separate-stderr clone "${r%%|*}"
+    [ "$status" -eq 5 ] || { echo "${r%%|*}: $status $stderr"; return 1; }
+    [ -z "$output" ]
+    [ "$stderr" = "$line" ] || { echo "$stderr"; return 1; }
+    ! git_called
+    [ "$(cache_snapshot)" = "$before" ]
+  done
+}
+
+@test "clone: a fork of a public repository and a renamed repository pass the policy" {
+  install_git_stub
+  run --separate-stderr clone alice/public-fork
+  git_called
+  rm "$BATS_TEST_TMPDIR/git-was-called"
+  run --separate-stderr clone alice/old-name
+  git_called
+}
+
+@test "clone: five clones made within the hour -> exit 5 clone limit reached; temp siblings do not count; git never called" {
+  install_git_stub
+  mkdir -p "$ROOT"/alice/r{1..4} "$ROOT/alice/.x.tmp.1"
+  run --separate-stderr clone alice/repo
+  git_called
+  rm "$BATS_TEST_TMPDIR/git-was-called"
+  : > "$GH_STUB_LOG"
+  mkdir -p "$ROOT/alice/r5"
+  run --separate-stderr clone alice/repo
+  [ "$status" -eq 5 ]
+  [ "$stderr" = "github-clone: refused: clone limit reached (5 per hour)" ]
+  [ "$(stub_calls)" -eq 0 ]
+  ! git_called
+}
+
+@test "clone: a clone older than 7 days is removed at the next run; a 6-day-old one stays" {
+  install_git_stub
+  mkdir -p "$ROOT/alice/old" "$ROOT/alice/recent"
+  touch -d '8 days ago' "$ROOT/alice/old"
+  touch -d '6 days ago' "$ROOT/alice/recent"
+  run --separate-stderr clone alice/repo
+  [[ "$stderr" == *"github-clone: removed alice/old (older than 7 days)"* ]] || { echo "$stderr"; return 1; }
+  [ ! -e "$ROOT/alice/old" ]
+  [ -d "$ROOT/alice/recent" ]
+}
+
+@test "clone: user 401, repos 403, connection refused or an unknown repository -> exit 6, nothing created, git never called" {
+  local before f
+  install_git_stub
+  before="$(cache_snapshot)"
+  for f in 'user:401:Bad credentials' 'repos/alice/repo:403:Resource not accessible by personal access token' \
+    'user:0:dial tcp 140.82.121.6:443: connect: connection refused'; do
+    GH_STUB_FAIL="$f" run --separate-stderr clone alice/repo
+    [ "$status" -eq 6 ] || { echo "$f: $status"; return 1; }
+    [ -z "$output" ]
+    [ "$stderr" = "github-clone: GitHub request failed (gh: ${f#*:*:} (HTTP $(cut -d: -f2 <<< "$f"))) — see runbook \"GitHub token rejected\"" ] ||
+      { echo "$stderr"; return 1; }
+    ! git_called
+    [ "$(cache_snapshot)" = "$before" ]
+  done
+  run --separate-stderr clone alice/x
+  [ "$status" -eq 6 ]
+  [ "$stderr" = 'github-clone: GitHub request failed (alice/x not found or not visible to the token) — see runbook "GitHub token rejected"' ]
+  ! git_called
+}
+
+@test "clone: --clean empties the cache without reading the token or calling gh or git; on a missing root it creates nothing" {
+  install_git_stub
+  rm "$ZYGGY_GITHUB_TOKEN_FILE"
+  mkdir -p "$ROOT"/alice/{a,b,c} "$ROOT/alice/.d.tmp.9"
+  run --separate-stderr clone --clean
+  [ "$status" -eq 0 ]
+  [ "$output" = "cleaned: $ROOT (3 clones removed)" ]
+  [ -z "$stderr" ]
+  [ -d "$ROOT" ]
+  [ -z "$(ls -A "$ROOT")" ]
+  rm -rf "$XDG_CACHE_HOME"
+  run --separate-stderr clone --clean
+  [ "$status" -eq 0 ]
+  [ "$output" = "cleaned: $ROOT (0 clones removed)" ]
+  [ ! -e "$XDG_CACHE_HOME" ]
+  [ "$(stub_calls)" -eq 0 ]
+  ! git_called
+}
+
+@test "clone: the gh calls are GET user and GET repos/alice/repo only, GH_TOKEN set on both" {
+  local token
+  install_git_stub
+  token="$(cat "$ZYGGY_GITHUB_TOKEN_FILE")"
+  run --separate-stderr clone alice/repo
+  [ "$(stub_endpoints)" = "$(printf '%s\n' user repos/alice/repo)" ]
+  ! sed 's/ GH_TOKEN=.*//' "$GH_STUB_LOG" | grep -qE $'(^argv=|\037)(-X|--method|-f|-F)(\037|$)'
+  [ "$(grep -c " GH_TOKEN=$token\$" "$GH_STUB_LOG")" -eq 2 ]
+}

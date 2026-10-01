@@ -1,0 +1,1 @@
+{"full_name":"alice/private-fork","name":"private-fork","owner":{"login":"alice","type":"User"},"private":true,"fork":true,"size":10,"default_branch":"main","parent":{"full_name":"acme-corp/upstream","private":true,"owner":{"login":"acme-corp","type":"Organization"}}}

@@ -1,0 +1,1 @@
+{"full_name":"alice/public-fork","name":"public-fork","owner":{"login":"alice","type":"User"},"private":true,"fork":true,"size":10,"default_branch":"main","parent":{"full_name":"octo/upstream","private":false,"owner":{"login":"octo","type":"User"}}}

@@ -180,6 +180,18 @@ path_without() { # path_without <name>
   [ "$(stub_calls)" -eq 5 ]
 }
 
+@test "stub: serves repos/<o>/<r> from its fixture, refuses a write verb on it, 404 for an unknown repository" {
+  run gh api repos/alice/repo
+  [ "$status" -eq 0 ]
+  [ "$(jq -r .full_name <<< "$output")" = alice/repo ]
+  run --separate-stderr gh api -X POST repos/alice/repo
+  [ "$status" -eq 99 ]
+  [ "$stderr" = "stub: write verb" ]
+  run --separate-stderr gh api repos/alice/none
+  [ "$status" -eq 1 ]
+  [ "$stderr" = "gh: Not Found (HTTP 404)" ]
+}
+
 @test "stub: serves user, the user/repos pages, a README, a 404 and rate_limit, and logs GH_TOKEN" {
   export GH_TOKEN=abc
   run bash -c "gh api --method GET --paginate -f per_page=100 -f sort=pushed -f affiliation=owner --jq '.[]' user/repos | wc -l"

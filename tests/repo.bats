@@ -282,9 +282,14 @@ hygiene_words() { # hygiene_words <root> <csv>
   done < <(scripts)
 }
 
-@test "repo: no hook or skill script contains a git invocation" {
+# The one script allowed to run git: the github-clone runner, only under the clone cache (spec 32).
+GIT_EXEMPT=(.claude/skills/github-clone/clone.sh)
+
+@test "repo: no hook or skill script contains a git invocation, except the one exempt clone script" {
   local f
+  [ "${#GIT_EXEMPT[@]}" -eq 1 ] || { echo "only one script may be exempt: ${GIT_EXEMPT[*]}"; return 1; }
   while IFS= read -r f; do
+    [ "$f" != "${GIT_EXEMPT[0]}" ] || continue
     run bash -c 'grep -vE "^[[:space:]]*#" "$1" | grep -nE "(^|[^a-z_-])git( |\$)"' _ "$REPO_ROOT/$f"
     [ "$status" -eq 1 ] || { echo "$f: $output"; return 1; }
   done < <(scripts)
