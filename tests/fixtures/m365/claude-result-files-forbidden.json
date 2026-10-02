@@ -1,0 +1,1 @@
+{"type":"result","subtype":"success","is_error":false,"duration_ms":5000,"num_turns":3,"result":"The drive answered 403 to the delta and to the folder listing.\nfiles-backfill batch: forbidden 403","session_id":"00000000-0000-0000-0000-000000000000","total_cost_usd":0.04,"permission_denials":[]}

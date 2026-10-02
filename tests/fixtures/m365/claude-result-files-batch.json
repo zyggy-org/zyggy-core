@@ -1,0 +1,1 @@
+{"type":"result","subtype":"success","is_error":false,"duration_ms":72000,"num_turns":14,"result":"Batch read.\nfiles-backfill batch: listed 10, parsed 8, skipped 2 (type 1, size 1, path 0, parse error 0, secret pattern 0), facts 4 (0 dup, 0 refused)","session_id":"00000000-0000-0000-0000-000000000000","total_cost_usd":0.38,"permission_denials":[]}

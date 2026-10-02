@@ -7,7 +7,8 @@ set -euo pipefail
 # usage: state.sh get <key> [<arg>] | set <key> [<arg>] <value> | reset <key> [<arg>]
 #        | list proposals [--status <status>] | mark <id> <status>
 # keys:  mail-watermark (ISO), backfill-watermark <folder> (ISO), drive-token <drive> (ISO timestamp — the pinned
-#        server has no delta token), replied <date> (message id; set appends once)
+#        server has no delta token; the brief's), files-backfill-watermark <drive> (ISO timestamp — the files
+#        backfill's own, never the brief's drive-token), replied <date> (message id; set appends once)
 # Exit 0 · 3 configuration · 4 usage or invalid value.
 # shellcheck source=../../hooks/lib.sh
 source "$(dirname "${BASH_SOURCE[0]}")/../../hooks/lib.sh"
@@ -55,6 +56,11 @@ resolve_key() { # resolve_key <key> <arg count>
     drive-token)
       [ "$2" -eq 1 ] || usage "drive-token needs <drive>"
       file="drive-$arg.token"
+      grammar=iso
+      ;;
+    files-backfill-watermark)
+      [ "$2" -eq 1 ] || usage "files-backfill-watermark needs <drive>"
+      file="files-backfill-$arg.watermark"
       grammar=iso
       ;;
     replied)

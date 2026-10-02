@@ -652,7 +652,7 @@ readonly -a ZY_M365_TOOLS_EXCLUDED=(
 # finding): the settings deny list is their only defence; mcp-wrapper.sh --probe reports them
 readonly -a ZY_M365_AUTH_TOOLS=(list-accounts login logout remove-account select-account verify-login)
 
-# --- the unattended claude runs (brief.sh, mail-backfill.sh) ----------------------------------------------------------
+# --- the unattended claude runs (brief.sh, mail-backfill.sh, files-backfill.sh) ---------------------------------------
 
 # What no run may ever use: the executor and the consent terminal, and every outbound channel (web, browser, file
 # edits, network and package tools). Each run's deny list ends with these.
@@ -690,9 +690,28 @@ for zy_t in "${ZY_M365_TOOLS_ENABLED[@]}"; do
 done
 ZY_M365_MAIL_BACKFILL_DENY+=('Bash(.claude/skills/m365/parse.sh *)' 'Bash(.claude/skills/m365/propose.sh *)'
   "${ZY_M365_RUN_DENY_COMMON[@]}")
+
+# What a files-backfill batch's model may use (owner-started, may run unwatched, facts only): the nine allowlisted
+# tools that are not shared-mailbox tools (the drive and site-drive reads and download-bytes-to-file, a disk write
+# bounded by the run directory and parse.sh), state.sh, facts.sh, parse.sh, reads of the state dir. What it may never
+# use: the 330, the five shared-mailbox tools (the mail reads and the two Draft tools), propose.sh and the common deny
+# list — every m365 tool is named exactly once.
+ZY_M365_FILES_BACKFILL_ALLOW=()
+ZY_M365_FILES_BACKFILL_DENY=()
+for zy_t in "${ZY_M365_TOOLS_EXCLUDED[@]}"; do ZY_M365_FILES_BACKFILL_DENY+=("mcp__m365__$zy_t"); done
+for zy_t in "${ZY_M365_TOOLS_ENABLED[@]}"; do
+  case "$zy_t" in
+    *shared-mailbox*) ZY_M365_FILES_BACKFILL_DENY+=("mcp__m365__$zy_t") ;;
+    *) ZY_M365_FILES_BACKFILL_ALLOW+=("mcp__m365__$zy_t") ;;
+  esac
+done
+ZY_M365_FILES_BACKFILL_ALLOW+=('Bash(.claude/skills/m365/state.sh *)' 'Bash(.claude/skills/m365/facts.sh *)'
+  'Bash(.claude/skills/m365/parse.sh *)' 'Read(~/.local/state/zyggy/m365/**)')
+ZY_M365_FILES_BACKFILL_DENY+=('Bash(.claude/skills/m365/propose.sh *)' "${ZY_M365_RUN_DENY_COMMON[@]}")
 unset zy_t
-# shellcheck disable=SC2034 # read by brief.sh and mail-backfill.sh
-readonly -a ZY_M365_BRIEF_ALLOW ZY_M365_BRIEF_DENY ZY_M365_MAIL_BACKFILL_ALLOW ZY_M365_MAIL_BACKFILL_DENY
+# shellcheck disable=SC2034 # read by brief.sh, mail-backfill.sh and files-backfill.sh
+readonly -a ZY_M365_BRIEF_ALLOW ZY_M365_BRIEF_DENY ZY_M365_MAIL_BACKFILL_ALLOW ZY_M365_MAIL_BACKFILL_DENY \
+  ZY_M365_FILES_BACKFILL_ALLOW ZY_M365_FILES_BACKFILL_DENY
 
 # The arguments joined by <separator> (one --allowedTools / --disallowedTools value).
 zy_m365_join() { # zy_m365_join <separator> <item…>
