@@ -15,7 +15,9 @@
   untracked because Claude Code writes permission approvals into it. `autoMemoryDirectory` in the same
   file points Claude Code's auto memory at `memory/<tenant>/<user>/auto`.
 - `ZYGGY_HOOKS=off` disables the hook and skill scripts (`github-inventory` and `github-clone` refuse with exit 5;
-  the dream pass will use it). `ZYGGY_NOW` is for tests only;
+  the dream pass will use it). The `m365` timer unit sets it: there `graph.sh cert-init`, `mail-backfill.sh`,
+  `files-backfill.sh`, `m365-approve.sh` and the `graph.sh` write verbs (`send-draft`, `move`, `delete`) refuse with
+  exit 5, while `brief.sh`, `propose.sh` and the `graph.sh` reads run. `ZYGGY_NOW` is for tests only;
   it must never be set on this machine.
 
 ## Instruction files
@@ -40,8 +42,10 @@ Exit codes of every script: `0` ok, `2` refused (secret pattern, `remember` only
 (the stderr line names the cause: a `ZYGGY_*` variable, the memory directory, a missing tool or file), `4` usage
 error or unknown section,
 `5` refused — by policy (an unattended run, or for `github-clone` a repository outside the owner's account, a
-fork of a private repository, over the size or clone limit); `6` a GitHub request failed (`github-inventory`,
-`github-clone`).
+fork of a private repository, over the size or clone limit; for the `m365` scripts `refused: no terminal`,
+`no approval for row`, an approval expired or already used, `object changed since approval (hash mismatch)`,
+`audit flagged`, a backfill cap reached); `6` a GitHub request failed (`github-inventory`,
+`github-clone`), or a Graph or identity failure (`m365`).
 
 ## When something reports an error
 
@@ -54,6 +58,15 @@ fork of a private repository, over the size or clone limit); `6` a GitHub reques
 - Exit 6 from `github-inventory` or `github-clone`: a GitHub request failed. Quote the stderr line to the owner
   and point to the runbook entry "GitHub token rejected". Do not retry with another tool.
 - Exit 5 from `github-clone`: quote the stderr line; do not retry and do not try another way.
+- Exit 6 from an `m365` script (`/m365 check`, `propose.sh`): quote the stderr line and point to the runbook entry
+  it names — "Certificate rejected" (`invalid_client`, clock skew) or "Scope or grant missing" (403). Do not retry
+  with another tool. A 401 from an `m365` tool: ask the owner to reconnect the server (`/mcp`).
+- A proposal you wrote waits for the owner: point to the runbook entry "Approve proposals" (`m365-approve.sh` on
+  the VM). The refusals the owner may see there — `no terminal`, `no approval for row`,
+  `object changed since approval` — are explained in that entry and in "A proposal shows CHANGED"; never try to
+  run the approval or a `graph.sh` write verb (`send-draft`, `move`, `delete`) yourself.
+- `audit FLAGGED` in the brief's journal line: the owner reviews the Drafts and Sent Items; a sent item without a
+  consent row means "Revoke the application credential" until it is explained.
 - `stop: note refused` on stderr: the turn's note looked like a secret and was not written. Expected; nothing to do.
 
 ## Headless runs
@@ -66,5 +79,5 @@ fork of a private repository, over the size or clone limit); `6` a GitHub reques
 ## What comes later
 
 These will be added by later deliverables and do not exist yet: the nightly dream pass (consolidates `inbox/`
-and `daily/` into the durable files and commits memory), Telegram, mail, social accounts, and jobs on the
+and `daily/` into the durable files and commits memory), Telegram, personal mail, social accounts, and jobs on the
 owner's laptops. Until they exist, say so when asked.

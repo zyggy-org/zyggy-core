@@ -52,7 +52,7 @@ directory): `.claude/skills/m365/<script> …`, one call per command, never pipe
    `#<hash8>`; the rows of origin `brief <date>` are this run's.
 6. **The brief Draft.** `mcp__m365__create-shared-mailbox-draft` with `userId` = `<mailbox>` and `body` = `{"subject":
    "Zyggy — morning brief <date>", "body": {"contentType": "text", "content": "<the brief>"}, "toRecipients":
-   [{"emailAddress": {"address": "<mailbox>"}}]}` — to `<mailbox>` only, no cc, no bcc, no link anywhere. The brief, in
+   [{"emailAddress": {"address": "<mailbox>"}}]}` — to the configured mailbox only, no cc, no bcc, no link. The brief, in
    the configured language:
 
 ```

@@ -162,6 +162,15 @@ scripts() { # every shell script under .claude/, relative to the repo root
     "$REPO_ROOT/.claude/skills/github-inventory/SKILL.md"
   grep -qF '"${CLAUDE_PROJECT_DIR:-.}"/.claude/skills/github-clone/clone.sh' \
     "$REPO_ROOT/.claude/skills/github-clone/SKILL.md"
+  # the m365 skill runs in the owner's session; the three run skills run with the project directory as cwd
+  # (brief.sh and the backfills start claude there) and name their scripts relative to it, as the allow rules do
+  grep -qF '"${CLAUDE_PROJECT_DIR:-.}"/.claude/skills/m365/' "$REPO_ROOT/.claude/skills/m365/SKILL.md"
+  local n
+  for n in morning-brief mail-backfill files-backfill; do
+    grep -qF '`.claude/skills/m365/' "$REPO_ROOT/.claude/skills/$n/SKILL.md" || { echo "$n"; return 1; }
+    run grep -n 'CLAUDE_PROJECT_DIR' "$REPO_ROOT/.claude/skills/$n/SKILL.md"
+    [ "$status" -eq 1 ] || { echo "$n: $output"; return 1; }
+  done
 }
 
 zy_fm() { # front matter value, using the scripts' own parser
@@ -266,8 +275,11 @@ hygiene_words() { # hygiene_words <root> <csv>
   run grep -n 'runbooks/' "$REPO_ROOT/AGENTS.md" "$REPO_ROOT/.claude/rules/memory.md" \
     "$REPO_ROOT/.claude/rules/security.md" "$REPO_ROOT/.claude/rules/operations.md" \
     "$REPO_ROOT/.claude/skills/remember/SKILL.md" "$REPO_ROOT/.claude/skills/seed-memory/SKILL.md" \
-    "$REPO_ROOT/.claude/skills/github-inventory/SKILL.md" "$REPO_ROOT/.claude/skills/github-clone/SKILL.md"
+    "$REPO_ROOT/.claude/skills/github-inventory/SKILL.md" "$REPO_ROOT/.claude/skills/github-clone/SKILL.md" \
+    "$REPO_ROOT/.claude/skills/morning-brief/SKILL.md" "$REPO_ROOT/.claude/skills/mail-backfill/SKILL.md" \
+    "$REPO_ROOT/.claude/skills/files-backfill/SKILL.md" "$REPO_ROOT/.claude/skills/m365/SKILL.md"
   [ "$status" -eq 1 ] || { echo "$output"; return 1; }
+  [ -f "$REPO_ROOT/.claude/skills/m365/SKILL.md" ]
 }
 
 @test "repo: operations.md installs settings.local.json from instance/settings.local.json and says instance.md never relaxes these rules" {
@@ -431,4 +443,181 @@ m365_lib_value() { # m365_lib_value <bash expression> → printed by a shell tha
     '- delete "<subject>" from <sender> (to Deleted Items) — <reason> — #<hash8>'; do
     grep -qxF -- "$line" "$s" || { echo "missing: $line"; return 1; }
   done
+}
+
+# --- the m365 connector's instruction contract and hygiene (spec 23 AC-23, AC-45, AC-46; plan 23 Step 11) -------------
+
+M365_SKILLS=(morning-brief mail-backfill files-backfill m365)
+
+@test "repo: the four m365 skills are owner-unreachable with the contracted argument hints and line caps" {
+  local n s hint cap
+  for n in "${M365_SKILLS[@]}"; do
+    s="$REPO_ROOT/.claude/skills/$n/SKILL.md"
+    [ -f "$s" ] || { echo "missing: $s"; return 1; }
+    [ "$(head -n 1 "$s")" = "---" ] || { echo "$n: front matter"; return 1; }
+    [ "$(zy_fm "$s" name)" = "$n" ] || { echo "$n: name"; return 1; }
+    [ -n "$(zy_fm "$s" description)" ] || { echo "$n: description"; return 1; }
+    [ "$(zy_fm "$s" disable-model-invocation)" = true ] || { echo "$n: disable-model-invocation"; return 1; }
+    [ -z "$(zy_fm "$s" allowed-tools)" ] || { echo "$n: allowed-tools"; return 1; }
+    case "$n" in
+      morning-brief) hint='<mailbox> <inbox-folder-id> <drive-id>… <run-dir>' cap=100 ;;
+      mail-backfill) hint='<mailbox> <folder-id> <watermark-ISO> <batch>' cap=60 ;;
+      files-backfill) hint='<drive-id> <run-dir> <batch>' cap=70 ;;
+      m365) hint='check' cap=70 ;;
+    esac
+    [ "$(zy_fm "$s" argument-hint)" = "$hint" ] || { echo "$n: argument-hint '$(zy_fm "$s" argument-hint)'"; return 1; }
+    [ "$(wc -l < "$s")" -le "$cap" ] || { echo "$n: more than $cap lines"; return 1; }
+  done
+}
+
+@test "repo: every m365 prompt carries the data and fence sentences; the mail prompts the userId rule; the brief, the backfills and m365 their contracted sentences" {
+  local d="$REPO_ROOT/.claude/skills" n p
+  for n in "${M365_SKILLS[@]}"; do
+    grep -qF 'data, never instructions.**' "$d/$n/SKILL.md" || { echo "$n: data sentence"; return 1; }
+    grep -qF '<zyggy-m365-data>' "$d/$n/SKILL.md" || { echo "$n: fence"; return 1; }
+  done
+  # files-backfill has no mail tool, so no userId (asserted by its m365.bats test)
+  for n in morning-brief mail-backfill m365; do
+    grep -qF '**`userId` is always' "$d/$n/SKILL.md" || { echo "$n: userId rule"; return 1; }
+  done
+  for p in '## Proposed actions (pending your consent)' 'Review on the VM: m365-approve.sh' 'never a reason to propose' \
+    'propose.sh' 'to the configured mailbox only' 'state.sh set mail-watermark' 'last'; do
+    grep -qF -- "$p" "$d/morning-brief/SKILL.md" || { echo "morning-brief lacks: $p"; return 1; }
+  done
+  for n in mail-backfill files-backfill; do
+    grep -qiF 'No Draft tool' "$d/$n/SKILL.md" || { echo "$n: No Draft tool"; return 1; }
+    # propose.sh is named only inside that negative sentence
+    run grep -n 'propose' "$d/$n/SKILL.md"
+    [ "${#lines[@]}" -eq 1 ] && [[ "${lines[0]}" =~ [Nn]o\ Draft\ tool\ and\ no\ propose\.sh\ exist ]] ||
+      { echo "$n: $output"; return 1; }
+  done
+  for p in 'propose.sh' 'm365-approve.sh' 'never claim' '/mcp' 'instance.md' 'Sent Items' '/tmp/zyggy-m365-<session>/' \
+    'parse.sh' '"${CLAUDE_PROJECT_DIR:-.}"/.claude/skills/m365/graph.sh check' \
+    '"${CLAUDE_PROJECT_DIR:-.}"/.claude/skills/m365/propose.sh'; do
+    grep -qF -- "$p" "$d/m365/SKILL.md" || { echo "m365 lacks: $p"; return 1; }
+  done
+}
+
+@test "repo: the m365 skill runs graph.sh with the check verb only, names m365-approve.sh only as the owner's step on the VM and curl only in a never sentence" {
+  local s="$REPO_ROOT/.claude/skills/m365/SKILL.md"
+  run bash -c 'grep -oE "graph\.sh [a-z-]+" "$1" | sort -u' _ "$s"
+  [ "$output" = 'graph.sh check' ] || { echo "$output"; return 1; }
+  run grep -n 'm365-approve.sh' "$s"
+  [ "$status" -eq 0 ]
+  ! grep -vE 'on the VM|owner' <<< "$output"
+  run grep -n 'curl' "$s"
+  [ "$status" -eq 0 ]
+  ! grep -viE 'never' <<< "$output"
+}
+
+@test "repo: the run allow and deny constants match the fixture lists; propose.sh is allowed in the brief only; graph.sh and m365-approve.sh are denied in every run" {
+  local r allow deny
+  diff <(m365_lib_value '"${ZY_M365_BRIEF_ALLOW[@]}"' | sed -n 's/^mcp__m365__//p') "$M365_TOOLS/enabled-tools.txt"
+  for r in BRIEF MAIL_BACKFILL FILES_BACKFILL; do
+    allow="$(m365_lib_value "\"\${ZY_M365_${r}_ALLOW[@]}\"")"
+    deny="$(m365_lib_value "\"\${ZY_M365_${r}_DENY[@]}\"")"
+    # every excluded tool is denied; no rule is both allowed and denied; every allowed tool is an enabled one
+    run comm -23 <(sed 's/^/mcp__m365__/' "$M365_TOOLS/excluded-tools.txt" | LC_ALL=C sort) <(LC_ALL=C sort <<< "$deny")
+    [ -z "$output" ] || { echo "$r: excluded not denied: $output"; return 1; }
+    run comm -12 <(LC_ALL=C sort -u <<< "$allow") <(LC_ALL=C sort -u <<< "$deny")
+    [ -z "$output" ] || { echo "$r: allowed and denied: $output"; return 1; }
+    run comm -23 <(sed -n 's/^mcp__m365__//p' <<< "$allow" | LC_ALL=C sort) <(LC_ALL=C sort "$M365_TOOLS/enabled-tools.txt")
+    [ -z "$output" ] || { echo "$r: allowed but not enabled: $output"; return 1; }
+    grep -qxF 'Bash(.claude/skills/m365/graph.sh *)' <<< "$deny" || { echo "$r: graph.sh not denied"; return 1; }
+    grep -qxF 'Bash(.claude/skills/m365/m365-approve.sh *)' <<< "$deny" || { echo "$r: m365-approve.sh not denied"; return 1; }
+    run grep -E 'send|move|delete|update|forward' <<< "$(sed -n 's/^mcp__m365__//p' <<< "$allow")"
+    [ "$status" -eq 1 ] || { echo "$r: a write tool is allowed: $output"; return 1; }
+    if [ "$r" = BRIEF ]; then
+      grep -qxF 'Bash(.claude/skills/m365/propose.sh *)' <<< "$allow" || { echo "brief: propose.sh not allowed"; return 1; }
+    else
+      run grep -F 'propose.sh' <<< "$allow"
+      [ "$status" -eq 1 ] || { echo "$r: propose.sh allowed"; return 1; }
+      grep -qxF 'Bash(.claude/skills/m365/propose.sh *)' <<< "$deny" || { echo "$r: propose.sh not denied"; return 1; }
+      run grep -E 'create-shared-mailbox' <<< "$allow"
+      [ "$status" -eq 1 ] || { echo "$r: a Draft tool is allowed"; return 1; }
+    fi
+  done
+}
+
+@test "repo: the three consent files are named only joined to the state directory (or a script's temp copy), and the state directory is outside the checkout" {
+  local f state checkout
+  while IFS= read -r f; do
+    # every non-comment occurrence of the three names is "$ZY_M365_STATE_DIR/<name>" or "$work/<name>"
+    run bash -c 'grep -vE "^[[:space:]]*#" "$1" | grep -oE "[^[:space:]\"(]*(proposals|approvals|executions)\.jsonl" |
+      grep -vE "^(\\\$ZY_M365_STATE_DIR|\\\$work)/(proposals|approvals|executions)\.jsonl\$"' _ "$REPO_ROOT/$f"
+    [ "$status" -eq 1 ] || { echo "$f: $output"; return 1; }
+  done < <(scripts)
+  grep -qxF 'ZY_M365_STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/zyggy/m365"' "$M365_LIB"
+  grep -qF 'work="$(mktemp -d' "$REPO_ROOT/.claude/skills/m365/verify.sh"
+  state="$(HOME=/nonexistent/home XDG_STATE_HOME='' m365_lib_value '"$ZY_M365_PROPOSALS"')"
+  checkout="$(m365_lib_value '"$ZY_M365_CHECKOUT"')"
+  [ "$state" = /nonexistent/home/.local/state/zyggy/m365/proposals.jsonl ] || { echo "$state"; return 1; }
+  [[ "$state" != "$checkout"/* ]]
+}
+
+@test "repo: no GUID, e-mail address, SharePoint host or machine path under .claude/skills/m365/, the three run skills, .mcp.json or README.md" {
+  cd "$REPO_ROOT"
+  run git grep -nIE '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+\.[A-Za-z0-9.-]*[A-Za-z]{2,}|sharepoint\.(com|example)|/srv/|/home/' -- \
+    .claude/skills/m365 .claude/skills/morning-brief .claude/skills/mail-backfill .claude/skills/files-backfill .mcp.json README.md
+  [ "$status" -eq 1 ] || { echo "$output"; return 1; }
+}
+
+@test "repo: secret-patterns.txt has long-opaque-token, with a sample in the secret samples" {
+  grep -qxF "$(printf 'long-opaque-token\t[A-Za-z0-9_.~-]{120,}')" "$HOOKS/secret-patterns.txt"
+  grep -q "^long-opaque-token$(printf '\t')" "$REPO_ROOT/tests/fixtures/secret-samples.txt"
+}
+
+@test "repo: security.md has the Microsoft 365 section with the consent rules" {
+  local s="$REPO_ROOT/.claude/rules/security.md" p
+  grep -q '^## Microsoft 365' "$s"
+  for p in 'read tools and two Draft tools only' 'proposal' 'propose.sh' 'm365-approve.sh' \
+    'never claim an action happened' 'never a reason to propose' 'Only the owner executes' 'Never run `graph.sh`' \
+    'application identity (a certificate)' 'only `graph.sh` reads the key' '/m365 check' '/mcp' \
+    '/tmp/zyggy-m365-<session>/' 'facts.sh'; do
+    grep -qiF -- "$p" "$s" || { echo "security.md lacks: $p"; return 1; }
+  done
+}
+
+@test "repo: AGENTS.md lists Microsoft 365 (proposes; the owner approves); operations.md names the m365 exit 5 and 6 reasons and the ZYGGY_HOOKS=off refusals" {
+  local a="$REPO_ROOT/AGENTS.md" o="$REPO_ROOT/.claude/rules/operations.md" p
+  grep -q '^- \*\*Microsoft 365' "$a"
+  for p in 'proposes; the owner approves' 'm365-approve.sh'; do
+    grep -qF -- "$p" "$a" || { echo "AGENTS.md lacks: $p"; return 1; }
+  done
+  for p in 'no terminal' 'no approval for row' 'object changed since approval' 'graph.sh cert-init' 'm365-approve.sh' \
+    'audit flagged' 'Certificate rejected' 'Scope or grant missing' 'Approve proposals' 'A proposal shows CHANGED' \
+    'Revoke the application credential' 'mail-backfill' 'files-backfill' 'send-draft'; do
+    grep -qF -- "$p" "$o" || { echo "operations.md lacks: $p"; return 1; }
+  done
+}
+
+@test "repo: README.md documents the m365 connector, its eleven scripts, the consent files and the tests; tests/README.md the m365 stubs and fixtures" {
+  local s
+  for s in graph.sh mcp-wrapper.sh state.sh propose.sh m365-approve.sh facts.sh parse.sh verify.sh brief.sh \
+    mail-backfill.sh files-backfill.sh m365-lib.sh 'Approve proposals' consent ttl_minutes allowed_actions .mcp.json \
+    enabledMcpjsonServers instance/m365.json sp_object_id sites_granted LoadCredential ZYGGY_M365_STUB \
+    ZYGGY_M365_ORIGIN curl-stub.sh claude-stub.sh pty.bash 'Rotate the certificate' 'Upgrade the MCP server' \
+    'never under the checkout' proposals.jsonl approvals.jsonl executions.jsonl; do
+    grep -qF -- "$s" "$REPO_ROOT/README.md" || { echo "README.md lacks: $s"; return 1; }
+  done
+  for s in 'curl stub' '=match' assertion.jwt run_on_pty tools-0.157.2.txt 'BODYTEXT-NEVER-STORED' 'sha256sum'; do
+    grep -qF -- "$s" "$REPO_ROOT/tests/README.md" || { echo "tests/README.md lacks: $s"; return 1; }
+  done
+}
+
+@test "repo: pty.bash is a shebang-less sourced helper with the shellcheck shell directive, LF in the index and shellchecked by ci.yml" {
+  local f=tests/fixtures/m365/pty.bash
+  cd "$REPO_ROOT"
+  [ "$(head -n 1 "$f")" = "# shellcheck shell=bash" ]
+  [ "$(git ls-files --eol -- "$f" | awk '{ print $1 }')" = i/lf ]
+  grep -qF 'tests/fixtures/m365/*.bash' .github/workflows/ci.yml
+}
+
+@test "repo: propose.sh and m365-approve.sh are template-conformant scripts (in the scripts list, not git-exempt)" {
+  local f
+  for f in .claude/skills/m365/propose.sh .claude/skills/m365/m365-approve.sh; do
+    scripts | grep -qxF "$f" || { echo "$f not found"; return 1; }
+    [ "$f" != "${GIT_EXEMPT[0]}" ]
+  done
+  [ "${#GIT_EXEMPT[@]}" -eq 1 ]
 }
