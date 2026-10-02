@@ -131,12 +131,12 @@ scripts() { # every shell script under .claude/, relative to the repo root
   ! grep -v -i 'never' <<< "$output"
 }
 
-@test "repo: the gh stub, the git spy, the curl stub, the MCP server stub, the MarkItDown stub, the claude stub and the brief actions start with the template shebang and set -euo pipefail, are LF and executable in the index, and ci.yml shellchecks all seven" {
+@test "repo: the gh stub, the git spy, the curl stub, the MCP server stub, the MarkItDown stub, the claude stub, the brief and the backfill actions start with the template shebang and set -euo pipefail, are LF and executable in the index, and ci.yml shellchecks all eight" {
   local f
   cd "$REPO_ROOT"
   for f in tests/fixtures/github/gh-stub.sh tests/fixtures/github/git-spy.sh tests/fixtures/graph/curl-stub.sh \
     tests/fixtures/m365/ms-365-mcp-server-stub.sh tests/fixtures/m365/markitdown-stub.sh tests/fixtures/m365/claude-stub.sh \
-    tests/fixtures/m365/brief-actions.sh; do
+    tests/fixtures/m365/brief-actions.sh tests/fixtures/m365/backfill-actions.sh; do
     [ "$(head -n 1 "$f")" = "#!/usr/bin/env bash" ] || { echo "$f: shebang"; return 1; }
     head -n 3 "$f" | grep -qx 'set -euo pipefail'
     [ "$(git ls-files -s -- "$f" | cut -d' ' -f1)" = 100755 ] || { echo "$f: mode"; return 1; }

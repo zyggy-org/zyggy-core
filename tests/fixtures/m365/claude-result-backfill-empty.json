@@ -1,0 +1,1 @@
+{"type":"result","subtype":"success","is_error":false,"duration_ms":4000,"num_turns":2,"result":"mail-backfill batch: messages 0, facts 0 (0 dup, 0 refused)","session_id":"00000000-0000-0000-0000-000000000000","total_cost_usd":0.03,"permission_denials":[]}

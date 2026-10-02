@@ -652,7 +652,13 @@ readonly -a ZY_M365_TOOLS_EXCLUDED=(
 # finding): the settings deny list is their only defence; mcp-wrapper.sh --probe reports them
 readonly -a ZY_M365_AUTH_TOOLS=(list-accounts login logout remove-account select-account verify-login)
 
-# --- the unattended claude run (brief.sh) -------------------------------------------------------------------------
+# --- the unattended claude runs (brief.sh, mail-backfill.sh) ----------------------------------------------------------
+
+# What no run may ever use: the executor and the consent terminal, and every outbound channel (web, browser, file
+# edits, network and package tools). Each run's deny list ends with these.
+readonly -a ZY_M365_RUN_DENY_COMMON=('Bash(.claude/skills/m365/graph.sh *)' 'Bash(.claude/skills/m365/m365-approve.sh *)'
+  WebFetch WebSearch mcp__plugin_playwright_playwright Edit Write NotebookEdit 'Bash(curl *)' 'Bash(wget *)' 'Bash(git *)'
+  'Bash(npm *)' 'Bash(npx *)' 'Bash(node *)')
 
 # What a morning-brief run's model may use (spec 23 run allowlist): the 14 tools the server loads, the four scripts it
 # writes through (state, facts, parse, and propose — a proposal row, never an execution) and reads of the state dir.
@@ -660,16 +666,33 @@ ZY_M365_BRIEF_ALLOW=()
 for zy_t in "${ZY_M365_TOOLS_ENABLED[@]}"; do ZY_M365_BRIEF_ALLOW+=("mcp__m365__$zy_t"); done
 ZY_M365_BRIEF_ALLOW+=('Bash(.claude/skills/m365/state.sh *)' 'Bash(.claude/skills/m365/facts.sh *)'
   'Bash(.claude/skills/m365/parse.sh *)' 'Bash(.claude/skills/m365/propose.sh *)' 'Read(~/.local/state/zyggy/m365/**)')
-# What it may never use: every other tool of the pinned server, the executor and the consent terminal, and every
-# outbound channel (web, browser, file edits, network and package tools).
+# What it may never use: every other tool of the pinned server and the common deny list.
 ZY_M365_BRIEF_DENY=()
 for zy_t in "${ZY_M365_TOOLS_EXCLUDED[@]}"; do ZY_M365_BRIEF_DENY+=("mcp__m365__$zy_t"); done
-ZY_M365_BRIEF_DENY+=('Bash(.claude/skills/m365/graph.sh *)' 'Bash(.claude/skills/m365/m365-approve.sh *)' WebFetch WebSearch
-  mcp__plugin_playwright_playwright Edit Write NotebookEdit 'Bash(curl *)' 'Bash(wget *)' 'Bash(git *)' 'Bash(npm *)'
-  'Bash(npx *)' 'Bash(node *)')
+ZY_M365_BRIEF_DENY+=("${ZY_M365_RUN_DENY_COMMON[@]}")
+
+# What a mail-backfill batch's model may use (owner-started, may run unwatched, facts only): the three /users mail
+# read tools, state.sh and facts.sh, reads of the state dir. No Draft tool, no drive tool, no parse.sh, no propose.sh.
+readonly -a ZY_M365_MAIL_READ_TOOLS=(list-shared-mailbox-folder-messages list-shared-mailbox-messages get-shared-mailbox-message)
+ZY_M365_MAIL_BACKFILL_ALLOW=()
+for zy_t in "${ZY_M365_MAIL_READ_TOOLS[@]}"; do ZY_M365_MAIL_BACKFILL_ALLOW+=("mcp__m365__$zy_t"); done
+ZY_M365_MAIL_BACKFILL_ALLOW+=('Bash(.claude/skills/m365/state.sh *)' 'Bash(.claude/skills/m365/facts.sh *)'
+  'Read(~/.local/state/zyggy/m365/**)')
+# What it may never use: the 330, the other eleven allowlisted tools (the two Draft tools, the drive tools,
+# download-bytes-to-file), parse.sh, propose.sh and the common deny list — every m365 tool is named exactly once.
+ZY_M365_MAIL_BACKFILL_DENY=()
+for zy_t in "${ZY_M365_TOOLS_EXCLUDED[@]}"; do ZY_M365_MAIL_BACKFILL_DENY+=("mcp__m365__$zy_t"); done
+for zy_t in "${ZY_M365_TOOLS_ENABLED[@]}"; do
+  case " ${ZY_M365_MAIL_READ_TOOLS[*]} " in
+    *" $zy_t "*) ;;
+    *) ZY_M365_MAIL_BACKFILL_DENY+=("mcp__m365__$zy_t") ;;
+  esac
+done
+ZY_M365_MAIL_BACKFILL_DENY+=('Bash(.claude/skills/m365/parse.sh *)' 'Bash(.claude/skills/m365/propose.sh *)'
+  "${ZY_M365_RUN_DENY_COMMON[@]}")
 unset zy_t
-# shellcheck disable=SC2034 # read by brief.sh
-readonly -a ZY_M365_BRIEF_ALLOW ZY_M365_BRIEF_DENY
+# shellcheck disable=SC2034 # read by brief.sh and mail-backfill.sh
+readonly -a ZY_M365_BRIEF_ALLOW ZY_M365_BRIEF_DENY ZY_M365_MAIL_BACKFILL_ALLOW ZY_M365_MAIL_BACKFILL_DENY
 
 # The arguments joined by <separator> (one --allowedTools / --disallowedTools value).
 zy_m365_join() { # zy_m365_join <separator> <item…>

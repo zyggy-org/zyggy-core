@@ -12,3 +12,4 @@ tests/fixtures/m365/ms-365-mcp-server-stub.sh text eol=lf
 tests/fixtures/m365/markitdown-stub.sh text eol=lf
 tests/fixtures/m365/claude-stub.sh text eol=lf
 tests/fixtures/m365/brief-actions.sh text eol=lf
+tests/fixtures/m365/backfill-actions.sh text eol=lf
