@@ -6,7 +6,9 @@ set -euo pipefail
 # assertion.jwt (the client assertion it received, for the tests' signature checks). No network.
 # It parses only what graph.sh sends: -sS, --proto =https, --max-time <s>, -X <M>, -H <header|@file>,
 # --data-urlencode <k=v|k@-> / --data @- / --json @- (body from stdin), -o <file>, -D <file>, -w '%{http_code}',
-# one URL. Exit 99: unroutable, unknown option or any write verb (graph.sh reads only, D7 — the one POST is the
+# --data-raw <v>, -H @- (header lines on stdin), one URL. A URL http://127.0.0.1:<port>/… is the loopback MCP server
+# stub: after the log line it is requested for real through fixtures/loopback-client.mjs (plan 23 Step R8). Exit 99:
+# unroutable, unknown option or any write verb (graph.sh reads only, D7 — the one POST is the
 # token request); 98: a /me request; 97: a DELETE (hard delete must never happen).
 # The log holds markers (present|absent|match), never a key, an assertion or a token.
 
@@ -57,7 +59,13 @@ while [ $# -gt 0 ]; do
       ;;
     -H)
       [ $# -ge 2 ] || refuse 99 "-H needs a value"
-      if [[ "$2" == @* ]]; then
+      if [ "$2" = @- ]; then
+        # header lines on stdin (mcp-server.sh --probe hands the bearer this way)
+        while IFS= read -r line || [ -n "$line" ]; do
+          [ -z "$line" ] || headers+=("$line")
+        done
+        read_stdin=1
+      elif [[ "$2" == @* ]]; then
         [ -f "${2#@}" ] || refuse 99 "-H @file missing"
         while IFS= read -r line || [ -n "$line" ]; do
           [ -z "$line" ] || headers+=("$line")
@@ -79,6 +87,11 @@ while [ $# -gt 0 ]; do
       else
         refuse 99 "--data-urlencode shape $2"
       fi
+      shift 2
+      ;;
+    --data-raw)
+      [ $# -ge 2 ] || refuse 99 "--data-raw needs a value"
+      body="$2"
       shift 2
       ;;
     --data | --json)
@@ -157,6 +170,22 @@ printf 'method=%s url=%s headers=%s prefer=%s bearer=%s client_secret=%s client_
   "$(present "$assertion")" "$(value_or_absent "$(form_value client_assertion_type)")" "$(value_or_absent "$(form_value grant_type)")" \
   "$(value_or_absent "$(form_value scope)")" "$(value_or_absent "$(form_value client_id)")" "$(value_or_absent "$destination")" >> "$log"
 [ -z "$assertion" ] || printf '%s' "$assertion" > "$here/assertion.jwt"
+
+# --- the loopback MCP server (plan 23 Step R8): a real request through Node, after the log line ----------------------
+
+if [[ "$url" =~ ^http://127\.0\.0\.1:[0-9]+/ ]]; then
+  set +e
+  # the header lines (the bearer among them) reach jq and node on stdin, never as arguments
+  status="$(if [ "${#headers[@]}" -gt 0 ]; then printf '%s\n' "${headers[@]}"; fi |
+    jq -Rsc --arg m "$method" --arg u "$url" --arg b "$body" \
+      '{method: $m, url: $u, headers: (split("\n") | map(select(length > 0))), body: $b}' |
+    node "$fixtures/loopback-client.mjs" "$out")"
+  rc=$?
+  set -e
+  [ "$rc" -eq 0 ] || exit "$rc"
+  [ -z "$write_fmt" ] || printf '%s' "${write_fmt//%\{http_code\}/$status}"
+  exit 0
+fi
 
 # --- the hard refusals -------------------------------------------------------------------------------------------
 

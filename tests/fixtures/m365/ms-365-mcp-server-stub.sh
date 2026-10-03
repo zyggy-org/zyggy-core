@@ -47,6 +47,15 @@ if [ "$rc" -eq 2 ]; then
   exit 1
 fi
 
+# HTTP mode (mcp-server.sh, plan 23 Step R8): the same start log above, then a loopback HTTP server in Node that
+# answers per request (fixtures/http-stub.mjs); the token=… line above is "absent" — the server holds none.
+for arg in "$@"; do
+  if [ "$arg" = --http ]; then
+    # node gets the environment the server got: bash's own PWD, SHLVL and _ removed
+    exec env -u PWD -u SHLVL -u _ node "$fixtures/http-stub.mjs" "$@"
+  fi
+done
+
 # The tools/list result for this mode, compact.
 tool_list() {
   case "$mode" in

@@ -451,6 +451,23 @@ m365_lib_value() { # m365_lib_value <bash expression> → printed by a shell tha
   grep -qF -- '--org-mode' "$w"
 }
 
+@test "repo (AC-52): mcp-server.sh never names graph.sh's token verb, a token variable, a client secret, npx, --login or the forbidden server flags; binds 127.0.0.1 only (no host setting); clears the environment once; the helper prints with a builtin" {
+  local s="$REPO_ROOT/.claude/skills/m365/mcp-server.sh" h="$REPO_ROOT/.claude/skills/m365/mcp-auth-header.sh"
+  run grep -nE -- '--enable-auth-tools|--enable-dynamic-registration|--enable-attachment-urls|--obo|--trust-proxy-auth|--allow-unauthenticated-discovery|MS365_MCP_OAUTH_TOKEN|MS365_MCP_CLIENT_SECRET|npx|--login|--public-url|graph\.sh"? token' "$s"
+  [ "$status" -eq 1 ] || { echo "$output"; return 1; }
+  [ "$(grep -c 'graph\.sh' "$s")" -eq 0 ]
+  [ "$(grep -c 'env -i' "$s")" -eq 1 ]
+  grep -qF 'listen="127.0.0.1:$ZY_M365_PORT"' "$s"
+  run grep -nE 'ZYGGY_M365_HOST|0\.0\.0\.0|::' "$s"
+  [ "$status" -eq 1 ] || { echo "$output"; return 1; }
+  grep -qF -- '--org-mode --http "$listen" --http-local-file-tools --no-dynamic-registration' "$s"
+  # the helper: graph.sh token once per attempt, the header through the printf builtin, nothing else prints the token
+  grep -qF "printf '{\"Authorization\":\"Bearer %s\"}\\n' \"\$token\"" "$h"
+  # "$token" is only tested by [[ ]] and printed by printf — both builtins, never an argument of a program
+  run bash -c 'grep -n "\"\$token\"" "$1" | grep -vE ":(\[\[ \"\\\$token\" =~|printf )"' _ "$h"
+  [ "$status" -eq 1 ] || { echo "$output"; return 1; }
+}
+
 @test "repo: morning-brief/SKILL.md is owner-unreachable (disable-model-invocation: true, no allowed-tools), <= 100 lines, carries every line of expected/m365-suggestions-section.txt verbatim and no D6 proposal wording (AC-38)" {
   local s="$REPO_ROOT/.claude/skills/morning-brief/SKILL.md" g="$REPO_ROOT/tests/expected/m365-suggestions-section.txt" line
   [ "$(head -n 1 "$s")" = "---" ]

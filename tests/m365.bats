@@ -50,6 +50,9 @@ setup() {
 # fixture body marker is never persisted anywhere.
 teardown() {
   local leak='STUBACCESS|BEGIN (RSA )?PRIVATE KEY'
+  stop_http_server
+  # the journal (logger stub) never holds a token
+  ! grep -qsE "$leak" "${LOGGER_STUB_LOG:-/nonexistent}" || { echo "token in the journal"; return 1; }
   if [ "$expect_token_on_stdout" -eq 1 ]; then
     ! grep -qE 'BEGIN (RSA )?PRIVATE KEY' <<< "${output:-}${stderr:-}" || { echo "key in stdout/stderr"; return 1; }
   else
@@ -1267,6 +1270,160 @@ server_log() { # the server stub's log, or nothing
   [ "$status" -eq 0 ] && grep -qx 'token=match' "$SERVER_STUB_LOG" || { echo "$status $stderr"; return 1; }
   ZYGGY_HOOKS=off run --separate-stderr wrapper --probe < /dev/null
   [ "$status" -eq 0 ] && [ "${output%%$'\n'*}" = "tools: 16" ] || { echo "$status $output $stderr"; return 1; }
+}
+
+# --- D8: mcp-auth-header.sh and mcp-server.sh over loopback HTTP (Step R8, AC-48..AC-54) ---------------------------
+
+HELPER="$REPO_ROOT/.claude/skills/m365/mcp-auth-header.sh"
+SERVER_SH="$REPO_ROOT/.claude/skills/m365/mcp-server.sh"
+TEN_ENV_NAMES='ENABLED_TOOLS HOME LC_ALL MS365_MCP_CLIENT_ID MS365_MCP_ORG_MODE MS365_MCP_TENANT_ID MS365_MCP_TOKEN_CACHE_PATH MS365_MCP_USE_KEYTAR NODE_OPTIONS PATH'
+
+# mcp-server.sh in the background on a free loopback port, through the server stub's HTTP mode; waits until it listens.
+start_http_server() {
+  local i
+  install_m365_server_stub
+  export ZYGGY_M365_PORT=$((20000 + RANDOM % 30000))
+  "$SERVER_SH" > "$BATS_TEST_TMPDIR/server.out" 2>&1 &
+  HTTP_SERVER_PID=$!
+  for i in $(seq 1 100); do
+    if (exec 3<> "/dev/tcp/127.0.0.1/$ZYGGY_M365_PORT") 2> /dev/null; then return 0; fi
+    sleep 0.1
+  done
+  echo "server did not listen on $ZYGGY_M365_PORT: $(cat "$BATS_TEST_TMPDIR/server.out")"
+  return 1
+}
+
+stop_http_server() {
+  if [ -n "${HTTP_SERVER_PID:-}" ]; then
+    kill "$HTTP_SERVER_PID" 2> /dev/null || true
+    wait "$HTTP_SERVER_PID" 2> /dev/null || true
+    HTTP_SERVER_PID=""
+  fi
+}
+
+# One request to the running stub with Node's fetch; the bearer (if any) comes from the environment, never argv.
+# Prints "<status>|<WWW-Authenticate or ->|<body>".
+stub_request() { # stub_request <json body> [token-ok|token-expired|none]
+  local token=""
+  [ "${2:-none}" = none ] || token="$(jq -r .access_token "$GRAPH_FIXTURES/${2}.json")"
+  TOKEN="$token" node -e '
+    const h = {"Content-Type": "application/json", "Accept": "application/json, text/event-stream"};
+    if (process.env.TOKEN) h.Authorization = "Bearer " + process.env.TOKEN;
+    fetch(process.argv[1], {method: "POST", headers: h, body: process.argv[2]}).then(async (r) =>
+      process.stdout.write(r.status + "|" + (r.headers.get("www-authenticate") ? "www-authenticate" : "-") + "|" + await r.text()));
+  ' "http://127.0.0.1:$ZYGGY_M365_PORT/mcp" "$1"
+}
+
+@test "image: node is available in the container (and on CI) for the HTTP server stub (plan 23 assumption 8)" {
+  command -v node
+  [ "$(node -e 'console.log(Number(process.versions.node.split(".")[0]) >= 18)')" = true ]
+}
+
+@test "helper (AC-49): no args, no stdin -> stdout exactly {\"Authorization\":\"Bearer <token>\"}, stderr empty, exit 0; journal \"token minted\" (tag zyggy-m365); one token POST, the token in no argv" {
+  local token
+  install_logger_stub
+  expect_token_on_stdout=1
+  token="$(jq -r .access_token "$GRAPH_FIXTURES/token-ok.json")"
+  run --separate-stderr "$HELPER" < /dev/null
+  [ "$status" -eq 0 ] && [ -z "$stderr" ] || { echo "$status $stderr"; return 1; }
+  [ "$output" = "{\"Authorization\":\"Bearer $token\"}" ] || { echo "$output" | cut -c1-40; return 1; }
+  [ "$(printf '%s\n' "$output" | wc -l)" -eq 1 ]
+  jq -e 'keys == ["Authorization"]' <<< "$output" > /dev/null
+  [ "$(cat "$LOGGER_STUB_LOG")" = 'tag=zyggy-m365 msg=token minted' ] || { cat "$LOGGER_STUB_LOG"; return 1; }
+  [ "$(request_count)" -eq 1 ] && requests | grep -q '^method=POST .*/oauth2/v2.0/token'
+  ! grep -q '^argv=.*STUBACCESS' "$CURL_STUB_LOG"
+  run --separate-stderr "$HELPER" extra
+  [ "$status" -eq 4 ] && [ -z "$output" ]
+}
+
+@test "helper (AC-50): invalid_client twice -> one retry, exit 6, stdout empty, stderr exactly the runbook line, journal names the reason; key missing -> exit 3, no retry; a 500 then 200 -> one retry then the header; always under 8 s" {
+  local start
+  install_logger_stub
+  expect_token_on_stdout=1
+  scenario 'oauth2/v2\.0/token$:400:token-invalid-client.json'
+  scenario 'oauth2/v2\.0/token$:400:token-invalid-client.json'
+  start=$SECONDS
+  run --separate-stderr "$HELPER"
+  [ "$status" -eq 6 ] && [ -z "$output" ] || { echo "$status $output $stderr"; return 1; }
+  [ "$stderr" = 'm365: token refresh failed — runbook 13 "Certificate rejected"' ] || { echo "$stderr"; return 1; }
+  [ "$(requests | grep -c 'oauth2/v2.0/token')" -eq 2 ]
+  grep -qxF 'tag=zyggy-m365 msg=token refresh failed: auth failed (invalid_client) — runbook 13 "Certificate rejected"' "$LOGGER_STUB_LOG" ||
+    { cat "$LOGGER_STUB_LOG"; return 1; }
+  # the key gone: configuration (exit 3) is not retried
+  : > "$CURL_STUB_LOG"
+  mv "$ZYGGY_M365_KEY_FILE" "$ZYGGY_M365_KEY_FILE.away"
+  run --separate-stderr "$HELPER"
+  [ "$status" -eq 3 ] && [ -z "$output" ] && [ "$stderr" = 'm365: token refresh failed — runbook 13 "Certificate rejected"' ] || { echo "$status $stderr"; return 1; }
+  [ "$(request_count)" -eq 0 ]
+  grep -q '^tag=zyggy-m365 msg=token refresh failed: key: not found' "$LOGGER_STUB_LOG"
+  mv "$ZYGGY_M365_KEY_FILE.away" "$ZYGGY_M365_KEY_FILE"
+  # one transient failure: retried once, then the header
+  scenario 'oauth2/v2\.0/token$:500'
+  run --separate-stderr "$HELPER"
+  [ "$status" -eq 0 ] && [[ "$output" == '{"Authorization":"Bearer '* ]] || { echo "$status $stderr"; return 1; }
+  [ "$(requests | grep -c 'oauth2/v2.0/token')" -eq 2 ]
+  [ $((SECONDS - start)) -lt 8 ]
+}
+
+@test "server (AC-51): mcp-server.sh starts the server with exactly --org-mode --http 127.0.0.1:<port> --http-local-file-tools --no-dynamic-registration, the ten variables, no token, and never calls graph.sh; a port outside 1024..65535 -> exit 3" {
+  local log p
+  start_http_server
+  log="$(cat "$SERVER_STUB_LOG")"
+  [ "$(grep '^argv=' <<< "$log")" = "argv=--org-mode --http 127.0.0.1:$ZYGGY_M365_PORT --http-local-file-tools --no-dynamic-registration" ] ||
+    { echo "$log"; return 1; }
+  [ "$(grep '^env=' <<< "$log" | cut -d= -f2 | paste -sd' ')" = "$TEN_ENV_NAMES" ] || { echo "$log"; return 1; }
+  grep -qx 'token=absent' <<< "$log"
+  grep -qx "listen=127.0.0.1:$ZYGGY_M365_PORT" <<< "$log"
+  [ "$(request_count)" -eq 0 ]
+  stop_http_server
+  for p in 80 1023 65536 70000 abc ''; do
+    [ -n "$p" ] || continue
+    ZYGGY_M365_PORT="$p" run --separate-stderr "$SERVER_SH"
+    [ "$status" -eq 3 ] && [[ "$stderr" == "m365: configuration error: ZYGGY_M365_PORT '$p' is not a port in 1024..65535" ]] ||
+      { echo "$p: $status $stderr"; return 1; }
+  done
+  run --separate-stderr "$SERVER_SH" --http
+  [ "$status" -eq 4 ]
+}
+
+@test "http stub (AC-53): POST /mcp without a bearer or with an expired one -> 401 + WWW-Authenticate, nothing past the door; with the fixture token -> initialize, tools/list (the allowlist, no auth tools, download-bytes-to-file present), tools/call answered; token=match logged, never the token" {
+  local r
+  start_http_server
+  r="$(stub_request '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' none)"
+  [[ "$r" == '401|www-authenticate|'* ]] || { echo "$r"; return 1; }
+  r="$(stub_request '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"list-shared-mailbox-messages"}}' token-expired)"
+  [[ "$r" == '401|www-authenticate|'*'expired'* ]] || { echo "$r"; return 1; }
+  ! grep -q '^rpc=' "$SERVER_STUB_LOG"
+  r="$(stub_request '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' token-ok)"
+  [[ "$r" == '200|-|'*'"protocolVersion"'* ]] || { echo "$r"; return 1; }
+  r="$(stub_request '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' token-ok)"
+  [ "$(jq -r '.result.tools[].name' <<< "${r#200|-|}" | LC_ALL=C sort)" = "$(cat "$ENABLED")" ] || { echo "$r" | cut -c1-200; return 1; }
+  r="$(stub_request '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"list-shared-mailbox-messages"}}' token-ok)"
+  [[ "$r" == '200|-|'*'"content"'* ]] || { echo "$r"; return 1; }
+  [ "$(grep -c '^token=match$' "$SERVER_STUB_LOG")" -eq 3 ] && [ "$(grep -c '^token=absent$' "$SERVER_STUB_LOG")" -eq 2 ]
+  [ "$(grep '^rpc=' "$SERVER_STUB_LOG" | paste -sd' ')" = 'rpc=initialize rpc=tools/list rpc=tools/call' ]
+  ! grep -q STUBACCESS "$SERVER_STUB_LOG"
+}
+
+@test "probe (AC-54, AC-48): mcp-server.sh --probe against the running server -> the unauthenticated POST answered 401, then tools: 16 = enabled-tools.txt, listen: 127.0.0.1:<port>, env: the ten names; the bearer reached curl on stdin only; no token in the output; no server -> exit 6" {
+  local expected
+  install_logger_stub
+  start_http_server
+  : > "$CURL_STUB_LOG"
+  run --separate-stderr "$SERVER_SH" --probe
+  [ "$status" -eq 0 ] || { echo "$status $output $stderr"; return 1; }
+  expected="$(printf 'tools: %s\n' "$(wc -l < "$ENABLED")"; cat "$ENABLED"; printf 'listen: 127.0.0.1:%s\nenv: %s\n' "$ZYGGY_M365_PORT" "$TEN_ENV_NAMES")"
+  [ "$output" = "$expected" ] || { diff <(printf '%s\n' "$expected") <(printf '%s\n' "$output"); return 1; }
+  [ "$(head -n 1 <<< "$output")" = 'tools: 16' ]
+  # three POSTs to the loopback server: the first without a bearer, then two with one; two tokens minted
+  [ "$(requests | grep -c "url=http://127.0.0.1:$ZYGGY_M365_PORT/mcp")" -eq 3 ]
+  [ "$(requests | grep "url=http://127.0.0.1" | sed -E 's/.* bearer=([a-z]+) .*/\1/' | paste -sd' ')" = 'absent present present' ]
+  [ "$(requests | grep -c 'oauth2/v2.0/token')" -eq 2 ]
+  ! grep -E "^argv=.*127\.0\.0\.1.*(Bearer|STUBACCESS)" "$CURL_STUB_LOG"
+  grep -q '^argv=.*-H.@-' "$CURL_STUB_LOG"
+  stop_http_server
+  run --separate-stderr "$SERVER_SH" --probe
+  [ "$status" -eq 6 ] && [[ "$stderr" == "m365: no server at 127.0.0.1:$ZYGGY_M365_PORT ("*') — runbook 13 "MCP server down"' ]] || { echo "$status $stderr"; return 1; }
 }
 
 # --- the D7 hooks: m365-guard.sh (PreToolUse) and m365-log.sh (PostToolUse) (Step R3, AC-35, AC-36) ---------------

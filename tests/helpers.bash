@@ -174,7 +174,7 @@ install_curl_stub() {
   mkdir -p "$d/fixtures"
   cp "$FIXTURES/graph/curl-stub.sh" "$d/curl"
   chmod +x "$d/curl"
-  cp "$FIXTURES"/graph/*.json "$FIXTURES"/graph/*.hdr "$FIXTURES/graph/routes.tsv" "$d/fixtures/"
+  cp "$FIXTURES"/graph/*.json "$FIXTURES"/graph/*.hdr "$FIXTURES"/graph/*.mjs "$FIXTURES/graph/routes.tsv" "$d/fixtures/"
   : > "$d/curl-stub.scenario"
   export PATH="$d:$PATH" CURL_STUB_DIR="$d" CURL_STUB_LOG="$d/curl-stub.log" ZYGGY_M365_STUB=1 ZYGGY_RETRY_SCALE=0
 }
@@ -188,7 +188,7 @@ install_m365_server_stub() { # install_m365_server_stub [mode]
   mkdir -p "$d/fixtures"
   cp "$FIXTURES/m365/ms-365-mcp-server-stub.sh" "$d/ms-365-mcp-server"
   chmod +x "$d/ms-365-mcp-server"
-  cp "$FIXTURES/m365/tools-list-0.157.2.json" "$FIXTURES/graph/token-ok.json" "$d/fixtures/"
+  cp "$FIXTURES/m365/tools-list-0.157.2.json" "$FIXTURES/graph/token-ok.json" "$FIXTURES/m365/http-stub.mjs" "$d/fixtures/"
   printf '%s' "${1:-ok}" > "$d/server-stub.mode"
   export PATH="$d:$PATH" SERVER_STUB_LOG="$d/server-stub.log"
 }
@@ -216,4 +216,13 @@ install_claude_stub() {
   export PATH="$BATS_TEST_TMPDIR/bin:$PATH" CLAUDE_STUB_LOG="$BATS_TEST_TMPDIR/claude-stub.log"
   export CLAUDE_STUB_RESULT="$FIXTURES/m365/claude-result-ok.json"
   unset CLAUDE_STUB_ACTIONS CLAUDE_STUB_SLEEP CLAUDE_STUB_EXIT BRIEF_ACTIONS_TRY_SEND
+}
+
+# The logger stub (tests/fixtures/m365/logger-stub.sh) as $BATS_TEST_TMPDIR/bin/logger, first on PATH; it appends
+# "tag=<tag> msg=<message>" to $BATS_TEST_TMPDIR/bin/logger-stub.log (LOGGER_STUB_LOG).
+install_logger_stub() {
+  mkdir -p "$BATS_TEST_TMPDIR/bin"
+  cp "$FIXTURES/m365/logger-stub.sh" "$BATS_TEST_TMPDIR/bin/logger"
+  chmod +x "$BATS_TEST_TMPDIR/bin/logger"
+  export PATH="$BATS_TEST_TMPDIR/bin:$PATH" LOGGER_STUB_LOG="$BATS_TEST_TMPDIR/bin/logger-stub.log"
 }

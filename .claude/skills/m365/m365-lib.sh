@@ -37,6 +37,18 @@ readonly ZY_M365_ITEM_ID_RE='^[A-Za-z0-9_!.=-]{1,200}$'
 # shellcheck disable=SC2034
 readonly ZY_M365_CURSOR_RE='^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z(\|[A-Za-z0-9_!.=-]{1,200})?$'
 readonly ZY_M365_EXPIRY_WARN_DAYS=30
+# D8: the loopback port of the HTTP server (zyggy-m365-mcp.service and .mcp.json must agree; the host is always
+# 127.0.0.1) and the time budget of the headersHelper, below Claude Code's 10 s helper timeout.
+# shellcheck disable=SC2034 # read by mcp-server.sh and mcp-auth-header.sh
+readonly ZY_M365_PORT_DEFAULT=47365 ZY_M365_HELPER_SECONDS=8
+
+# ZY_M365_PORT from ZYGGY_M365_PORT (default 47365); exit 3 outside 1024..65535.
+zy_m365_port() {
+  ZY_M365_PORT="${ZYGGY_M365_PORT:-$ZY_M365_PORT_DEFAULT}"
+  if [[ ! "$ZY_M365_PORT" =~ ^[0-9]{4,5}$ ]] || [ "$ZY_M365_PORT" -lt 1024 ] || [ "$ZY_M365_PORT" -gt 65535 ]; then
+    zy_die 3 "configuration error: ZYGGY_M365_PORT '$ZY_M365_PORT' is not a port in 1024..65535"
+  fi
+}
 
 # --- configuration ---------------------------------------------------------------------------------------
 
