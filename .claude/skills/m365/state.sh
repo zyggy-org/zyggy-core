@@ -1,11 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
-# The m365 connector's named state and consent bookkeeping (spec 23): the watermarks and tokens the runs advance,
-# the replied-message ids, and the proposal listing and status marks of the consent flow. Values come only from the
-# arguments and are validated against a closed grammar; files are 0600 in a 0700 state directory, written as a
-# temporary file and renamed. The model may call get/set/reset; list and mark serve m365-approve.sh and graph.sh.
+# The m365 connector's named state (spec 23): the watermarks and tokens the runs advance and the replied-message
+# ids. Values come only from the arguments and are validated against a closed grammar; files are 0600 in a 0700
+# state directory, written as a temporary file and renamed. The model may call get/set/reset.
 # usage: state.sh get <key> [<arg>] | set <key> [<arg>] <value> | reset <key> [<arg>]
-#        | list proposals [--status <status>] | mark <id> <status>
 # keys:  mail-watermark (ISO), backfill-watermark <folder> (ISO), drive-token <drive> (ISO timestamp — the pinned
 #        server has no delta token; the brief's), files-backfill-watermark <drive> (the files backfill's own cursor
 #        <ISO>|<item-id>, or a plain <ISO> written before plan step 20a — never the brief's drive-token),
@@ -17,14 +15,14 @@ source "$(dirname "${BASH_SOURCE[0]}")/../../hooks/lib.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/m365-lib.sh"
 ZY_SELF=m365-state
 
-readonly ZY_STATE_ARG_RE='^[A-Za-z0-9!_=-]{1,200}$' ZY_STATE_SUBJECT_CHARS=60
+readonly ZY_STATE_ARG_RE='^[A-Za-z0-9!_=-]{1,200}$'
 
 die() { # die <exit code> <message>
   zy_die "$@"
 }
 
 usage() {
-  die 4 "$1 (usage: state.sh get <key> [<arg>] | set <key> [<arg>] <value> | reset <key> [<arg>] | list proposals [--status <status>] | mark <id> <status>)"
+  die 4 "$1 (usage: state.sh get <key> [<arg>] | set <key> [<arg>] <value> | reset <key> [<arg>])"
 }
 
 # --- 1. the verb and its arguments (exit 4 before anything else) -------------------------------------------------
@@ -37,9 +35,6 @@ arg=""
 value=""
 file=""
 grammar=""
-status_filter=""
-row_id=""
-new_status=""
 
 # The file name and the value grammar of <key> [<arg>]; exit 4 on an unknown key, a missing or malformed argument.
 resolve_key() { # resolve_key <key> <arg count>
@@ -99,22 +94,6 @@ case "$verb" in
       id) [[ "$value" =~ $ZY_M365_ID_RE ]] || die 4 "invalid value for $key: expected one message id" ;;
     esac
     ;;
-  list)
-    [ "${1:-}" = proposals ] || usage "list takes 'proposals'"
-    shift
-    if [ $# -gt 0 ]; then
-      if [ "$1" != --status ] || [ $# -ne 2 ]; then usage "list proposals takes --status <status> only"; fi
-      [[ "$2" =~ $ZY_M365_STATUS_RE ]] || usage "'$2' is not a status (pending|approved|executed|failed|refused|expired)"
-      status_filter="$2"
-    fi
-    ;;
-  mark)
-    [ $# -eq 2 ] || usage "mark needs <id> <status>"
-    [[ "$1" =~ $ZY_M365_ROW_ID_RE ]] || usage "'${1:0:40}' is not a proposal id"
-    [[ "$2" =~ $ZY_M365_STATUS_RE ]] || usage "'$2' is not a status (pending|approved|executed|failed|refused|expired)"
-    row_id="$1"
-    new_status="$2"
-    ;;
   *) usage "unknown verb '$verb'" ;;
 esac
 
@@ -164,59 +143,8 @@ state_reset() {
   rm -f "$ZY_M365_STATE_DIR/$file"
 }
 
-# --- 4. the proposals: listing and status marks -----------------------------------------------------------------
-
-# One line per row, oldest first: <id> <status> <action> <subject ≤ 60> <origin> #<hash8> — no body (none is
-# stored), no full hash, control characters replaced. "no proposals" when nothing matches.
-list_proposals() {
-  local lines
-  lines=""
-  if [ -s "$ZY_M365_PROPOSALS" ]; then
-    lines="$(jq -r -n --arg s "$status_filter" --argjson n "$ZY_STATE_SUBJECT_CHARS" '
-      [inputs | select($s == "" or .status == $s)] | sort_by(.ts // "") | .[]
-      | ((.snapshot.subject // "") | gsub("[[:cntrl:]]"; " ") | .[:$n] | if . == "" then "-" else . end) as $subject
-      | "\(.id) \(.status) \(.action) \($subject) \(.origin // "-") #\((.snapshot_hash // "")[:8])"' "$ZY_M365_PROPOSALS")" ||
-      die 4 "$ZY_M365_PROPOSALS is not a JSON Lines file"
-  fi
-  if [ -n "$lines" ]; then
-    printf '%s\n' "$lines"
-  else
-    printf 'no proposals\n'
-  fi
-}
-
-# Rewrite the status of row <id>: only that line changes (jq -c of that row), every other line is copied byte for
-# byte; temporary file + rename under an exclusive lock on the proposals file; 0600 kept.
-mark_proposal() {
-  local path="$ZY_M365_PROPOSALS" tmp ids n row
-  [ -s "$path" ] || die 4 "no proposal $row_id"
-  tmp="$path.tmp"
-  # shellcheck disable=SC2064 # expand now: the trap must remove this file
-  trap "rm -f '$tmp'" EXIT
-  exec 9< "$path"
-  flock -x 9
-  ids="$(jq -r '.id // ""' "$path" 2> /dev/null)" || die 4 "$path is not a JSON Lines file"
-  n="$(grep -nxF -- "$row_id" <<< "$ids" | cut -d: -f1 | head -n 1 || true)"
-  [ -n "$n" ] || die 4 "no proposal $row_id"
-  row="$(sed -n "${n}p" "$path" | jq -c --arg s "$new_status" '.status = $s')"
-  (
-    umask 077
-    {
-      head -n $((n - 1)) "$path"
-      printf '%s\n' "$row"
-      tail -n +$((n + 1)) "$path"
-    } > "$tmp"
-  )
-  chmod 600 "$tmp"
-  mv -f "$tmp" "$path"
-  exec 9<&-
-  trap - EXIT
-}
-
 case "$verb" in
   get) state_get ;;
   set) state_set ;;
   reset) state_reset ;;
-  list) list_proposals ;;
-  mark) mark_proposal ;;
 esac

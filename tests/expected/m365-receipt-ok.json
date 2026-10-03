@@ -22,14 +22,6 @@
   "replied_ids": [
     "m1"
   ],
-  "proposals": {
-    "pending": 0,
-    "executed": 1,
-    "refused": 0
-  },
-  "executions": 1,
-  "sent_items": 1,
-  "sent_matched": 1,
   "audit": "ok",
   "reasons": []
 }

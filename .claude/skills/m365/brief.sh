@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 # The morning brief of the m365 connector (spec 23), the unit's entry point: one unattended claude run that reads the
-# new mail and the changed files through the m365 server and leaves one brief Draft to the owner, at most reply_cap
-# reply Drafts and proposals; then the post-run audit, one memory line and one journal line. The run can propose
-# but never execute (D6): its child has ZYGGY_HOOKS=off and no terminal, so graph.sh's write verbs refuse inside it,
-# and its tool lists allow propose.sh and deny graph.sh and m365-approve.sh.
+# new mail and the changed files through the m365 server and leaves one brief Draft to the owner, with numbered
+# suggested actions, and at most reply_cap reply Drafts; then the post-run audit, one memory line and one journal
+# line. The run suggests but never acts (D7): its tool lists deny the three action tools (deny wins over the
+# template's ask rules), graph.sh and every outbound channel, and it runs with --permission-prompts none.
 # Order: pre-flight (configuration and claude before any request; graph.sh token fails fast on the identity; a
 # receipt or a brief Draft of today → "already created"; the Inbox id and the drive ids) → a run directory →
 # claude -p "/morning-brief <mailbox> <inbox-folder-id> <drive-id>… <run-dir>" → the JSON result checked against the
 # caps → the run directory removed → verify.sh (receipt) → remember.sh → brief.jsonl (0600) and the journal line
-# "brief <date>: mail <n>, files <m>, replies <r>, proposals <p>, facts <f>, turns <t>, cost <usd>, audit ok|FLAGGED
+# "brief <date>: mail <n>, files <m>, replies <r>, suggestions <s>, facts <f>, turns <t>, cost <usd>, audit ok|FLAGGED
 # [, denials <tool,…>], exit <code>". Allowed unattended (the unit sets ZYGGY_HOOKS=off).
 # usage: brief.sh
 # Exit 0 done or already created · 3 configuration · 4 usage · 5 audit flagged (the Drafts stay for the owner's
@@ -21,7 +21,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/m365-lib.sh"
 ZY_SELF=m365-brief
 
 readonly ZY_BRIEF_SUBJECT='Zyggy — morning brief'
-readonly ZY_BRIEF_COUNTS_RE='^brief [0-9]{4}-[0-9]{2}-[0-9]{2}: mail ([0-9]+), files ([0-9]+), replies ([0-9]+), proposals ([0-9]+), facts ([0-9]+)$'
+readonly ZY_BRIEF_COUNTS_RE='^brief [0-9]{4}-[0-9]{2}-[0-9]{2}: mail ([0-9]+), files ([0-9]+), replies ([0-9]+), suggestions ([0-9]+), facts ([0-9]+)$'
 readonly ZY_BRIEF_RUNBOOK='runbook 13 "Model run failed"'
 
 die() { # die <exit code> <message>
@@ -39,7 +39,6 @@ zy_m365_claude
 date="$(zy_local_date)"
 window="$(zy_now_utc)"
 graph_sh="$ZY_M365_SKILL_DIR/graph.sh"
-state_sh="$ZY_M365_SKILL_DIR/state.sh"
 verify_sh="$ZY_M365_SKILL_DIR/verify.sh"
 remember_sh="$ZY_M365_SKILL_DIR/../remember/remember.sh"
 
@@ -170,22 +169,20 @@ if [ "$over_cost" = true ] || [ "$turns" -gt "$max_turns" ]; then
   fail 6 "claude run over the cap ($cost_part, $turns_part) — $ZY_BRIEF_RUNBOOK"
 fi
 
-# The model's counts line (its last line of that shape); "-" where it gave none. The proposals are counted from
-# the consent file instead: the pending rows this run's origin wrote.
+# The model's counts line (its last line of that shape); "-" where it gave none.
 mail=-
 files=-
 replies=-
+suggestions=-
 facts=-
 counts="$(jq -r '.result // ""' "$result" | grep -E "$ZY_BRIEF_COUNTS_RE" | tail -n 1 || true)"
 if [[ "$counts" =~ $ZY_BRIEF_COUNTS_RE ]]; then
   mail="${BASH_REMATCH[1]}"
   files="${BASH_REMATCH[2]}"
   replies="${BASH_REMATCH[3]}"
+  suggestions="${BASH_REMATCH[4]}"
   facts="${BASH_REMATCH[5]}"
 fi
-"$state_sh" list proposals --status pending > "$work/proposals" ||
-  fail 6 "state.sh list proposals failed"
-proposals="$(grep -cE " brief $date #[0-9a-f]{8}\$" "$work/proposals" || true)"
 denials="$(jq -r '[.permission_denials[]?.tool_name // empty] | unique | join(",")' "$result")"
 
 # --- 4. the audit, the memory line, the journal ----------------------------------------------------------------------
@@ -207,7 +204,7 @@ case "$rc" in
     ;;
 esac
 
-summary="mail $mail, files $files, replies $replies, proposals $proposals, facts $facts"
+summary="mail $mail, files $files, replies $replies, suggestions $suggestions, facts $facts"
 # The brief's one memory line; remember.sh writes nothing under ZYGGY_HOOKS=off (the unit's setting for its own
 # claude child), so it runs with the variable removed. A refusal is reported, never fatal.
 rc=0
@@ -219,10 +216,10 @@ fi
 
 cost_shown="$(printf '%.2f' "$cost")"
 journal_append "$(jq -nc --arg d "$date" --arg t "$(zy_now_utc)" --arg mail "$mail" --arg files "$files" \
-  --arg replies "$replies" --argjson proposals "$proposals" --arg facts "$facts" --argjson turns "$turns" \
+  --arg replies "$replies" --arg suggestions "$suggestions" --arg facts "$facts" --argjson turns "$turns" \
   --argjson cost "$cost_shown" --arg audit "$audit" --arg denials "$denials" --arg key "$key_src" --argjson e "$code" '
   def n: if . == "-" then null else tonumber end;
-  {date: $d, ts: $t, mail: ($mail | n), files: ($files | n), replies: ($replies | n), proposals: $proposals,
+  {date: $d, ts: $t, mail: ($mail | n), files: ($files | n), replies: ($replies | n), suggestions: ($suggestions | n),
    facts: ($facts | n), turns: $turns, cost: $cost, audit: $audit,
    denials: (if $denials == "" then [] else $denials | split(",") end), key: $key, exit: $e}')"
 

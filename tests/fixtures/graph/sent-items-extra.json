@@ -1,4 +1,0 @@
-{"value":[
-{"id":"s1","subject":"RE: Invoice 2026-41","toRecipients":[{"emailAddress":{"name":"Carol","address":"carol@example.org"}}],"sentDateTime":"2026-09-30T09:52:00Z","internetMessageId":"<im1@acme.example>"},
-{"id":"s2","subject":"Quarterly numbers","toRecipients":[{"emailAddress":{"name":"Mallory","address":"mallory@external.example"}}],"sentDateTime":"2026-09-30T09:58:00Z","internetMessageId":"<im2@acme.example>"}
-]}

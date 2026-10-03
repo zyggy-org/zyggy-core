@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
-# The post-run audit of the m365 connector (spec 23, AC-39): every Draft created in the window and every mail that
-# left the mailbox in it, checked after the fact through graph.sh reads. Drafts: exactly one brief Draft
-# ("Zyggy — morning brief …") to the owner only; reply Drafts ("RE: …") only to the sender or replyTo of a message
-# recorded for <date> with state.sh set replied, in the same conversation; any other Draft to the owner only; no URL
-# and no secret pattern in any Draft's generated text and no e-mail address in a reply or other Draft (the brief's
-# own format names senders); at most one brief + brief.reply_cap Drafts. Sent Items: every item must be explained
-# by one executed send-draft row of executions.jsonl (the proposal snapshot's subject, sentDateTime within ± 2 min
-# of the execution — the send POST returns no message id), and every executed row must have its item.
+# The post-run audit of the m365 connector (spec 23, AC-39): every Draft created in the window, checked after the
+# fact through graph.sh reads. Drafts: exactly one brief Draft ("Zyggy — morning brief …") to the owner only; reply
+# Drafts ("RE: …") only to the sender or replyTo of a message recorded for <date> with state.sh set replied, in the
+# same conversation; any other Draft to the owner only; no URL and no secret pattern in any Draft's generated text
+# and no e-mail address in a reply or other Draft (the brief's own format names senders); at most one brief +
+# brief.reply_cap Drafts. Sent mail is not audited here (D7): Sent Items cannot be attributed to the application
+# through Graph; the owner reconciles the Exchange audit log against actions.jsonl (runbook 13).
 # Writes the receipt brief-<date>.json (0600, no body text); prints `audit ok` (exit 0) or `audit FLAGGED: …`
 # (exit 5). Never deletes, moves or changes anything: graph.sh read verbs only. Allowed unattended (the brief run).
 # usage: verify.sh <date YYYY-MM-DD> <window-start YYYY-MM-DDTHH:MM:SSZ>
@@ -18,7 +17,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/../../hooks/lib.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/m365-lib.sh"
 ZY_SELF=m365-verify
 
-readonly ZY_VERIFY_BRIEF_PREFIX='Zyggy — morning brief' ZY_VERIFY_MATCH_SECONDS=120 ZY_VERIFY_SUBJECT_CHARS=80
+readonly ZY_VERIFY_BRIEF_PREFIX='Zyggy — morning brief' ZY_VERIFY_SUBJECT_CHARS=80
 readonly ZY_VERIFY_URL_RE='([A-Za-z][A-Za-z0-9+.-]*://|www\.)'
 readonly ZY_VERIFY_EMAIL_RE='[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}'
 # Outlook's separator above the quoted original in a reply Draft (createReply + Comment): the text below it is the
@@ -69,7 +68,7 @@ graph_message() {
   printf '%s' "${msg#m365: }"
 }
 
-# --- 3. what Graph holds: the Drafts and Sent Items of the window, the replied-to messages --------------------------
+# --- 3. what Graph holds: the Drafts of the window, the replied-to messages --------------------------
 
 rc=0
 graph_run "$work/drafts.json" drafts-since "$window" || rc=$?
@@ -88,10 +87,6 @@ while IFS= read -r id; do
     die "$rc" "$(graph_message)"
   fi
 done < "$work/replied.ids"
-
-rc=0
-graph_run "$work/sent.json" sent-since "$window" || rc=$?
-[ "$rc" -eq 0 ] || die "$rc" "$(graph_message)"
 
 # --- 4. the Drafts --------------------------------------------------------------------------------------------------
 
@@ -161,44 +156,7 @@ if [ "$total" -gt $((reply_cap + 1)) ]; then
   reasons+=("$total drafts > cap $((reply_cap + 1)) (one brief + reply_cap $reply_cap)")
 fi
 
-# --- 5. Sent Items against executions.jsonl ----------------------------------------------------------------------------
-
-# The execution rows of the window; the sends among them (2xx send-draft) carry their proposal's snapshot subject.
-: > "$work/executions.jsonl"
-[ ! -s "$ZY_M365_EXECUTIONS" ] || cp "$ZY_M365_EXECUTIONS" "$work/executions.jsonl"
-: > "$work/proposals.jsonl"
-[ ! -s "$ZY_M365_PROPOSALS" ] || cp "$ZY_M365_PROPOSALS" "$work/proposals.jsonl"
-jq -c -n --slurpfile e "$work/executions.jsonl" --slurpfile p "$work/proposals.jsonl" --slurpfile sent "$work/sent.json" \
-  --arg w "$window" --argjson secs "$ZY_VERIFY_MATCH_SECONDS" --argjson n "$ZY_VERIFY_SUBJECT_CHARS" '
-  def epoch: sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601;
-  def line: gsub("[[:cntrl:]]"; " ") | .[:$n];
-  ([$e[] | select((.ts // "") >= $w)]) as $window_rows
-  | ([$p[] | {key: .id, value: (.snapshot.subject // "")}] | from_entries) as $subjects
-  | ([$window_rows[] | select(.verb == "send-draft" and ((.http_status | tostring) | test("^2")))
-      | . + {subject: ($subjects[.row_id // ""] // "")}] | sort_by(.ts)) as $sends
-  | ($sent[0] // [] | to_entries) as $items
-  | reduce $sends[] as $x ({used: [], missing: []};
-      . as $acc
-      | ([$items[] | select((.key as $k | $acc.used | any(.[]; . == $k)) | not)
-          | select(.value.subject == $x.subject and ((((.value.sentDateTime // "") | epoch) - ($x.ts | epoch)) | if . < 0 then -. else . end) <= $secs)
-          | .key] | first) as $k
-      | if $k == null then .missing += [$x] else .used += [$k] end)
-  | . as $r
-  | {executions: ($window_rows | length), sent_items: ($items | length), sent_matched: ($r.used | length),
-     reasons: ([$items[] | select((.key as $k | $r.used | any(.[]; . == $k)) | not) | .value
-       | "sent item \"\(.subject // "" | line)\" to \([.toRecipients[]?.emailAddress.address // empty | ascii_downcase] | join(", "))"
-         + " has no executed consent row"]
-       + [$r.missing[] | "executed row \(.row_id) (send-draft) has no sent item in the window"])}' > "$work/sent-audit.json"
-while IFS= read -r reason; do
-  reasons+=("$reason")
-done < <(jq -r '.reasons[]' "$work/sent-audit.json")
-
-# --- 6. the receipt and the verdict -------------------------------------------------------------------------------------
-
-proposal_count() { # proposal_count <status>
-  "$state_sh" list proposals --status "$1" > "$work/list"
-  grep -vcxF 'no proposals' "$work/list" || true
-}
+# --- 5. the receipt and the verdict -------------------------------------------------------------------------------------
 
 audit=ok
 [ "${#reasons[@]}" -eq 0 ] || audit=flagged
@@ -208,12 +166,9 @@ receipt="$ZY_M365_STATE_DIR/brief-$date.json"
 (
   umask 077
   jq -n --arg date "$date" --arg w "$window" --slurpfile records "$work/records.jsonl" \
-    --argjson replied "$(jq -R . "$work/replied.ids" | jq -s -c .)" --argjson pending "$(proposal_count pending)" \
-    --argjson executed "$(proposal_count executed)" --argjson refused "$(proposal_count refused)" \
-    --slurpfile sent "$work/sent-audit.json" --arg audit "$audit" --argjson reasons "$reasons_json" '
+    --argjson replied "$(jq -R . "$work/replied.ids" | jq -s -c .)" --arg audit "$audit" --argjson reasons "$reasons_json" '
     {date: $date, window_start: $w, drafts: [$records[] | {id, kind, subject, recipients}], replied_ids: $replied,
-     proposals: {pending: $pending, executed: $executed, refused: $refused}, executions: $sent[0].executions,
-     sent_items: $sent[0].sent_items, sent_matched: $sent[0].sent_matched, audit: $audit, reasons: $reasons}' > "$receipt.tmp"
+     audit: $audit, reasons: $reasons}' > "$receipt.tmp"
 )
 chmod 600 "$receipt.tmp"
 mv -f "$receipt.tmp" "$receipt"

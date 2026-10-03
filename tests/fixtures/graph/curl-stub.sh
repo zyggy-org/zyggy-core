@@ -6,8 +6,8 @@ set -euo pipefail
 # assertion.jwt (the client assertion it received, for the tests' signature checks). No network.
 # It parses only what graph.sh sends: -sS, --proto =https, --max-time <s>, -X <M>, -H <header|@file>,
 # --data-urlencode <k=v|k@-> / --data @- / --json @- (body from stdin), -o <file>, -D <file>, -w '%{http_code}',
-# one URL. Exit 99: unroutable, unknown option or a write verb other than …/send and …/move; 98: a /me request;
-# 97: a DELETE (hard delete must never happen); 96: a move without destinationId.
+# one URL. Exit 99: unroutable, unknown option or any write verb (graph.sh reads only, D7 — the one POST is the
+# token request); 98: a /me request; 97: a DELETE (hard delete must never happen).
 # The log holds markers (present|absent|match), never a key, an assertion or a token.
 
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -165,15 +165,7 @@ printf 'method=%s url=%s headers=%s prefer=%s bearer=%s client_secret=%s client_
 case "$method" in
   GET) ;;
   POST)
-    if [[ "$url" =~ /oauth2/v2\.0/token$ ]]; then
-      :
-    elif [[ "$url" =~ /messages/[^/?]+/send$ ]]; then
-      :
-    elif [[ "$url" =~ /messages/[^/?]+/move$ ]]; then
-      [ -n "$destination" ] || refuse 96 "move without destinationId"
-    else
-      refuse 99 "write verb"
-    fi
+    [[ "$url" =~ /oauth2/v2\.0/token$ ]] || refuse 99 "write verb"
     ;;
   *) refuse 99 "write verb" ;;
 esac

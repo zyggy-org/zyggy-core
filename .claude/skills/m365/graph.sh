@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 # Central's Microsoft 365 application identity, in one script (spec 23): generates the key pair on this machine,
-# mints app-only access tokens with a certificate client assertion, reads Graph on /users/<mailbox>, /drives and
-# /sites, and executes one consented send, move or soft delete against an approved, unexpired, hash-matching row
-# on an attended terminal — the only write path anywhere (D6).
+# mints app-only access tokens with a certificate client assertion, and reads Graph on /users/<mailbox>, /drives and
+# /sites. Reads only (D7): every action goes through the m365 MCP server behind a permission prompt; item-exists
+# and item-kind serve the guard hook (m365-guard.sh).
 # usage: graph.sh cert-init [--rotate|--commit] | token [--key new] [--alg PS256|RS256]
 #        | check [--counts] [--other-mailbox <upn>] [--drive <id>] | mail-folders | drives | drive-files <drive-id>
-#        | drafts-since <ISO> | message-sender <id> | snapshot draft|message <id> | get draft|message <id>
-#        | sent-since <ISO> | send-draft|move|delete --approved <hash>
+#        | drafts-since <ISO> | message-sender <id> | item-exists <drive-id> <parent-id> <name>
+#        | item-kind <drive-id> <item-id>
 # drive-files prints one JSON line {id, path, size, modified} per file of the drive (the files backfill's listing):
 # the delta from the root, every page, paths rebuilt from the folder items (delta never returns parentReference.path),
 # deleted items and folders left out, sorted by modified then id; 403/404 → exit 5 "drive <id>: <status> (…)".
@@ -25,22 +25,16 @@ readonly ZY_M365_SCOPE=https://graph.microsoft.com/.default
 readonly ZY_M365_ASSERTION_TYPE=urn:ietf:params:oauth:client-assertion-type:jwt-bearer
 readonly ZY_M365_ASSERTION_SECONDS=300 ZY_M365_CURL_TIMEOUT=60 ZY_M365_RETRIES=5 ZY_M365_PAGE=100 ZY_M365_TOP=50
 readonly ZY_M365_ALG_DEFAULT=PS256 ZY_M365_BRIEF_SUBJECT='Zyggy — morning brief'
-readonly ZY_M365_SNAPSHOT_SELECT='id,subject,toRecipients,ccRecipients,bccRecipients,from,receivedDateTime,parentFolderId,changeKey,isDraft'
 readonly ZY_M365_DRAFTS_SELECT='id,subject,toRecipients,ccRecipients,bccRecipients,conversationId,createdDateTime,changeKey,body'
-readonly ZY_M365_SENT_SELECT='id,subject,toRecipients,sentDateTime,internetMessageId'
 readonly ZY_M365_DELTA_SELECT='id,name,file,folder,root,size,lastModifiedDateTime,parentReference,deleted' ZY_M365_DELTA_PAGES=2000
 readonly ZY_M365_PREFER_TEXT='Prefer: outlook.body-content-type="text"'
-# Graph's well-known mail folder names: a move row may name one and it is passed to Graph as-is.
-readonly ZY_M365_WELL_KNOWN_FOLDERS=' archive clutter conflicts conversationhistory deleteditems drafts inbox junkemail localfailures msgfolderroot outbox recoverableitemsdeletions scheduled searchfolders sentitems serverfailures syncissues '
-# A write's failing statuses are recorded and marked, not died on: every 4xx but 401 (re-minted once) and every 5xx.
-readonly ZY_M365_WRITE_TOLERATE='40[02-9]|4[1-9][0-9]|5[0-9][0-9]'
 
 die() { # die <exit code> <message>
   zy_die "$@"
 }
 
 usage() {
-  die 4 "$1 (usage: graph.sh cert-init [--rotate|--commit] | token [--key new] [--alg PS256|RS256] | check [--counts] [--other-mailbox <upn>] [--drive <id>] | mail-folders | drives | drive-files <drive-id> | drafts-since <ISO> | message-sender <id> | snapshot draft|message <id> | get draft|message <id> | sent-since <ISO> | send-draft|move|delete --approved <hash>)"
+  die 4 "$1 (usage: graph.sh cert-init [--rotate|--commit] | token [--key new] [--alg PS256|RS256] | check [--counts] [--other-mailbox <upn>] [--drive <id>] | mail-folders | drives | drive-files <drive-id> | drafts-since <ISO> | message-sender <id> | item-exists <drive-id> <parent-id> <name> | item-kind <drive-id> <item-id>)"
 }
 
 # --- 1. the verb and its arguments (exit 4 before anything else) -------------------------------------------------
@@ -55,8 +49,7 @@ counts=0
 other=""
 drive=""
 arg=""
-kind=""
-approved=""
+item_name=""
 case "$verb" in
   cert-init)
     while [ $# -gt 0 ]; do
@@ -121,7 +114,7 @@ case "$verb" in
     [[ "$1" =~ $ZY_M365_DRIVE_ID_RE ]] || usage "'${1:0:40}' is not a drive id"
     arg="$1"
     ;;
-  drafts-since | sent-since)
+  drafts-since)
     [ $# -eq 1 ] || usage "$verb needs one <ISO> timestamp"
     [[ "$1" =~ $ZY_M365_ISO_RE ]] || usage "'$1' is not an ISO timestamp (YYYY-MM-DDTHH:MM:SSZ)"
     arg="$1"
@@ -131,38 +124,33 @@ case "$verb" in
     [[ "$1" =~ $ZY_M365_ID_RE ]] || usage "'$1' is not a message id"
     arg="$1"
     ;;
-  snapshot | get)
-    [ $# -eq 2 ] || usage "$verb needs draft|message <id>"
-    case "$1" in
-      draft | message) kind="$1" ;;
-      *) usage "$verb: '$1' is not draft or message" ;;
-    esac
-    [[ "$2" =~ $ZY_M365_ID_RE ]] || usage "'$2' is not a message id"
-    arg="$2"
-    ;;
-  send-draft | move | delete)
-    [[ " $* " != *" --hard "* ]] || usage "delete --hard: a hard delete never exists; delete is a move to deleteditems"
-    if [ $# -ne 2 ] || [ "$1" != --approved ]; then
-      usage "$verb needs exactly --approved <hash> (nothing leaves the mailbox without an approved row)"
+  item-exists)
+    [ $# -eq 3 ] || usage "item-exists needs <drive-id> <parent-id> <name>"
+    [[ "$1" =~ $ZY_M365_DRIVE_ID_RE ]] || usage "'${1:0:40}' is not a drive id"
+    [[ "$2" =~ $ZY_M365_ITEM_ID_RE ]] || usage "'${2:0:40}' is not an item id"
+    # one path segment: no separator, no control character, not . or .., at most 255 characters
+    if [ -z "$3" ] || [ "${#3}" -gt 255 ] || [[ "$3" == */* ]] || [[ "$3" == *\\* ]] || [[ "$3" =~ [[:cntrl:]] ]] ||
+      [ "$3" = . ] || [ "$3" = .. ]; then
+      usage "'${3:0:40}' is not a file name"
     fi
-    [[ "$2" =~ $ZY_M365_HASH_RE ]] || usage "'$2' is not a sha256 hash"
-    approved="$2"
+    drive="$1"
+    arg="$2"
+    item_name="$3"
+    ;;
+  item-kind)
+    [ $# -eq 2 ] || usage "item-kind needs <drive-id> <item-id>"
+    [[ "$1" =~ $ZY_M365_DRIVE_ID_RE ]] || usage "'${1:0:40}' is not a drive id"
+    [[ "$2" =~ $ZY_M365_ITEM_ID_RE ]] || usage "'${2:0:40}' is not an item id"
+    drive="$1"
+    arg="$2"
     ;;
   *) usage "unknown verb '$verb'" ;;
 esac
 
-# --- 2. the attended-only verbs, the principal, the tools, the configuration, the curl seam --------------------------
+# --- 2. the attended-only verb, the principal, the tools, the configuration, the curl seam ---------------------------
 
 if [ "$verb" = cert-init ] && zy_hooks_off; then
   die 5 "refused: unattended run (ZYGGY_HOOKS=off)"
-fi
-# The write verbs' first two preconditions, before the configuration is even read: an attended environment (the
-# unit runs with ZYGGY_HOOKS=off) and a terminal on stdin and stdout (the unit, a pipe and claude -p have none).
-if [ -n "$approved" ]; then
-  if zy_hooks_off; then
-    die 5 "refused: unattended run (ZYGGY_HOOKS=off)"
-  fi
-  zy_m365_tty || die 5 "refused: no terminal"
 fi
 
 zy_require_config
@@ -496,163 +484,35 @@ run_check() {
   fi
 }
 
-# The current snapshot of one mail object → SNAPSHOT_CANONICAL (the lib's canonical line, no body) and
-# SNAPSHOT_HASH (the lib's hash of it): recipients and sender lower-cased and sorted, so case and order never
-# change the hash. The body is never selected here.
-SNAPSHOT_CANONICAL=""
-SNAPSHOT_HASH=""
-load_snapshot() { # load_snapshot <draft|message> <id>
-  local snapshot
-  load_message "$2" "$ZY_M365_SNAPSHOT_SELECT"
-  snapshot="$(jq -c --arg kind "$1" '{kind: $kind, id: (.id // ""), subject: (.subject // ""),
-    to: ([.toRecipients[]?.emailAddress.address // empty | ascii_downcase] | sort),
-    cc: ([.ccRecipients[]?.emailAddress.address // empty | ascii_downcase] | sort),
-    bcc: ([.bccRecipients[]?.emailAddress.address // empty | ascii_downcase] | sort),
-    from: ((.from.emailAddress.address // "") | ascii_downcase), receivedDateTime: (.receivedDateTime // ""),
-    parentFolderId: (.parentFolderId // ""), changeKey: (.changeKey // ""), isDraft: (.isDraft // false)}' "$body")"
-  SNAPSHOT_CANONICAL="$(zy_m365_canonical "$snapshot")"
-  SNAPSHOT_HASH="$(zy_m365_hash "$SNAPSHOT_CANONICAL")"
-}
-
-# --- 3. the consented execution: the only write path -------------------------------------------------------------------
-
-# Preconditions in the Contracts' order, each a refusal (exit 5) with nothing read or requested beyond what the
-# step needs; m365-approve.sh and the runbook quote these messages:
-#   (1) ZYGGY_HOOKS=off                      → refused: unattended run           (section 2, before the configuration)
-#   (2) stdin or stdout is not a tty         → refused: no terminal              (section 2)
-#   (3) no approval row bound to the hash    → no approval for row <id>
-#   (4) the row is executed, failed, refused or expired (or an execution with 2xx exists) → row <id> already executed …
-#   (5) the approval is older than consent.ttl_minutes → approval for <id> expired (ttl <n> min)
-#   (6) the row's action differs from the verb, or the verb is outside consent.allowed_actions
-#   (7) only now the key is read and a token minted: the current snapshot's hash must equal the approved one
-#       (a draft that was sent → <id> is no longer a draft; else object changed since approval)
-#   (8) one POST — send, or move with a destination (deleteditems for delete; a hard delete does not exist)
-#   (9) one executions.jsonl row {row_id, hash, verb, http_status, ts}, the status mark (executed | failed) and the
-#       result line, or exit 6 with the Graph failure named (a failed row is re-approvable).
-state_sh="$ZY_M365_SKILL_DIR/state.sh"
-
-# The approval that binds <hash>: the newest whose proposal is a <verb> row, else the newest (its row then names the
-# refusal). Sets APPROVAL (json) and APPROVAL_ROW_ID; exit 5 when there is none.
-APPROVAL=""
-APPROVAL_ROW_ID=""
-select_approval() { # select_approval <verb> <hash>
-  local candidate id row
-  local -a candidates=()
-  mapfile -t candidates < <(zy_m365_approvals "$2")
-  if [ "${#candidates[@]}" -eq 0 ]; then
-    id=""
-    if [ -s "$ZY_M365_PROPOSALS" ]; then
-      id="$(jq -r -n --arg h "$2" 'first(inputs | select(.snapshot_hash == $h) | .id) // empty' "$ZY_M365_PROPOSALS")"
-    fi
-    die 5 "no approval for row${id:+ $id}"
-  fi
-  APPROVAL="${candidates[0]}"
-  for candidate in "${candidates[@]}"; do
-    id="$(jq -r '.row_id // empty' <<< "$candidate")"
-    [[ "$id" =~ $ZY_M365_ROW_ID_RE ]] || continue
-    row="$(zy_m365_row "$id")"
-    if [ -n "$row" ] && [ "$(jq -r '.action // empty' <<< "$row")" = "$1" ]; then
-      APPROVAL="$candidate"
-      break
-    fi
-  done
-  APPROVAL_ROW_ID="$(jq -r '.row_id // empty' <<< "$APPROVAL")"
-  [[ "$APPROVAL_ROW_ID" =~ $ZY_M365_ROW_ID_RE ]] || die 5 "approval for $2 names no proposal"
-}
-
-# The destination of a move row: a well-known name as-is, else a display name or id resolved through the folder
-# list → DESTINATION; an unknown or missing folder marks the row failed and exits 5.
-DESTINATION=""
-resolve_destination() { # resolve_destination <row id> <folder>
-  if [ -z "$2" ]; then
-    "$state_sh" mark "$1" failed
-    die 5 "row $1 names no folder"
-  fi
-  if [[ "$ZY_M365_WELL_KNOWN_FOLDERS" == *" $2 "* ]]; then
-    DESTINATION="$2"
-    return 0
-  fi
-  load_folders
-  DESTINATION="$(jq -r --arg n "$2" 'first(.[] | select(.displayName == $n or .id == $n) | .id) // empty' "$work/folders.json")"
-  if [ -z "$DESTINATION" ]; then
-    "$state_sh" mark "$1" failed
-    die 5 "folder $2 not found"
-  fi
-}
-
-execute() { # execute <verb> <hash>
-  local verb="$1" hash="$2" row row_id status ts ts_epoch age action target kind
-  # (3)
-  select_approval "$verb" "$hash"
-  row_id="$APPROVAL_ROW_ID"
-  row="$(zy_m365_row "$row_id")"
-  [ -n "$row" ] || die 5 "no proposal $row_id for the approval"
-  # (4)
-  status="$(jq -r '.status // empty' <<< "$row")"
-  if [ "$status" = executed ] || zy_m365_executed "$row_id"; then
-    die 5 "row $row_id already executed"
-  fi
-  case "$status" in
-    pending | approved) ;;
-    failed) die 5 "row $row_id failed earlier — re-approve it with m365-approve.sh" ;;
-    refused | expired) die 5 "row $row_id $status" ;;
-    *) die 5 "row $row_id has an unknown status" ;;
-  esac
-  # (5)
-  ts="$(jq -r '.ts // empty' <<< "$APPROVAL")"
-  if [[ ! "$ts" =~ $ZY_M365_ISO_RE ]] || ! ts_epoch="$(date -u -d "$ts" +%s 2> /dev/null)"; then
-    die 5 "approval for $row_id has no valid timestamp"
-  fi
-  age=$(($(zy_date UTC +%s) - ts_epoch))
-  [ "$age" -le $((M365_CONSENT_TTL_MINUTES * 60)) ] || die 5 "approval for $row_id expired (ttl $M365_CONSENT_TTL_MINUTES min)"
-  # (6)
-  action="$(jq -r '.action // empty' <<< "$row")"
-  [ "$action" = "$verb" ] || die 5 "row $row_id is a ${action:-nameless} proposal, not $verb"
-  [[ " $M365_CONSENT_ALLOWED_ACTIONS " == *" $verb "* ]] || die 5 "action $verb not allowed by consent.allowed_actions"
-  target="$(jq -r '.target_id // empty' <<< "$row")"
-  [[ "$target" =~ $ZY_M365_ID_RE ]] || die 5 "row $row_id has no valid target id"
-  # (7)
-  zy_m365_read_key "$key_variant"
-  printf 'key: %s\n' "$M365_KEY_SRC" >&2
-  mint_token
-  kind="$(zy_m365_kind_of "$verb")"
-  load_snapshot "$kind" "$target"
-  if [ "$SNAPSHOT_HASH" != "$hash" ]; then
-    if [ "$kind" = draft ] && [ "$(jq -r '.isDraft' <<< "$SNAPSHOT_CANONICAL")" != true ]; then
-      die 5 "$target is no longer a draft"
-    fi
-    die 5 "object changed since approval (hash mismatch) — re-run m365-approve.sh"
-  fi
-  # (8)
-  if [ "$verb" = send-draft ]; then
-    graph_call "$ZY_M365_WRITE_TOLERATE" POST "$(mailbox_url)/messages/$target/send"
+# Whether <name> exists in folder <parent-id> of drive <drive-id> (the guard's overwrite check): GET by path, the
+# name URL-encoded; 200 → exists, 404 → absent, anything else exit 6.
+item_exists() {
+  local name
+  name="$(jq -rn --arg n "$item_name" '$n | @uri')"
+  graph_call 404 GET "$ZY_M365_GRAPH/drives/$drive/items/$arg:/$name?\$select=id"
+  if [ "$HTTP_STATUS" = 404 ]; then
+    printf 'absent\n'
   else
-    if [ "$verb" = delete ]; then
-      DESTINATION=deleteditems
-    else
-      resolve_destination "$row_id" "$(jq -r '.folder // empty' <<< "$row")"
-    fi
-    jq -nc --arg d "$DESTINATION" '{destinationId: $d}' > "$work/post-body"
-    HTTP_STDIN="$work/post-body"
-    graph_call "$ZY_M365_WRITE_TOLERATE" POST "$(mailbox_url)/messages/$target/move" -H 'Content-Type: application/json' --data @-
-    HTTP_STDIN=/dev/null
-  fi
-  # (9)
-  zy_m365_consent_append "$ZY_M365_EXECUTIONS" "$(jq -nc --arg r "$row_id" --arg h "$hash" --arg v "$verb" \
-    --argjson s "$HTTP_STATUS" --arg t "$(zy_now_utc)" '{row_id: $r, hash: $h, verb: $v, http_status: $s, ts: $t}')"
-  if [[ "$HTTP_STATUS" =~ ^2[0-9][0-9]$ ]]; then
-    "$state_sh" mark "$row_id" executed
-    printf 'executed: %s %s (%s)\n' "$verb" "$hash" "$HTTP_STATUS"
-  else
-    "$state_sh" mark "$row_id" failed
-    die 6 "$(graph_error)"
+    printf 'exists\n'
   fi
 }
 
-# --- 4. the key, then the verb -----------------------------------------------------------------------------------------
+# The kind of item <item-id> in drive <drive-id> (the guard's parent check): folder (a folder or the root), file
+# (anything else), absent (404).
+item_kind() {
+  graph_call 404 GET "$ZY_M365_GRAPH/drives/$drive/items/$arg?\$select=id,folder,root"
+  if [ "$HTTP_STATUS" = 404 ]; then
+    printf 'absent\n'
+  elif jq -e '.folder != null or .root != null' "$body" > /dev/null; then
+    printf 'folder\n'
+  else
+    printf 'file\n'
+  fi
+}
 
-# The write verbs read the key inside execute, once the approval checks have passed.
-if [ "$verb" != cert-init ] && [ -z "$approved" ]; then
+# --- 3. the key, then the verb -----------------------------------------------------------------------------------------
+
+if [ "$verb" != cert-init ]; then
   zy_m365_read_key "$key_variant"
   printf 'key: %s\n' "$M365_KEY_SRC" >&2
 fi
@@ -687,28 +547,18 @@ case "$verb" in
       -H "$ZY_M365_PREFER_TEXT"
     jq -c '.value // []' "$body"
     ;;
-  sent-since)
-    mint_token
-    graph_call - GET "$(mailbox_url)/mailFolders/sentitems/messages?\$filter=sentDateTime%20ge%20$arg&\$select=$ZY_M365_SENT_SELECT&\$top=$ZY_M365_TOP"
-    jq -c '[.value[]? | {id, subject, toRecipients, sentDateTime, internetMessageId}]' "$body"
-    ;;
   message-sender)
     mint_token
     load_message "$arg" from,replyTo,conversationId
     jq -c '{from: ((.from.emailAddress.address // "") | ascii_downcase),
       replyTo: [.replyTo[]?.emailAddress.address // empty | ascii_downcase], conversationId: (.conversationId // "")}' "$body"
     ;;
-  snapshot)
+  item-exists)
     mint_token
-    load_snapshot "$kind" "$arg"
-    printf '%s\nhash: %s\n' "$SNAPSHOT_CANONICAL" "$SNAPSHOT_HASH"
+    item_exists
     ;;
-  get)
-    # The body text goes to stdout only (for the approve terminal); the response file lives in the work directory
-    # the trap removes and is never copied anywhere.
+  item-kind)
     mint_token
-    load_message "$arg" id,subject,body -H "$ZY_M365_PREFER_TEXT"
-    jq -r '.body.content // ""' "$body"
+    item_kind
     ;;
-  send-draft | move | delete) execute "$verb" "$approved" ;;
 esac

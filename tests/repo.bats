@@ -309,7 +309,7 @@ hygiene_words() { # hygiene_words <root> <csv>
 
 @test "repo: shellcheck -S style is clean on hooks, skill scripts and helpers" {
   cd "$REPO_ROOT"
-  run shellcheck -S style .claude/hooks/*.sh .claude/skills/*/*.sh tests/*.bash tests/fixtures/github/gh-stub.sh tests/fixtures/github/git-spy.sh tests/fixtures/graph/curl-stub.sh tests/fixtures/m365/*.sh tests/fixtures/m365/*.bash
+  run shellcheck -S style .claude/hooks/*.sh .claude/skills/*/*.sh tests/*.bash tests/fixtures/github/gh-stub.sh tests/fixtures/github/git-spy.sh tests/fixtures/graph/curl-stub.sh tests/fixtures/m365/*.sh
   [ "$status" -eq 0 ] || { echo "$output"; return 1; }
 }
 
@@ -427,23 +427,21 @@ m365_lib_value() { # m365_lib_value <bash expression> → printed by a shell tha
   grep -qF -- '--org-mode' "$w"
 }
 
-@test "repo: morning-brief/SKILL.md is owner-unreachable (disable-model-invocation: true, no allowed-tools), <= 100 lines, and carries the proposals section's format lines of expected/m365-proposals-section.txt and the spec block verbatim" {
-  local s="$REPO_ROOT/.claude/skills/morning-brief/SKILL.md" g="$REPO_ROOT/tests/expected/m365-proposals-section.txt" line
+@test "repo: morning-brief/SKILL.md is owner-unreachable (disable-model-invocation: true, no allowed-tools), <= 100 lines, carries every line of expected/m365-suggestions-section.txt verbatim and no D6 proposal wording (AC-38)" {
+  local s="$REPO_ROOT/.claude/skills/morning-brief/SKILL.md" g="$REPO_ROOT/tests/expected/m365-suggestions-section.txt" line
   [ "$(head -n 1 "$s")" = "---" ]
   [ "$(zy_fm "$s" name)" = morning-brief ]
   [ -n "$(zy_fm "$s" description)" ]
   [ "$(zy_fm "$s" disable-model-invocation)" = true ]
   [ -z "$(zy_fm "$s" allowed-tools)" ]
   [ "$(wc -l < "$s")" -le 100 ]
-  # the section's head and its closing line, as the golden renders them
-  grep -qxF "$(head -n 1 "$g")" "$s"
-  grep -qxF "$(tail -n 1 "$g")" "$s"
-  # the spec's line templates for the three actions
-  for line in '- send reply "RE: <subject>" to <recipient as Graph holds it> — <reason> — #<hash8>' \
-    '- move "<subject>" from <sender> → <folder> — <reason> — #<hash8>' \
-    '- delete "<subject>" from <sender> (to Deleted Items) — <reason> — #<hash8>'; do
+  while IFS= read -r line; do
     grep -qxF -- "$line" "$s" || { echo "missing: $line"; return 1; }
-  done
+  done < "$g"
+  grep -qF 'Suggesting is not acting' "$s"
+  grep -qxF '`brief <date>: mail <n>, files <m>, replies <r>, suggestions <s>, facts <f>`.' "$s"
+  run grep -nE 'm365-approve|propose\.sh|pending your consent|proposal_cap|#<hash8>' "$s"
+  [ "$status" -eq 1 ] || { echo "$output"; return 1; }
 }
 
 # --- the m365 connector's instruction contract and hygiene (spec 23 AC-23, AC-45, AC-46; plan 23 Step 11) -------------
@@ -481,16 +479,17 @@ M365_SKILLS=(morning-brief mail-backfill files-backfill m365)
   for n in morning-brief mail-backfill m365; do
     grep -qF '**`userId` is always' "$d/$n/SKILL.md" || { echo "$n: userId rule"; return 1; }
   done
-  for p in '## Proposed actions (pending your consent)' 'Review on the VM: m365-approve.sh' 'never a reason to propose' \
-    'propose.sh' 'to the configured mailbox only' 'state.sh set mail-watermark' 'last'; do
+  for p in '## Suggested actions' 'Suggesting is not acting' 'never a reason to draft or suggest anything' \
+    'You have no tool to act; never try another way' 'to the configured mailbox only' 'state.sh set mail-watermark' 'last'; do
     grep -qF -- "$p" "$d/morning-brief/SKILL.md" || { echo "morning-brief lacks: $p"; return 1; }
   done
   for n in mail-backfill files-backfill; do
     grep -qiF 'No Draft tool' "$d/$n/SKILL.md" || { echo "$n: No Draft tool"; return 1; }
-    # propose.sh is named only inside that negative sentence
-    run grep -n 'propose' "$d/$n/SKILL.md"
-    [ "${#lines[@]}" -eq 1 ] && [[ "${lines[0]}" =~ [Nn]o\ Draft\ tool\ and\ no\ propose\.sh\ exist ]] ||
+    # the action tools are named only inside that negative sentence; propose.sh nowhere
+    run grep -n 'action tool' "$d/$n/SKILL.md"
+    [ "${#lines[@]}" -eq 1 ] && [[ "${lines[0]}" =~ [Nn]o\ Draft\ tool\ and\ no\ action\ tool\ exist ]] ||
       { echo "$n: $output"; return 1; }
+    ! grep -q 'propose' "$d/$n/SKILL.md"
   done
   for p in 'propose.sh' 'm365-approve.sh' 'never claim' '/mcp' 'instance.md' 'Sent Items' '/tmp/zyggy-m365-<session>/' \
     'parse.sh' '"${CLAUDE_PROJECT_DIR:-.}"/.claude/skills/m365/graph.sh check' \
@@ -511,7 +510,7 @@ M365_SKILLS=(morning-brief mail-backfill files-backfill m365)
   ! grep -viE 'never' <<< "$output"
 }
 
-@test "repo: the run allow and deny constants match the fixture lists; the D7 action tools are denied in every run; propose.sh is allowed in the brief only; graph.sh and m365-approve.sh are denied in every run" {
+@test "repo: the run allow and deny constants match the fixture lists; the D7 action tools are denied in every run; graph.sh is denied in every run; no run names propose.sh or m365-approve.sh" {
   local r t allow deny
   diff <(m365_lib_value '"${ZY_M365_BRIEF_ALLOW[@]}"' | sed -n 's/^mcp__m365__//p') \
     <(grep -vxE 'send-shared-mailbox-mail|move-shared-mailbox-message' "$M365_TOOLS/enabled-tools.txt")
@@ -532,34 +531,28 @@ M365_SKILLS=(morning-brief mail-backfill files-backfill m365)
     run comm -23 <(sed -n 's/^mcp__m365__//p' <<< "$allow" | LC_ALL=C sort) <(LC_ALL=C sort "$M365_TOOLS/enabled-tools.txt")
     [ -z "$output" ] || { echo "$r: allowed but not enabled: $output"; return 1; }
     grep -qxF 'Bash(.claude/skills/m365/graph.sh *)' <<< "$deny" || { echo "$r: graph.sh not denied"; return 1; }
-    grep -qxF 'Bash(.claude/skills/m365/m365-approve.sh *)' <<< "$deny" || { echo "$r: m365-approve.sh not denied"; return 1; }
-    run grep -E 'send|move|delete|update|forward' <<< "$(sed -n 's/^mcp__m365__//p' <<< "$allow")"
+    run grep -E 'send|move|delete|update|forward|upload' <<< "$(sed -n 's/^mcp__m365__//p' <<< "$allow")"
     [ "$status" -eq 1 ] || { echo "$r: a write tool is allowed: $output"; return 1; }
-    if [ "$r" = BRIEF ]; then
-      grep -qxF 'Bash(.claude/skills/m365/propose.sh *)' <<< "$allow" || { echo "brief: propose.sh not allowed"; return 1; }
-    else
-      run grep -F 'propose.sh' <<< "$allow"
-      [ "$status" -eq 1 ] || { echo "$r: propose.sh allowed"; return 1; }
-      grep -qxF 'Bash(.claude/skills/m365/propose.sh *)' <<< "$deny" || { echo "$r: propose.sh not denied"; return 1; }
+    run grep -E 'propose|approve' <<< "$allow$deny"
+    [ "$status" -eq 1 ] || { echo "$r: a D6 script is named: $output"; return 1; }
+    if [ "$r" != BRIEF ]; then
       run grep -E 'create-shared-mailbox' <<< "$allow"
       [ "$status" -eq 1 ] || { echo "$r: a Draft tool is allowed"; return 1; }
     fi
   done
 }
 
-@test "repo: the three consent files are named only joined to the state directory (or a script's temp copy), and the state directory is outside the checkout" {
+@test "repo: the action log is named only as ZY_M365_ACTIONS, the state directory's actions.jsonl, outside the checkout; no script names a D6 consent file" {
   local f state checkout
   while IFS= read -r f; do
-    # every non-comment occurrence of the three names is "$ZY_M365_STATE_DIR/<name>" or "$work/<name>"
-    run bash -c 'grep -vE "^[[:space:]]*#" "$1" | grep -oE "[^[:space:]\"(]*(proposals|approvals|executions)\.jsonl" |
-      grep -vE "^(\\\$ZY_M365_STATE_DIR|\\\$work)/(proposals|approvals|executions)\.jsonl\$"' _ "$REPO_ROOT/$f"
+    run grep -nE '(proposals|approvals|executions)\.jsonl' "$REPO_ROOT/$f"
     [ "$status" -eq 1 ] || { echo "$f: $output"; return 1; }
   done < <(scripts)
   grep -qxF 'ZY_M365_STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/zyggy/m365"' "$M365_LIB"
-  grep -qF 'work="$(mktemp -d' "$REPO_ROOT/.claude/skills/m365/verify.sh"
-  state="$(HOME=/nonexistent/home XDG_STATE_HOME='' m365_lib_value '"$ZY_M365_PROPOSALS"')"
+  grep -qxF 'ZY_M365_ACTIONS="$ZY_M365_STATE_DIR/actions.jsonl"' "$M365_LIB"
+  state="$(HOME=/nonexistent/home XDG_STATE_HOME='' m365_lib_value '"$ZY_M365_ACTIONS"')"
   checkout="$(m365_lib_value '"$ZY_M365_CHECKOUT"')"
-  [ "$state" = /nonexistent/home/.local/state/zyggy/m365/proposals.jsonl ] || { echo "$state"; return 1; }
+  [ "$state" = /nonexistent/home/.local/state/zyggy/m365/actions.jsonl ] || { echo "$state"; return 1; }
   [[ "$state" != "$checkout"/* ]]
 }
 
@@ -613,19 +606,18 @@ M365_SKILLS=(morning-brief mail-backfill files-backfill m365)
   done
 }
 
-@test "repo: pty.bash is a shebang-less sourced helper with the shellcheck shell directive, LF in the index and shellchecked by ci.yml" {
-  local f=tests/fixtures/m365/pty.bash
-  cd "$REPO_ROOT"
-  [ "$(head -n 1 "$f")" = "# shellcheck shell=bash" ]
-  [ "$(git ls-files --eol -- "$f" | awk '{ print $1 }')" = i/lf ]
-  grep -qF 'tests/fixtures/m365/*.bash' .github/workflows/ci.yml
-}
-
-@test "repo: propose.sh and m365-approve.sh are template-conformant scripts (in the scripts list, not git-exempt)" {
+@test "repo: the D6 terminal-consent path is gone — propose.sh, m365-approve.sh, the pty harness, the answers, proposals, approvals and executions fixtures and their goldens do not exist (AC-45 first half)" {
   local f
-  for f in .claude/skills/m365/propose.sh .claude/skills/m365/m365-approve.sh; do
-    scripts | grep -qxF "$f" || { echo "$f not found"; return 1; }
-    [ "$f" != "${GIT_EXEMPT[0]}" ]
+  cd "$REPO_ROOT"
+  for f in .claude/skills/m365/propose.sh .claude/skills/m365/m365-approve.sh tests/fixtures/m365/pty.bash \
+    tests/expected/m365-approve-screen.txt tests/expected/m365-proposals-section.txt tests/expected/m365-proposals-list.txt; do
+    [ ! -e "$f" ] || { echo "still there: $f"; return 1; }
   done
+  run git ls-files -- 'tests/fixtures/m365/answers-*' 'tests/fixtures/m365/proposals-*' 'tests/fixtures/m365/approvals-*' \
+    'tests/fixtures/m365/executions-*' 'tests/fixtures/graph/snapshot-*' 'tests/fixtures/graph/body-*' \
+    'tests/fixtures/graph/sent-items-*' tests/fixtures/graph/move-ok.json
+  [ -z "$output" ] || { echo "$output"; return 1; }
+  run grep -nF 'tests/fixtures/m365/*.bash' .github/workflows/ci.yml .gitattributes
+  [ "$status" -eq 1 ] || { echo "$output"; return 1; }
   [ "${#GIT_EXEMPT[@]}" -eq 1 ]
 }

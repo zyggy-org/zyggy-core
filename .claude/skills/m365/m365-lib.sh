@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 # Shared functions for the m365 connector scripts (spec 23). Sourced after ../../hooks/lib.sh, never executed.
-# Owns the paths (config, state dir, key, certificate, the three consent files), the configuration validation, the
-# key lookup, the retry clock, the curl stub guard, the one definition of the snapshot canonical form and its hash,
-# the terminal test and the consent-file readers and the one appender. No request is made here and the private key
-# is never read into a variable: callers hand its path to openssl.
+# Owns the paths (config, state dir, key, certificate, the action log), the configuration validation, the key
+# lookup, the retry clock, the curl stub guard, the one locked appender and the pinned server's tool partition. No
+# request is made here and the private key is never read into a variable: callers hand its path to openssl.
 # Every m365 script prefixes its stderr lines with "m365: " (zy_die reads ZY_SELF).
 # shellcheck disable=SC2034 # read by lib.sh's zy_die and by the scripts that source this library
 ZY_SELF=m365
@@ -17,14 +16,13 @@ ZY_M365_STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/zyggy/m365"
 ZY_M365_KEY_FILE="${ZYGGY_M365_KEY_FILE:-${XDG_CONFIG_HOME:-$HOME/.config}/zyggy/m365-app.key}"
 ZY_M365_CER_FILE="${ZYGGY_M365_CER_FILE:-${XDG_CONFIG_HOME:-$HOME/.config}/zyggy/m365-app.cer}"
 ZY_M365_CREDENTIAL_NAME=m365-app-key
-# The three consent files (spec 23 D6): what the model proposed, what the owner approved on a terminal, what
-# graph.sh executed. 0600, append-only (state.sh mark rewrites one status), no body text ever.
-ZY_M365_PROPOSALS="$ZY_M365_STATE_DIR/proposals.jsonl"
-ZY_M365_APPROVALS="$ZY_M365_STATE_DIR/approvals.jsonl"
-ZY_M365_EXECUTIONS="$ZY_M365_STATE_DIR/executions.jsonl"
+# The action log (spec 23 D7): one body-free row per call of an action tool, written by the PostToolUse hook
+# m365-log.sh. 0600, append-only.
+ZY_M365_ACTIONS="$ZY_M365_STATE_DIR/actions.jsonl"
 # shellcheck disable=SC2034 # the paths and grammars are read by the scripts that source this library
 readonly ZY_M365_SKILL_DIR ZY_M365_CHECKOUT ZY_M365_CONFIG ZY_M365_SETTINGS ZY_M365_STATE_DIR ZY_M365_KEY_FILE ZY_M365_CER_FILE
-readonly ZY_M365_CREDENTIAL_NAME ZY_M365_PROPOSALS ZY_M365_APPROVALS ZY_M365_EXECUTIONS
+# shellcheck disable=SC2034 # ZY_M365_ACTIONS is read by .claude/hooks/m365-log.sh
+readonly ZY_M365_CREDENTIAL_NAME ZY_M365_ACTIONS
 readonly ZY_M365_GUID_RE='^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
 readonly ZY_M365_UPN_RE='^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$'
 readonly ZY_M365_DATE_RE='^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
@@ -38,12 +36,6 @@ readonly ZY_M365_DRIVE_ID_RE='^[A-Za-z0-9_!.=-]{1,512}$'
 readonly ZY_M365_ITEM_ID_RE='^[A-Za-z0-9_!.=-]{1,200}$'
 # shellcheck disable=SC2034
 readonly ZY_M365_CURSOR_RE='^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z(\|[A-Za-z0-9_!.=-]{1,200})?$'
-# shellcheck disable=SC2034
-readonly ZY_M365_HASH_RE='^[0-9a-f]{64}$'
-# shellcheck disable=SC2034 # proposal ids (ULID-like from propose.sh; short names in fixtures) and the row statuses
-readonly ZY_M365_ROW_ID_RE='^[A-Za-z0-9_-]{1,64}$'
-# shellcheck disable=SC2034
-readonly ZY_M365_STATUS_RE='^(pending|approved|executed|failed|refused|expired)$'
 readonly ZY_M365_EXPIRY_WARN_DAYS=30
 
 # --- configuration ---------------------------------------------------------------------------------------
@@ -92,7 +84,7 @@ zy_m365_require_integer() { # zy_m365_require_integer <jq path> <min> <max>
 # Loads ${ZYGGY_M365_CONFIG:-<checkout>/instance/m365.json} into M365_* variables after validating it; exit 3 on
 # the first problem, before any request. --base validates only what cert-init needs before the app registration
 # exists (tenant_id, mailbox, timezone, language, cert.subject, cert.days). The full validation adds the GUIDs,
-# the drives block, cert.expires (warning on stderr within 30 days, exit 3 once past), the consent block and the
+# the drives block, cert.expires (warning on stderr within 30 days, exit 3 once past), the actions block and the
 # numeric caps of brief, mail_backfill and files_backfill.
 zy_m365_load_config() { # zy_m365_load_config [--base]
   local base=0 key days today_epoch expires_epoch
@@ -148,12 +140,28 @@ zy_m365_load_config() { # zy_m365_load_config [--base]
     zy_m365_cfg_test ".drives.$key | type == \"array\" and all(type == \"string\")" ||
       zy_m365_config_error "drives.$key is not a list of strings"
   done
-  zy_m365_cfg_test '.consent | type == "object"' || zy_m365_config_error "consent is not an object"
-  zy_m365_require_integer .consent.ttl_minutes 1 1440
-  zy_m365_cfg_test '.consent.allowed_actions | type == "array" and all(IN("send-draft", "move", "delete")) and (unique | length) == length' ||
-    zy_m365_config_error "consent.allowed_actions may only hold send-draft, move and delete (narrowing only)"
+  # The actions block (D7, replaces D6's consent block): what the guard lets reach a permission prompt.
+  if ! zy_m365_cfg_test 'has("actions")'; then
+    zy_m365_cfg_test 'has("consent")' && zy_m365_config_error "actions missing (consent is obsolete — D7)"
+    zy_m365_config_error "actions missing"
+  fi
+  zy_m365_cfg_test 'has("consent") | not' || zy_m365_config_error "consent is obsolete (D7) — remove it"
+  zy_m365_cfg_test '.actions | type == "object"' || zy_m365_config_error "actions is not an object"
+  zy_m365_cfg_test '.actions.enabled | type == "array" and all(IN("send", "upload", "move")) and (unique | length) == length' ||
+    zy_m365_config_error "actions.enabled may only hold send, upload and move (narrowing only)"
+  zy_m365_require_integer .actions.send.body_max_chars 1 100000000
+  zy_m365_require_integer .actions.send.max_recipients 1 100000000
+  zy_m365_require_integer .actions.upload.max_bytes 1 100000000
+  zy_m365_cfg_test '.actions.upload.extensions | type == "array" and all(type == "string" and test("^[a-z0-9]{1,10}$"))' ||
+    zy_m365_config_error "actions.upload.extensions is not a list of lowercase alphanumeric extensions"
+  zy_m365_cfg_test '(.actions.files.write_drive_id // "") | type == "string"' ||
+    zy_m365_config_error "actions.files.write_drive_id is not a string"
+  if zy_m365_cfg_test '.actions.enabled | index("upload") != null'; then
+    [[ "$(jq -r '.actions.files.write_drive_id // ""' <<< "$ZY_M365_CONFIG_JSON")" =~ $ZY_M365_DRIVE_ID_RE ]] ||
+      zy_m365_config_error "actions.files.write_drive_id must name the OneDrive drive while upload is enabled"
+  fi
   zy_m365_cfg_test '.brief | type == "object"' || zy_m365_config_error "brief is not an object"
-  for key in mail_max_items reply_cap files_max_items file_max_bytes file_text_cap_bytes max_turns max_facts proposal_cap; do
+  for key in mail_max_items reply_cap files_max_items file_max_bytes file_text_cap_bytes max_turns max_facts suggestion_cap; do
     zy_m365_require_integer ".brief.$key" 0 100000000
   done
   zy_m365_require_number .brief.budget_usd 0
@@ -177,12 +185,17 @@ zy_m365_load_config() { # zy_m365_load_config [--base]
   done
   zy_m365_cfg_test '.files_backfill.model | type == "string"' || zy_m365_config_error "files_backfill.model is not a string"
 
-  M365_CONSENT_TTL_MINUTES="$(zy_m365_cfg .consent.ttl_minutes)"
-  M365_CONSENT_ALLOWED_ACTIONS="$(jq -r '.consent.allowed_actions | join(" ")' <<< "$ZY_M365_CONFIG_JSON")"
+  M365_ACTIONS_ENABLED="$(jq -r '.actions.enabled | join(" ")' <<< "$ZY_M365_CONFIG_JSON")"
+  M365_SEND_BODY_MAX="$(zy_m365_cfg .actions.send.body_max_chars)"
+  M365_SEND_MAX_RECIPIENTS="$(zy_m365_cfg .actions.send.max_recipients)"
+  M365_UPLOAD_MAX_BYTES="$(zy_m365_cfg .actions.upload.max_bytes)"
+  M365_UPLOAD_EXTENSIONS="$(jq -r '.actions.upload.extensions | join(" ")' <<< "$ZY_M365_CONFIG_JSON")"
+  M365_WRITE_DRIVE_ID="$(jq -r '.actions.files.write_drive_id // ""' <<< "$ZY_M365_CONFIG_JSON")"
   M365_SITES_GRANTED="$(jq -r '.drives.sites_granted[]' <<< "$ZY_M365_CONFIG_JSON")"
   M365_EXCLUDE_DRIVES_JSON="$(jq -c '.drives.exclude_drives' <<< "$ZY_M365_CONFIG_JSON")"
   M365_EXCLUDE_FOLDERS_JSON="$(jq -c '.mail_backfill.exclude_folders' <<< "$ZY_M365_CONFIG_JSON")"
-  export M365_CLIENT_ID M365_SP_OBJECT_ID M365_CERT_EXPIRES M365_CONSENT_TTL_MINUTES M365_CONSENT_ALLOWED_ACTIONS
+  export M365_CLIENT_ID M365_SP_OBJECT_ID M365_CERT_EXPIRES M365_ACTIONS_ENABLED M365_SEND_BODY_MAX M365_SEND_MAX_RECIPIENTS
+  export M365_UPLOAD_MAX_BYTES M365_UPLOAD_EXTENSIONS M365_WRITE_DRIVE_ID
   export M365_SITES_GRANTED M365_EXCLUDE_DRIVES_JSON M365_EXCLUDE_FOLDERS_JSON
 }
 
@@ -240,32 +253,8 @@ zy_m365_sleep() { # zy_m365_sleep <seconds>
   [ "$secs" = 0 ] || [ "$secs" = 0.000 ] || sleep "$secs"
 }
 
-# --- the snapshot canonical form and its hash (the single definition) --------------------------------------------
+# --- user programs, the state directory and the one appender ----------------------------------------------------
 
-# The canonical snapshot of a mail object: sorted keys, compact, exactly these keys, no body. A proposal, an approval
-# and an execution all refer to the hash of this line.
-zy_m365_canonical() { # zy_m365_canonical <snapshot json>
-  jq -S -c '{kind, id, subject, to, cc, bcc, from, receivedDateTime, parentFolderId, changeKey, isDraft}' <<< "$1"
-}
-
-# SHA-256 (64 hex) of the canonical line followed by one newline, i.e. of exactly what zy_m365_canonical prints.
-zy_m365_hash() { # zy_m365_hash <canonical line>
-  printf '%s\n' "$1" | sha256sum | cut -c1-64
-}
-
-# The snapshot kind an action binds to: a send-draft row snapshots a draft, a move or delete row a message.
-# propose.sh, the write verbs and m365-approve.sh must agree on it, or the hashes never match.
-zy_m365_kind_of() { # zy_m365_kind_of <action>
-  case "$1" in
-    send-draft) printf draft ;;
-    *) printf message ;;
-  esac
-}
-
-# --- the terminal and the consent files -------------------------------------------------------------------------
-
-# True on an attended terminal: stdin and stdout are a tty (the owner's SSH session; a pseudo-tty in CI). A unit,
-# a pipe and `claude -p` fail it.
 # The path of a user-installed program (npm prefix ~/.local, pipx): PATH first, then $HOME/.local/bin, which a
 # systemd unit's PATH (claude-remote, the brief unit) does not carry; prints nothing when neither has it.
 zy_m365_user_bin() { # zy_m365_user_bin <name>
@@ -277,10 +266,6 @@ zy_m365_user_bin() { # zy_m365_user_bin <name>
   printf '%s' "$found"
 }
 
-zy_m365_tty() {
-  [ -t 0 ] && [ -t 1 ]
-}
-
 # The state directory, 0700, created on first use; exit 3 when that is impossible.
 zy_m365_state_dir() {
   if [ ! -d "$ZY_M365_STATE_DIR" ]; then
@@ -290,9 +275,10 @@ zy_m365_state_dir() {
   chmod 700 "$ZY_M365_STATE_DIR"
 }
 
-# The one appender for the three consent files: 0600 (created on first write), an exclusive lock on the file for
-# the duration of the append, one JSON row per line. Callers pass a compact JSON object without body text.
-zy_m365_consent_append() { # zy_m365_consent_append <file> <json row>
+# The one appender for the JSON Lines logs of the state directory (the action log): 0600 (created on first write),
+# an exclusive lock on the file for the duration of the append, one JSON row per line. Callers pass a compact JSON
+# object without body text.
+zy_m365_append() { # zy_m365_append <file> <json row>
   zy_m365_state_dir
   (
     umask 077
@@ -301,25 +287,6 @@ zy_m365_consent_append() { # zy_m365_consent_append <file> <json row>
     printf '%s\n' "$2" >&9
   )
   chmod 600 "$1"
-}
-
-# The proposal row <id> as compact JSON, or nothing.
-zy_m365_row() { # zy_m365_row <row id>
-  [ -s "$ZY_M365_PROPOSALS" ] || return 0
-  jq -c -n --arg id "$1" 'first(inputs | select(.id == $id))' "$ZY_M365_PROPOSALS"
-}
-
-# Every approval row bound to <hash>, newest first (one per line), or nothing.
-zy_m365_approvals() { # zy_m365_approvals <hash>
-  [ -s "$ZY_M365_APPROVALS" ] || return 0
-  jq -c -n --arg h "$1" '[inputs | select(.hash_at_approval == $h)] | reverse | .[]' "$ZY_M365_APPROVALS"
-}
-
-# True when an execution with a 2xx status is recorded for the proposal <row id>: it ran, whatever the status says.
-zy_m365_executed() { # zy_m365_executed <row id>
-  [ -s "$ZY_M365_EXECUTIONS" ] &&
-    jq -e -n --arg id "$1" 'any(inputs; .row_id == $id and ((.http_status | tostring) | test("^2")))' \
-      "$ZY_M365_EXECUTIONS" > /dev/null
 }
 
 # --- the pinned server's tool partition (plan 23 Step 1; generated from tests/fixtures/m365/*-tools.txt, never typed) ----
@@ -690,15 +657,14 @@ readonly -a ZY_M365_ACTION_TOOLS=(move-shared-mailbox-message send-shared-mailbo
 
 # --- the unattended claude runs (brief.sh, mail-backfill.sh, files-backfill.sh) ---------------------------------------
 
-# What no run may ever use: the executor and the consent terminal, and every outbound channel (web, browser, file
+# What no run may ever use: graph.sh (the identity's own reads) and every outbound channel (web, browser, file
 # edits, network and package tools). Each run's deny list ends with these.
-readonly -a ZY_M365_RUN_DENY_COMMON=('Bash(.claude/skills/m365/graph.sh *)' 'Bash(.claude/skills/m365/m365-approve.sh *)'
+readonly -a ZY_M365_RUN_DENY_COMMON=('Bash(.claude/skills/m365/graph.sh *)'
   WebFetch WebSearch mcp__plugin_playwright_playwright Edit Write NotebookEdit 'Bash(curl *)' 'Bash(wget *)' 'Bash(git *)'
   'Bash(npm *)' 'Bash(npx *)' 'Bash(node *)')
 
 # What a morning-brief run's model may use (spec 23 run allowlist): the 14 read/Draft tools the server loads (never an
-# action tool), the four scripts it writes through (state, facts, parse, and propose — a proposal row, never an
-# execution) and reads of the state dir.
+# action tool), the three scripts it writes through (state, facts, parse) and reads of the state dir.
 ZY_M365_BRIEF_ALLOW=()
 for zy_t in "${ZY_M365_TOOLS_ENABLED[@]}"; do
   case " ${ZY_M365_ACTION_TOOLS[*]} " in
@@ -707,7 +673,7 @@ for zy_t in "${ZY_M365_TOOLS_ENABLED[@]}"; do
   esac
 done
 ZY_M365_BRIEF_ALLOW+=('Bash(.claude/skills/m365/state.sh *)' 'Bash(.claude/skills/m365/facts.sh *)'
-  'Bash(.claude/skills/m365/parse.sh *)' 'Bash(.claude/skills/m365/propose.sh *)' 'Read(~/.local/state/zyggy/m365/**)')
+  'Bash(.claude/skills/m365/parse.sh *)' 'Read(~/.local/state/zyggy/m365/**)')
 # What it may never use: every other tool of the pinned server, the action tools the server loads, and the common
 # deny list — every m365 tool is named exactly once.
 ZY_M365_BRIEF_DENY=()
@@ -720,15 +686,15 @@ done
 ZY_M365_BRIEF_DENY+=("${ZY_M365_RUN_DENY_COMMON[@]}")
 
 # What a mail-backfill batch's model may use (owner-started, may run unwatched, facts only): the three /users mail
-# read tools, state.sh and facts.sh, reads of the state dir. No Draft tool, no drive tool, no parse.sh, no propose.sh.
+# read tools, state.sh and facts.sh, reads of the state dir. No Draft tool, no drive tool, no action tool, no parse.sh.
 readonly -a ZY_M365_MAIL_READ_TOOLS=(list-shared-mailbox-folder-messages list-shared-mailbox-messages get-shared-mailbox-message)
 ZY_M365_MAIL_BACKFILL_ALLOW=()
 for zy_t in "${ZY_M365_MAIL_READ_TOOLS[@]}"; do ZY_M365_MAIL_BACKFILL_ALLOW+=("mcp__m365__$zy_t"); done
 ZY_M365_MAIL_BACKFILL_ALLOW+=('Bash(.claude/skills/m365/state.sh *)' 'Bash(.claude/skills/m365/facts.sh *)'
   'Read(~/.local/state/zyggy/m365/**)')
 # What it may never use: the 328, the other thirteen allowlisted tools (the two Draft tools, the drive tools,
-# download-bytes-to-file, the two action tools), parse.sh, propose.sh and the common deny list — every m365 tool is
-# named exactly once.
+# download-bytes-to-file, the two action tools), parse.sh and the common deny list — every m365 tool is named
+# exactly once.
 ZY_M365_MAIL_BACKFILL_DENY=()
 for zy_t in "${ZY_M365_TOOLS_EXCLUDED[@]}"; do ZY_M365_MAIL_BACKFILL_DENY+=("mcp__m365__$zy_t"); done
 for zy_t in "${ZY_M365_TOOLS_ENABLED[@]}"; do
@@ -737,14 +703,14 @@ for zy_t in "${ZY_M365_TOOLS_ENABLED[@]}"; do
     *) ZY_M365_MAIL_BACKFILL_DENY+=("mcp__m365__$zy_t") ;;
   esac
 done
-ZY_M365_MAIL_BACKFILL_DENY+=('Bash(.claude/skills/m365/parse.sh *)' 'Bash(.claude/skills/m365/propose.sh *)'
+ZY_M365_MAIL_BACKFILL_DENY+=('Bash(.claude/skills/m365/parse.sh *)'
   "${ZY_M365_RUN_DENY_COMMON[@]}")
 
 # What a files-backfill batch's model may use (owner-started, may run unwatched, facts only; plan step 20a): the batch
 # arrives in the prompt — files-backfill.sh lists, filters and keeps the cursor — so only download-bytes-to-file (a
 # disk write bounded by the run directory and parse.sh), facts.sh and parse.sh. What it may never use: the 328, the
 # 15 other allowlisted tools (the drive reads, the mail reads, the two Draft tools, the two action tools), state.sh,
-# propose.sh and the common deny list — every m365 tool is named exactly once.
+# and the common deny list — every m365 tool is named exactly once.
 ZY_M365_FILES_BACKFILL_ALLOW=()
 ZY_M365_FILES_BACKFILL_DENY=()
 for zy_t in "${ZY_M365_TOOLS_EXCLUDED[@]}"; do ZY_M365_FILES_BACKFILL_DENY+=("mcp__m365__$zy_t"); done
@@ -755,7 +721,7 @@ for zy_t in "${ZY_M365_TOOLS_ENABLED[@]}"; do
   esac
 done
 ZY_M365_FILES_BACKFILL_ALLOW+=('Bash(.claude/skills/m365/facts.sh *)' 'Bash(.claude/skills/m365/parse.sh *)')
-ZY_M365_FILES_BACKFILL_DENY+=('Bash(.claude/skills/m365/state.sh *)' 'Bash(.claude/skills/m365/propose.sh *)'
+ZY_M365_FILES_BACKFILL_DENY+=('Bash(.claude/skills/m365/state.sh *)'
   "${ZY_M365_RUN_DENY_COMMON[@]}")
 unset zy_t
 # shellcheck disable=SC2034 # read by brief.sh, mail-backfill.sh and files-backfill.sh
@@ -775,7 +741,7 @@ zy_m365_claude() {
   ZY_M365_CLAUDE_BIN="$(command -v claude)" || zy_die 3 "claude not found"
 }
 
-# One claude run in the shape of the unit (spec 23: the run can propose but never execute): the project directory
+# One claude run in the shape of the unit (spec 23: the run suggests but never acts): the project directory
 # as working directory, ZYGGY_HOOKS=off, ZYGGY_M365_ORIGIN=<origin> ("-" for none), stdin /dev/null so the child has
 # no terminal, stdout (the JSON result) and stderr into files. The child runs in the background so a SIGTERM to the
 # caller can stop it (ZY_M365_CLAUDE_PID while it runs); the return status is claude's.

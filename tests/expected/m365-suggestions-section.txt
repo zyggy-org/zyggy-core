@@ -1,0 +1,4 @@
+## Suggested actions (nothing happens until you ask me in the session; each action shows you a confirmation)
+1. send to <recipient> "RE: <subject>" — <why ≤ 120>
+2. file "<subject>" from <sender> → Archive   (or: move to Deleted Items)
+Ask me, e.g. "do 1 and 3".
