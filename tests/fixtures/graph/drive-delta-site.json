@@ -1,0 +1,6 @@
+{"@odata.context":"fixture","@odata.deltaLink":"https://graph.microsoft.com/v1.0/drives/b!ops0001/items/01SROOT/delta?token=latest","value":[
+{"id":"01SROOT","name":"root","root":{},"folder":{"childCount":3},"lastModifiedDateTime":"2026-09-06T08:00:00Z"},
+{"id":"01S01","name":"minutes.docx","file":{"mimeType":"application/vnd.openxmlformats-officedocument.wordprocessingml.document"},"size":8192,"lastModifiedDateTime":"2026-09-05T08:00:00Z","parentReference":{"id":"01SROOT"}},
+{"id":"01S02","name":"budget.xlsx","file":{"mimeType":"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"},"size":8192,"lastModifiedDateTime":"2026-09-06T08:00:00Z","parentReference":{"id":"01SROOT"}},
+{"id":"01S03","name":"logo.png","file":{"mimeType":"image/png"},"size":8192,"lastModifiedDateTime":"2026-09-06T08:00:00Z","parentReference":{"id":"01SROOT"}}
+]}

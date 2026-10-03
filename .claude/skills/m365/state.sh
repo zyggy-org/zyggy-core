@@ -7,8 +7,9 @@ set -euo pipefail
 # usage: state.sh get <key> [<arg>] | set <key> [<arg>] <value> | reset <key> [<arg>]
 #        | list proposals [--status <status>] | mark <id> <status>
 # keys:  mail-watermark (ISO), backfill-watermark <folder> (ISO), drive-token <drive> (ISO timestamp — the pinned
-#        server has no delta token; the brief's), files-backfill-watermark <drive> (ISO timestamp — the files
-#        backfill's own, never the brief's drive-token), replied <date> (message id; set appends once)
+#        server has no delta token; the brief's), files-backfill-watermark <drive> (the files backfill's own cursor
+#        <ISO>|<item-id>, or a plain <ISO> written before plan step 20a — never the brief's drive-token),
+#        replied <date> (message id; set appends once)
 # Exit 0 · 3 configuration · 4 usage or invalid value.
 # shellcheck source=../../hooks/lib.sh
 source "$(dirname "${BASH_SOURCE[0]}")/../../hooks/lib.sh"
@@ -61,7 +62,7 @@ resolve_key() { # resolve_key <key> <arg count>
     files-backfill-watermark)
       [ "$2" -eq 1 ] || usage "files-backfill-watermark needs <drive>"
       file="files-backfill-$arg.watermark"
-      grammar=iso
+      grammar=cursor
       ;;
     replied)
       [ "$2" -eq 1 ] || usage "replied needs <date>"
@@ -94,6 +95,7 @@ case "$verb" in
     resolve_key "$key" $(($# - 2))
     case "$grammar" in
       iso) [[ "$value" =~ $ZY_M365_ISO_RE ]] || die 4 "invalid value for $key: expected an ISO timestamp (YYYY-MM-DDTHH:MM:SSZ)" ;;
+      cursor) [[ "$value" =~ $ZY_M365_CURSOR_RE ]] || die 4 "invalid value for $key: expected an ISO timestamp (YYYY-MM-DDTHH:MM:SSZ), optionally followed by |<item-id>" ;;
       id) [[ "$value" =~ $ZY_M365_ID_RE ]] || die 4 "invalid value for $key: expected one message id" ;;
     esac
     ;;

@@ -1,0 +1,9 @@
+{"@odata.context":"fixture","@odata.deltaLink":"https://graph.microsoft.com/v1.0/drives/b!onedrive0001/items/01ROOT0001/delta?token=latest","value":[
+{"id":"01F14","name":"plan.pdf","file":{"mimeType":"application/pdf"},"size":102400,"lastModifiedDateTime":"2026-09-02T08:00:00Z","parentReference":{"id":"01DIR0002"}},
+{"id":"01F15","name":"scan.pdf","file":{"mimeType":"application/pdf"},"size":20000000,"lastModifiedDateTime":"2026-09-02T08:00:00Z","parentReference":{"id":"01DIR0002"}},
+{"id":"01F16","name":"old.docx","file":{"mimeType":"application/vnd.openxmlformats-officedocument.wordprocessingml.document"},"size":10240,"lastModifiedDateTime":"2026-09-02T08:00:00Z","parentReference":{"id":"01DIR0003"}},
+{"id":"01F17","name":"notes.md","file":{"mimeType":"text/markdown"},"size":512,"lastModifiedDateTime":"2026-09-02T09:30:00Z","parentReference":{"id":"01ROOT0001"}},
+{"id":"01F18","name":"gone.docx","deleted":{"state":"deleted"},"parentReference":{"id":"01DIR0001"},"lastModifiedDateTime":"2026-09-02T10:00:00Z"},
+{"id":"01F19","name":"data.csv","file":{"mimeType":"text/csv"},"size":4096,"lastModifiedDateTime":"2026-09-03T08:00:00Z","parentReference":{"id":"01ROOT0001"}},
+{"id":"01F20","name":"chart.png","file":{"mimeType":"image/png"},"size":40960,"lastModifiedDateTime":"2026-09-03T08:00:00Z","parentReference":{"id":"01ROOT0001"}}
+]}

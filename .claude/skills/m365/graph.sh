@@ -5,9 +5,12 @@ set -euo pipefail
 # /sites, and executes one consented send, move or soft delete against an approved, unexpired, hash-matching row
 # on an attended terminal — the only write path anywhere (D6).
 # usage: graph.sh cert-init [--rotate|--commit] | token [--key new] [--alg PS256|RS256]
-#        | check [--counts] [--other-mailbox <upn>] [--drive <id>] | mail-folders | drives | drafts-since <ISO>
-#        | message-sender <id> | snapshot draft|message <id> | get draft|message <id> | sent-since <ISO>
-#        | send-draft|move|delete --approved <hash>
+#        | check [--counts] [--other-mailbox <upn>] [--drive <id>] | mail-folders | drives | drive-files <drive-id>
+#        | drafts-since <ISO> | message-sender <id> | snapshot draft|message <id> | get draft|message <id>
+#        | sent-since <ISO> | send-draft|move|delete --approved <hash>
+# drive-files prints one JSON line {id, path, size, modified} per file of the drive (the files backfill's listing):
+# the delta from the root, every page, paths rebuilt from the folder items (delta never returns parentReference.path),
+# deleted items and folders left out, sorted by modified then id; 403/404 → exit 5 "drive <id>: <status> (…)".
 # Exit 0 · 3 configuration or key · 4 usage · 5 refused · 6 identity or Graph failure.
 # The private key is handed to openssl by path and never read into a variable. The access token leaves this script
 # only on stdout (`token`) and in a 0600 header file handed to curl. curl runs in a cleared environment with
@@ -25,6 +28,7 @@ readonly ZY_M365_ALG_DEFAULT=PS256 ZY_M365_BRIEF_SUBJECT='Zyggy — morning brie
 readonly ZY_M365_SNAPSHOT_SELECT='id,subject,toRecipients,ccRecipients,bccRecipients,from,receivedDateTime,parentFolderId,changeKey,isDraft'
 readonly ZY_M365_DRAFTS_SELECT='id,subject,toRecipients,ccRecipients,bccRecipients,conversationId,createdDateTime,changeKey,body'
 readonly ZY_M365_SENT_SELECT='id,subject,toRecipients,sentDateTime,internetMessageId'
+readonly ZY_M365_DELTA_SELECT='id,name,file,folder,root,size,lastModifiedDateTime,parentReference,deleted' ZY_M365_DELTA_PAGES=2000
 readonly ZY_M365_PREFER_TEXT='Prefer: outlook.body-content-type="text"'
 # Graph's well-known mail folder names: a move row may name one and it is passed to Graph as-is.
 readonly ZY_M365_WELL_KNOWN_FOLDERS=' archive clutter conflicts conversationhistory deleteditems drafts inbox junkemail localfailures msgfolderroot outbox recoverableitemsdeletions scheduled searchfolders sentitems serverfailures syncissues '
@@ -36,7 +40,7 @@ die() { # die <exit code> <message>
 }
 
 usage() {
-  die 4 "$1 (usage: graph.sh cert-init [--rotate|--commit] | token [--key new] [--alg PS256|RS256] | check [--counts] [--other-mailbox <upn>] [--drive <id>] | mail-folders | drives | drafts-since <ISO> | message-sender <id> | snapshot draft|message <id> | get draft|message <id> | sent-since <ISO> | send-draft|move|delete --approved <hash>)"
+  die 4 "$1 (usage: graph.sh cert-init [--rotate|--commit] | token [--key new] [--alg PS256|RS256] | check [--counts] [--other-mailbox <upn>] [--drive <id>] | mail-folders | drives | drive-files <drive-id> | drafts-since <ISO> | message-sender <id> | snapshot draft|message <id> | get draft|message <id> | sent-since <ISO> | send-draft|move|delete --approved <hash>)"
 }
 
 # --- 1. the verb and its arguments (exit 4 before anything else) -------------------------------------------------
@@ -111,6 +115,11 @@ case "$verb" in
     ;;
   mail-folders | drives)
     [ $# -eq 0 ] || usage "$verb takes no argument"
+    ;;
+  drive-files)
+    [ $# -eq 1 ] || usage "drive-files needs one <drive-id>"
+    [[ "$1" =~ $ZY_M365_DRIVE_ID_RE ]] || usage "'${1:0:40}' is not a drive id"
+    arg="$1"
     ;;
   drafts-since | sent-since)
     [ $# -eq 1 ] || usage "$verb needs one <ISO> timestamp"
@@ -410,6 +419,41 @@ load_drives() {
     "$work/drives.jsonl" > "$work/drives.json"
 }
 
+# The files of one drive → stdout, one JSON line {id, path, size, modified} each, sorted by modified then id. Every
+# delta page from the root is read; a nextLink is followed only inside the Graph base (the token never leaves it).
+# The last occurrence of an id wins (delta may repeat items); deleted items and folders are left out; the path is
+# rebuilt from the folder items' names up to the root. 403/404 → exit 5 "drive <id>: <status> (…)".
+list_drive_files() { # list_drive_files <drive-id>
+  # the URL is ".../drives/<id>/root" + "/delta": composed so no template file holds a machine-path-shaped literal
+  local url="$ZY_M365_GRAPH/drives/$1/root" pages=0
+  url+="/delta?\$select=$ZY_M365_DELTA_SELECT"
+  : > "$work/items.jsonl"
+  while [ -n "$url" ]; do
+    pages=$((pages + 1))
+    [ "$pages" -le "$ZY_M365_DELTA_PAGES" ] || die 6 "drive $1: more than $ZY_M365_DELTA_PAGES delta pages"
+    graph_call '403|404' GET "$url"
+    case "$HTTP_STATUS" in
+      403) die 5 "drive $1: 403 (not granted)" ;;
+      404) die 5 "drive $1: 404 (not found)" ;;
+    esac
+    jq -c '.value[]?' "$body" >> "$work/items.jsonl"
+    url="$(jq -r '."@odata.nextLink" // empty' "$body")"
+    if [ -n "$url" ] && [[ "$url" != "$ZY_M365_GRAPH/"* ]]; then
+      die 6 "Graph returned a nextLink outside $ZY_M365_GRAPH"
+    fi
+  done
+  jq -s -c '(reduce .[] as $i ({}; .[$i.id] = $i)) as $by
+    | ($by | with_entries(select(.value.folder != null or .value.root != null))
+        | with_entries(.value |= {name, parent: (.parentReference.id // null), root: (.root != null)})) as $dirs
+    | def folder_path($id; $depth):
+        if $id == null or $depth > 64 or ($dirs[$id] // null) == null or $dirs[$id].root then ""
+        else folder_path($dirs[$id].parent; $depth + 1) + "/" + $dirs[$id].name end;
+    [$by[] | select(.file != null and .deleted == null)
+      | {id, path: (folder_path(.parentReference.id // null; 0) + "/" + .name), size: (.size // 0),
+        modified: ((.lastModifiedDateTime // "1970-01-01T00:00:00Z")[0:19] + "Z")}]
+    | sort_by(.modified, .id) | .[]' "$work/items.jsonl"
+}
+
 # One message by id with a $select; 404 is "not found (<id>)", exit 6.
 load_message() { # load_message <id> <select> [curl arguments…]
   local id="$1" select="$2"
@@ -632,6 +676,10 @@ case "$verb" in
     mint_token
     load_drives
     jq -c . "$work/drives.json"
+    ;;
+  drive-files)
+    mint_token
+    list_drive_files "$arg"
     ;;
   drafts-since)
     mint_token

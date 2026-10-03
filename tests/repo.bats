@@ -462,7 +462,7 @@ M365_SKILLS=(morning-brief mail-backfill files-backfill m365)
     case "$n" in
       morning-brief) hint='<mailbox> <inbox-folder-id> <drive-id>… <run-dir>' cap=100 ;;
       mail-backfill) hint='<mailbox> <folder-id> <watermark-ISO> <batch>' cap=60 ;;
-      files-backfill) hint='<drive-id> <run-dir> <batch>' cap=70 ;;
+      files-backfill) hint='<drive-id> <run-dir> <n>' cap=60 ;;
       m365) hint='check' cap=70 ;;
     esac
     [ "$(zy_fm "$s" argument-hint)" = "$hint" ] || { echo "$n: argument-hint '$(zy_fm "$s" argument-hint)'"; return 1; }

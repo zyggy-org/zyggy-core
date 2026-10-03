@@ -4,7 +4,9 @@ set -euo pipefail
 # $BATS_TEST_TMPDIR/markitdown-stub/markitdown by install_markitdown_stub). Finds its texts beside itself:
 # fixtures/parsed-<basename>.txt is printed for <file> when present; otherwise the stub fails like the real CLI on an
 # unsupported file (one stderr line, exit 1). MARKITDOWN_STUB_SLEEP=<seconds> sleeps first (the timeout test).
-# Logs argv to markitdown-stub.log beside itself. Never reads the input file's content.
+# MARKITDOWN_STUB_TEXT=<fixture name> prints fixtures/<fixture name> for any file whose own text is absent (the files
+# backfill names its downloads by item id). Logs argv to markitdown-stub.log beside itself. Never reads the input
+# file's content.
 
 here="$(cd "$(dirname "$0")" && pwd)"
 printf 'argv=%s\n' "$*" >> "$here/markitdown-stub.log"
@@ -14,6 +16,9 @@ printf 'argv=%s\n' "$*" >> "$here/markitdown-stub.log"
 }
 sleep "${MARKITDOWN_STUB_SLEEP:-0}"
 text="$here/fixtures/parsed-$(basename "$1").txt"
+if [ ! -f "$text" ] && [ -n "${MARKITDOWN_STUB_TEXT:-}" ]; then
+  text="$here/fixtures/$MARKITDOWN_STUB_TEXT"
+fi
 if [ -f "$text" ]; then
   cat "$text"
 else

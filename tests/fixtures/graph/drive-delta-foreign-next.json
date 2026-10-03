@@ -1,0 +1,3 @@
+{"@odata.context":"fixture","@odata.nextLink":"https://evil.example/v1.0/drives/b!onedrive0001/items/01ROOT0001/delta?token=page2","value":[
+{"id":"01ROOT0001","name":"root","root":{},"folder":{"childCount":0},"lastModifiedDateTime":"2026-09-29T16:00:00Z"}
+]}

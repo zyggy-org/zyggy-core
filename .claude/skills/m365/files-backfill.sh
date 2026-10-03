@@ -2,28 +2,31 @@
 set -euo pipefail
 # The files backfill of the m365 connector (spec 23 Q8, AC-19, AC-42): owner-started (in tmux, may run unwatched), it
 # turns every file of the OneDrive and the granted sites' document libraries into validated fact lines in memory
-# inbox/, oldest change first, in resumable, cost-capped batches. Facts only: the batch's model reads the drive,
-# downloads a document into the batch's run directory, parses it with parse.sh (which deletes it) and writes through
-# facts.sh and state.sh; ZY_M365_FILES_BACKFILL_DENY denies the mail tools, the Draft tools and the proposal script.
+# inbox/, oldest change first, in resumable, cost-capped batches. This script lists, filters and keeps the cursor
+# (plan step 20a); the batch's model only downloads each file it is given into the batch's run directory, parses it
+# with parse.sh (which deletes it) and writes through facts.sh; ZY_M365_FILES_BACKFILL_ALLOW holds nothing else.
 # Order: refused under ZYGGY_HOOKS=off → the arguments → configuration and claude (before any request) → graph.sh
 # token (fails fast on the identity) → the drives from graph.sh drives (drives.exclude_drives already dropped) → per
-# drive: the totals (budget_usd_total, max_facts; 0 = no facts cap) → graph.sh check --drive <id> (403/404 → the drive
-# is skipped, counted forbidden) → until a batch lists 0 files: a fresh 0700 run directory (ZYGGY_M365_RUN_DIR),
-# claude -p "/files-backfill <drive-id> <run-dir> <batch>[ skip paths under: <path>, …]" with the batch caps, the run
-# directory removed, the new watermark read back from state.sh files-backfill-watermark <drive> (an ISO timestamp the
-# model sets last — the pinned server has no delta token; never the brief's drive-token), the checkpoint
-# files-backfill.json (0600) rewritten after each completed batch. A batch answering "forbidden 403" skips the drive
-# (counted forbidden, checked again next run). A watermark that did not move stops that drive (exit 5 at the end);
-# SIGINT/SIGTERM stop the claude child, remove the run directory and exit without writing: the checkpoint of the last
-# completed batch stands and the next run says "resuming drive <name> from <timestamp>". --reset clears the
+# drive: graph.sh check --drive <id> (403/404 → the drive is skipped, counted forbidden) → graph.sh drive-files <id>
+# once (403/404 → likewise) → while files remain after the cursor: the files after it, oldest first (modified, then
+# id), walked until <batch_files> eligible ones — a file of another type, over file_max_bytes or under
+# drives.exclude_paths is counted skipped and never reaches the model; the totals (budget_usd_total, max_facts; 0 = no
+# facts cap); a fresh 0700 run directory (ZYGGY_M365_RUN_DIR); claude -p "/files-backfill <drive-id> <run-dir> <n>"
+# followed by the n files inside <zyggy-m365-data> with the batch caps; the run directory removed; when the model's
+# counts line confirms the n files, the cursor <ISO>|<item-id> of the last file walked goes to state.sh
+# files-backfill-watermark <drive> (strictly greater next time, so files sharing one second never stall it; a plain
+# <ISO> from before 20a resumes at that second; never the brief's drive-token) and the checkpoint files-backfill.json
+# (0600) is rewritten. A batch without a confirming counts line stops that drive with the cursor unmoved (exit 5 at
+# the end); SIGINT/SIGTERM stop the claude child, remove the run directory and exit without writing: the checkpoint
+# of the last completed batch stands and the next run says "resuming drive <name> from <cursor>". --reset clears the
 # checkpoint and every files-backfill watermark, then starts again from the beginning.
 # usage: files-backfill.sh [--drive <name>] [--reset]     (<name>: drive name or drive id)
 # stdout: one line per drive start, batch and drive end, then the counts line "files-backfill: done|stopped — drives
 # <k> (excluded <e>, forbidden <x>), listed <l>, parsed <p>, skipped <s> (type <a>, size <b>, path <c>, parse error
 # <d>, secret pattern <e>), facts <f> (<d> duplicates dropped, <r> refused), batches <b>, turns <t>, cost <usd> (cap
 # <cap>)" (totals of the whole backfill, across resumed runs; forbidden = drives skipped in this run).
-# Exit 0 done · 3 configuration · 4 usage · 5 refused unattended, a cap reached or a watermark not advanced
-# (checkpoint intact) · 6 identity, Graph or model-run failure · 130/143 interrupted.
+# Exit 0 done · 3 configuration · 4 usage · 5 refused unattended, a cap reached or a batch not confirmed (checkpoint
+# intact) · 6 identity, Graph or model-run failure · 130/143 interrupted.
 # shellcheck source=../../hooks/lib.sh
 source "$(dirname "${BASH_SOURCE[0]}")/../../hooks/lib.sh"
 # shellcheck source=m365-lib.sh
@@ -31,7 +34,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/m365-lib.sh"
 ZY_SELF=files-backfill
 
 readonly ZY_FB_COUNTS_RE='^files-backfill batch: listed ([0-9]+), parsed ([0-9]+), skipped ([0-9]+) \(type ([0-9]+), size ([0-9]+), path ([0-9]+), parse error ([0-9]+), secret pattern ([0-9]+)\), facts ([0-9]+) \(([0-9]+) dup, ([0-9]+) refused\)$'
-readonly ZY_FB_FORBIDDEN_RE='^files-backfill batch: forbidden 403$'
+readonly ZY_FB_TYPES='["docx","xlsx","pptx","pdf","txt","md","csv","json","html","htm"]'
 readonly ZY_FB_RUNBOOK='runbook 13 "Model run failed"'
 readonly ZY_FB_GRANT='runbook 13 "Grant another site"'
 readonly ZY_FB_STATE_ARG_RE='^[A-Za-z0-9!_=-]{1,200}$'
@@ -85,14 +88,14 @@ budget_batch="$(zy_m365_cfg .files_backfill.budget_usd_per_batch)"
 budget_total="$(zy_m365_cfg .files_backfill.budget_usd_total)"
 max_facts="$(zy_m365_cfg .files_backfill.max_facts)"
 model="$(zy_m365_cfg .files_backfill.model)"
-# drives.exclude_paths travel in the prompt ("skip paths under: /a, /b"): absolute, one line, no comma
-skip=""
+file_max="$(zy_m365_cfg .files_backfill.file_max_bytes)"
+# drives.exclude_paths: absolute, one line, no comma (the grammar the brief's prompt shares); a file at or under one
+# is skipped (path) before any model run
 while IFS= read -r p; do
   [[ "$p" =~ $ZY_FB_PATH_RE ]] ||
     die 3 "configuration error: drives.exclude_paths holds an entry that is not an absolute path without commas (/…)"
-  skip+="${skip:+, }$p"
 done < <(zy_m365_cfg_test '.drives.exclude_paths | length > 0' && jq -r '.drives.exclude_paths[]' <<< "$ZY_M365_CONFIG_JSON")
-[ -z "$skip" ] || skip=" skip paths under: $skip"
+skip_json="$(jq -c '[.drives.exclude_paths[]? | rtrimstr("/")]' <<< "$ZY_M365_CONFIG_JSON")"
 now="$(zy_now_utc)"
 graph_sh="$ZY_M365_SKILL_DIR/graph.sh"
 state_sh="$ZY_M365_SKILL_DIR/state.sh"
@@ -241,14 +244,36 @@ skip_forbidden() { # skip_forbidden <id> <name> <site> <status text> <delta>: co
 
 # --- 5. the batches ------------------------------------------------------------------------------------------------------
 
-args_for() { # args_for <drive-id> <run-dir> → the claude argv in $args
-  args=(-p "/files-backfill $1 $2 $batch$skip" --permission-mode auto --permission-prompts none
+args_for() { # args_for <prompt> → the claude argv in $args
+  args=(-p "$1" --permission-mode auto --permission-prompts none
     --no-session-persistence --output-format json --max-turns "$max_turns" --max-budget-usd "$budget_batch")
   if [ -n "$model" ] && [ "$model" != null ]; then
     args+=(--model "$model")
   fi
   args+=(--allowedTools "$(zy_m365_join , "${ZY_M365_FILES_BACKFILL_ALLOW[@]}")"
     --disallowedTools "$(zy_m365_join , "${ZY_M365_FILES_BACKFILL_DENY[@]}")")
+}
+
+# The next batch of the drive's listing ($work/files.jsonl, sorted by modified then id) after the cursor <c>, as TSV
+# lines "<class> <modified> <id> <extension> <path>" (class ok|type|size|path): every file after the cursor up to and
+# including the <batch_files>-th eligible one, or to the end. jq compares the keys "<modified>|<id>" by code point, so
+# an old plain-ISO cursor sorts before every file of its own second. A path with a control character or the fence tag
+# counts as a path skip: it could not travel as one data line inside <zyggy-m365-data>.
+next_batch() { # next_batch <cursor> > <tsv>
+  jq -r -s --arg c "$1" --argjson n "$batch" --argjson max "$file_max" --argjson skip "$skip_json" \
+    --argjson types "$ZY_FB_TYPES" '
+    def ext: (.path | split("/") | last) as $f | if ($f | test("\\.")) then ($f | split(".") | last | ascii_downcase) else "" end;
+    def class: ext as $e
+      | if ($types | index($e)) == null then "type"
+        elif .size > $max then "size"
+        elif (.path | test("[[:cntrl:]]|zyggy-m365-data")) then "path"
+        elif (.path as $p | any($skip[]; . as $s | $p == $s or ($p | startswith($s + "/")))) then "path"
+        else "ok" end;
+    [.[] | select((.modified + "|" + .id) > $c) | . + {ext: ext, class: class}] as $rest
+    | (reduce range(0; $rest | length) as $i ({ok: 0, last: null};
+        if .last == null and $rest[$i].class == "ok" then .ok += 1 | (if .ok == $n then .last = $i else . end) else . end)) as $r
+    | $rest[0:(($r.last // (($rest | length) - 1)) + 1)][]
+    | [.class, .modified, .id, (if .ext == "" then "-" else .ext end), .path] | @tsv' "$work/files.jsonl"
 }
 
 stop=""
@@ -269,10 +294,17 @@ while IFS=$'\t' read -r id name site; do
     skip_forbidden "$id" "$name" "$site" "${checked:-no answer}" "$(delta 0 0 0 0 0 0 0 0 0 0 0 0 0 0)"
     continue
   fi
+  # the listing, once per drive and run: graph.sh answers 5 for a drive it cannot read
+  rc=0
+  graph_run "$work/files.jsonl" drive-files "$id" || rc=$?
+  if [ "$rc" -eq 5 ]; then
+    checked="$(graph_message)"
+    skip_forbidden "$id" "$name" "$site" "${checked#"drive $id: "}" "$(delta 0 0 0 0 0 0 0 0 0 0 0 0 0 0)"
+    continue
+  fi
+  [ "$rc" -eq 0 ] || die "$rc" "$(graph_message)"
   announced=0
   while :; do
-    stop="$(cap_reason)"
-    [ -z "$stop" ] || break 2
     wm="$("$state_sh" get files-backfill-watermark "$id")"
     if [ "$announced" -eq 0 ]; then
       if [ "$(jq -r --arg id "$id" '.drives[$id].batches // 0' <<< "$ck")" -gt 0 ]; then
@@ -282,10 +314,47 @@ while IFS=$'\t' read -r id name site; do
       fi
       announced=1
     fi
+    next_batch "$wm" > "$work/batch.tsv"
+    if [ ! -s "$work/batch.tsv" ]; then
+      ckpt_add "$id" "$name" "$site" "" true false "$(delta 0 0 0 0 0 0 0 0 0 0 0 0 0 0)"
+      say "$name done"
+      break
+    fi
+    # the walk: the shell's skips, the eligible files' prompt lines, the cursor after the last file walked
+    walked=0
+    ok=0
+    sk_type=0
+    sk_size=0
+    sk_path=0
+    lines=""
+    while IFS=$'\t' read -r class modified item ext path; do
+      [[ "$item" =~ $ZY_M365_ITEM_ID_RE ]] || die 6 "Graph returned an unexpected item id"
+      [[ "$modified" =~ $ZY_M365_ISO_RE ]] || die 6 "Graph returned an unexpected lastModifiedDateTime"
+      walked=$((walked + 1))
+      cursor="$modified|$item"
+      case "$class" in
+        ok)
+          ok=$((ok + 1))
+          lines+="$item"$'\t'"$ext"$'\t'"${modified:0:10}"$'\t'"$path"$'\n'
+          ;;
+        type) sk_type=$((sk_type + 1)) ;;
+        size) sk_size=$((sk_size + 1)) ;;
+        *) sk_path=$((sk_path + 1)) ;;
+      esac
+    done < "$work/batch.tsv"
+    if [ "$ok" -eq 0 ]; then
+      "$state_sh" set files-backfill-watermark "$id" "$cursor"
+      ckpt_add "$id" "$name" "$site" "$cursor" false false \
+        "$(delta 0 "$walked" 0 "$walked" "$sk_type" "$sk_size" "$sk_path" 0 0 0 0 0 0 0)"
+      say "$name: $walked file$([ "$walked" -eq 1 ] || printf s) skipped without a model run"
+      continue
+    fi
+    stop="$(cap_reason)"
+    [ -z "$stop" ] || break 2
     run_dir="$(mktemp -d -t zyggy-m365-files.XXXXXX)"
     chmod 700 "$run_dir"
     export ZYGGY_M365_RUN_DIR="$run_dir"
-    args_for "$id" "$run_dir"
+    args_for "/files-backfill $id $run_dir $ok"$'\n<zyggy-m365-data>\n'"$lines</zyggy-m365-data>"
     rc=0
     zy_m365_run_claude "$work/result.json" "$work/claude-err" - "${args[@]}" || rc=$?
     rm -rf "$run_dir"
@@ -303,35 +372,26 @@ while IFS=$'\t' read -r id name site; do
       ckpt_add "$id" "$name" "$site" "" false false "$(delta 0 0 0 0 0 0 0 0 0 0 0 0 "$turns" "$cost")"
       die 6 "claude run failed ($(jq -r '.subtype // "exit '"$rc"'"' "$result")) — $ZY_FB_RUNBOOK"
     fi
+    # the model's counts line (its last line of that shape) confirms the batch: listed = the files it was given,
+    # parsed + skipped = listed; without it the cursor stays and the drive stops
     text="$(jq -r '.result // ""' "$result")"
-    if grep -qE "$ZY_FB_FORBIDDEN_RE" <<< "$text"; then
-      skip_forbidden "$id" "$name" "$site" "403 (not granted)" "$(delta 0 0 0 0 0 0 0 0 0 0 0 0 "$turns" "$cost")"
-      continue 2
-    fi
-    # the model's counts line (its last line of that shape); "-" for listed where it gave none
-    listed=-
-    n=(0 0 0 0 0 0 0 0 0 0 0)
     counts="$(grep -E "$ZY_FB_COUNTS_RE" <<< "$text" | tail -n 1 || true)"
-    if [[ "$counts" =~ $ZY_FB_COUNTS_RE ]]; then
-      listed="${BASH_REMATCH[1]}"
-      n=("${BASH_REMATCH[@]:1:11}")
-    fi
-    new_wm="$("$state_sh" get files-backfill-watermark "$id")"
-    done_now=false
-    [ "$listed" != 0 ] || done_now=true
-    ckpt_add "$id" "$name" "$site" "$new_wm" "$done_now" false "$(delta 1 "${n[@]}" "$turns" "$cost")"
-    say "$name batch $(jq -r --arg id "$id" '.drives[$id].batches' <<< "$ck"): listed $listed, parsed ${n[1]}, skipped ${n[2]}, facts ${n[8]}, cost $(printf '%.2f' "$cost")"
-    if [ "$done_now" = true ]; then
-      say "$name done"
-      break
-    fi
-    if [ -z "$new_wm" ] || { [ -n "$wm" ] && [[ ! "$new_wm" > "$wm" ]]; }; then
-      printf 'files-backfill: %s: watermark not advanced, stopping the drive\n' "$name" >&2
+    if [[ ! "$counts" =~ $ZY_FB_COUNTS_RE ]] || [ "${BASH_REMATCH[1]}" -ne "$ok" ] ||
+      [ $((BASH_REMATCH[2] + BASH_REMATCH[3])) -ne "$ok" ]; then
+      ckpt_add "$id" "$name" "$site" "" false false "$(delta 0 0 0 0 0 0 0 0 0 0 0 0 "$turns" "$cost")"
+      printf 'files-backfill: %s: batch of %s files not confirmed by a counts line, stopping the drive\n' "$name" "$ok" >&2
       stuck+=("$name")
       break
     fi
+    m=("${BASH_REMATCH[@]:1:11}")
+    "$state_sh" set files-backfill-watermark "$id" "$cursor"
+    ckpt_add "$id" "$name" "$site" "$cursor" false false "$(delta 1 "$walked" "${m[1]}" \
+      "$((m[2] + sk_type + sk_size + sk_path))" "$((m[3] + sk_type))" "$((m[4] + sk_size))" "$((m[5] + sk_path))" \
+      "${m[6]}" "${m[7]}" "${m[8]}" "${m[9]}" "${m[10]}" "$turns" "$cost")"
+    say "$name batch $(jq -r --arg id "$id" '.drives[$id].batches' <<< "$ck"): listed $walked, parsed ${m[1]}, skipped $((m[2] + sk_type + sk_size + sk_path)), facts ${m[8]}, cost $(printf '%.2f' "$cost")"
   done
 done <<< "$drives"
+
 
 # --- 6. the counts line -------------------------------------------------------------------------------------------------
 
@@ -345,6 +405,6 @@ printf 'files-backfill: %s — drives %s (excluded %s, forbidden %s), listed %s,
   "$(ck_get .total_refused)" "$(ck_get .total_batches)" "$(ck_get .total_turns)" "$(ck_get .total_cost)" "$budget_total"
 [ -z "$stop" ] || die 5 "stopped: $stop"
 if [ "${#stuck[@]}" -gt 0 ]; then
-  die 5 "stopped: watermark not advanced in $(zy_m365_join ', ' "${stuck[@]}")"
+  die 5 "stopped: batch not confirmed in $(zy_m365_join ', ' "${stuck[@]}")"
 fi
 exit 0
