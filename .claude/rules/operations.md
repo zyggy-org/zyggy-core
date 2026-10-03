@@ -58,8 +58,9 @@ cap reached); `6` a GitHub request failed (`github-inventory`,
 - Exit 5 from `github-clone`: quote the stderr line; do not retry and do not try another way.
 - Exit 6 from an `m365` script (`/m365 check`): quote the stderr line and point to the runbook entry it names —
   "Certificate rejected" (`invalid_client`, clock skew) or "Scope or grant missing" (403). Do not retry with
-  another tool. An authentication failure from an `m365` tool: tell the owner and point to runbook 13 "Token
-  refresh failed"; do not retry another way.
+  another tool. The `m365` credential refreshes itself; if an `m365` tool still reports an authentication failure,
+  tell the owner the credential could not be refreshed and point to runbook 13 "Certificate rejected"; do not retry
+  another way.
 - A denied prompt or a guard refusal ends the action — report it (`m365-guard: refused: <reason>` names what the
   policy does not allow, runbook "Guard refused"); never retry it another way.
 - `audit FLAGGED` in the brief's journal line: the owner reviews the Drafts. A `Send`, `Move` or upload by the

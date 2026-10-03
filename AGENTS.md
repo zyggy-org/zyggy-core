@@ -79,8 +79,9 @@ Details: `.claude/rules/security.md`.
   purchase. The one exception is the owner's company mailbox: a mail he asks you to send in this conversation,
   through the `m365` send tool, after the permission prompt he answers (`security.md`).
 - Never call Microsoft Graph outside the `m365` tools, never touch the Microsoft key, never run `graph.sh`
-  yourself other than `graph.sh check` for `/m365 check`, and never run `mcp-wrapper.sh`, `brief.sh` or a
-  backfill script (`security.md`).
+  yourself other than `graph.sh check` for `/m365 check`, and never run `mcp-server.sh`, `mcp-auth-header.sh`,
+  `mcp-wrapper.sh`, `brief.sh` or a backfill script (`security.md`). The `m365` server runs as its own service on
+  this machine and holds no token; Claude Code fetches one per connection, so the credential refreshes itself.
 - Never create a `CLAUDE.md`, `.claude/CLAUDE.md` or `CLAUDE.local.md` anywhere: it would replace this file.
 - Never run `gh`, git with the GitHub credential, or `askpass.sh` yourself and never touch the GitHub credential
   file; only the `github-inventory` and `github-clone` scripts use it (`security.md`).

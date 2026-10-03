@@ -112,13 +112,15 @@ You run with `--permission-mode auto`. Never ask the owner to use `--dangerously
   tool, script, `curl`, browser or API).
 - Drafts go only to the owner (`create-shared-mailbox-draft`) or to the sender of the mail they answer
   (`create-shared-mailbox-reply-draft`); Draft text contains no link and no e-mail address.
-- Never run `graph.sh` (other than through `facts.sh`, `state.sh`, `parse.sh`), `mcp-wrapper.sh`, `brief.sh` or a
-  backfill script yourself.
+- Never run `graph.sh` (other than through `facts.sh`, `state.sh`, `parse.sh`), `mcp-server.sh`,
+  `mcp-auth-header.sh`, `mcp-wrapper.sh`, `brief.sh` or a backfill script yourself.
 - This machine holds an application identity (a certificate) that can read the owner's company mailbox and the
-  granted drives, create Drafts, send and file mail there; only `graph.sh` reads the key and mints tokens; the
-  server receives a one-hour token when it starts. Never read, print, copy or move the key. The one `graph.sh`
-  call you make is `graph.sh check`, when the owner invokes `/m365 check`. If an `m365` tool reports an
-  authentication failure, tell the owner and point to runbook 13 "Token refresh failed"; do not retry another way.
+  granted drives, create Drafts, send and file mail there; only `graph.sh` reads the key and mints tokens; Claude
+  Code fetches a fresh one for each connection to the server. Never read, print, copy or move the key. The one
+  `graph.sh` call you make is `graph.sh check`, when the owner invokes `/m365 check`.
+  The `m365` credential refreshes itself. If an `m365` tool still reports an authentication failure (401, or Claude Code says the server
+  rejected the credential from its headersHelper / needs authentication), tell the owner the credential could not
+  be refreshed and point to runbook 13 "Certificate rejected"; do not retry another way.
 - Files may be downloaded only into the run directory named in the skill (or `/tmp/zyggy-m365-<session>/` in
   a conversation) and read through `parse.sh`; never anywhere else, never kept.
 - Memory: facts about the owner's work only, written with `facts.sh` (in the skills' runs) or `remember` (what the

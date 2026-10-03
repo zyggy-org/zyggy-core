@@ -431,14 +431,13 @@ m365_lib_value() { # m365_lib_value <bash expression> → printed by a shell tha
   diff <(m365_lib_value '"${ZY_M365_AUTH_TOOLS[@]}"') <(printf '%s\n' list-accounts login logout remove-account select-account verify-login)
 }
 
-@test "repo: .mcp.json declares exactly the m365 server, started through mcp-wrapper.sh by bash, no env, no GUID, in jq --indent 2 layout" {
+@test "repo (AC-52): .mcp.json declares exactly the m365 server over loopback HTTP with the headersHelper — no headers, env, command or args, no GUID, in jq --indent 2 layout" {
   local m="$REPO_ROOT/.mcp.json"
   jq -e . "$m" > /dev/null
   cmp "$m" <(jq --indent 2 . "$m")
   jq -e 'keys == ["mcpServers"] and (.mcpServers | keys == ["m365"])' "$m"
-  jq -e '.mcpServers.m365 | keys == ["args","command"]' "$m"
-  jq -e '.mcpServers.m365.command == "bash"' "$m"
-  jq -e '.mcpServers.m365.args == ["-c", "exec \"${CLAUDE_PROJECT_DIR:-.}/.claude/skills/m365/mcp-wrapper.sh\""]' "$m"
+  jq -e '.mcpServers.m365 == {"type": "http", "url": "http://127.0.0.1:${ZYGGY_M365_PORT:-47365}/mcp",
+    "headersHelper": "${CLAUDE_PROJECT_DIR:-.}/.claude/skills/m365/mcp-auth-header.sh"}' "$m"
   run grep -nE '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-' "$m"
   [ "$status" -eq 1 ]
 }
@@ -537,7 +536,7 @@ M365_SKILLS=(morning-brief mail-backfill files-backfill m365)
     'mcp__m365__send-shared-mailbox-mail' 'mcp__m365__move-shared-mailbox-message' 'permission prompt' \
     'never retry another way' 'm365-guard: refused' 'never claim an action you did not see succeed' 'instance.md' \
     '/tmp/zyggy-m365-<session>/' 'parse.sh' '"${CLAUDE_PROJECT_DIR:-.}"/.claude/skills/m365/graph.sh check' \
-    'Token refresh' 'failed'; do
+    'credential refreshes itself' 'Certificate rejected'; do
     grep -qF -- "$p" "$d/m365/SKILL.md" || { echo "m365 lacks: $p"; return 1; }
   done
   run grep -nE 'propose\.sh|m365-approve' "$d/m365/SKILL.md"
@@ -618,7 +617,7 @@ M365_SKILLS=(morning-brief mail-backfill files-backfill m365)
   for p in 'asks the owner for permission each time' 'in his own words in this conversation' 'show the full message' \
     'never retry another way' 'Files are never created, overwritten, edited, renamed or deleted' \
     'application identity (a certificate)' 'only `graph.sh` reads the key' 'Never run `graph.sh`' '/m365 check' \
-    'Token refresh failed' '/tmp/zyggy-m365-<session>/' 'facts.sh'; do
+    'credential refreshes itself' 'Certificate rejected' '/tmp/zyggy-m365-<session>/' 'facts.sh'; do
     grep -qiF -- "$p" "$s" || { echo "security.md lacks: $p"; return 1; }
   done
   run grep -niE 'm365-approve|propose\.sh|approve on the VM|no terminal|proposal' "$s"
@@ -642,7 +641,12 @@ M365_SKILLS=(morning-brief mail-backfill files-backfill m365)
   local f
   cd "$REPO_ROOT"
   # /mcp the slash command, not a path such as skills/m365/mcp-wrapper.sh
-  run grep -niE 'hourly|reconnect|(^|[^a-z0-9._/-])/mcp([^a-z-]|$)' .claude/rules/security.md .claude/rules/operations.md AGENTS.md README.md \
+  # the D8 sentence (AC-55)
+  for f in .claude/rules/security.md .claude/rules/operations.md .claude/skills/m365/SKILL.md; do
+    grep -qF 'credential refreshes itself' "$f" || { echo "$f lacks the D8 sentence"; return 1; }
+  done
+  # (a URL's path "…}/mcp" is not the command)
+  run grep -niE 'hourly|reconnect|(^|[^a-z0-9._/}-])/mcp([^a-z-]|$)' .claude/rules/security.md .claude/rules/operations.md AGENTS.md README.md \
     .claude/skills/m365/SKILL.md .claude/skills/morning-brief/SKILL.md .claude/skills/mail-backfill/SKILL.md \
     .claude/skills/files-backfill/SKILL.md
   [ "$status" -eq 1 ] || { echo "$output"; return 1; }
@@ -657,7 +661,8 @@ M365_SKILLS=(morning-brief mail-backfill files-backfill m365)
     m365-lib.sh m365-guard.sh m365-log.sh actions.jsonl permissions.ask '`actions`' write_drive_id body_max_chars \
     max_recipients suggestion_cap 'How actions are confirmed' .mcp.json enabledMcpjsonServers instance/m365.json \
     sp_object_id sites_granted LoadCredential ZYGGY_M365_STUB curl-stub.sh claude-stub.sh 'Rotate the certificate' \
-    'Upgrade the MCP server' 'never under' item-exists item-kind; do
+    'Upgrade the MCP server' 'never under' item-exists item-kind mcp-server.sh mcp-auth-header.sh headersHelper \
+    zyggy-m365-mcp.service ZYGGY_M365_PORT 'token minted'; do
     grep -qF -- "$s" "$REPO_ROOT/README.md" || { echo "README.md lacks: $s"; return 1; }
   done
   run grep -nE 'propose\.sh|m365-approve|pty\.bash|proposals\.jsonl|approvals\.jsonl|executions\.jsonl|ttl_minutes|allowed_actions|Approve proposals' \
