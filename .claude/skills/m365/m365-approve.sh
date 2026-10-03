@@ -40,6 +40,7 @@ if zy_hooks_off; then
   die 5 "refused: unattended run (ZYGGY_HOOKS=off)"
 fi
 
+zy_m365_principal_from_settings
 zy_require_config
 command -v jq > /dev/null || die 3 "jq not found"
 graph_sh="$ZY_M365_SKILL_DIR/graph.sh"

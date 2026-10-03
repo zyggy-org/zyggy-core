@@ -22,6 +22,8 @@ setup() {
   export XDG_CONFIG_HOME="$HOME/.config"
   mkdir -p "$XDG_CONFIG_HOME"
   unset CREDENTIALS_DIRECTORY ZYGGY_HOOKS
+  # never the checkout's own settings.local.json: the principal comes from export_principal unless a test says so
+  export ZYGGY_M365_SETTINGS="$BATS_TEST_TMPDIR/no-settings.local.json"
   install_m365_keypair
   install_curl_stub
   M365="$REPO_ROOT/.claude/skills/m365"
@@ -3001,6 +3003,34 @@ mb_deny() {
   printf '{' > "$ZYGGY_M365_CONFIG"
   run --separate-stderr mail_backfill
   [ "$status" -eq 3 ] && [[ "$stderr" == 'mail-backfill: configuration error: '*'is not valid JSON' ]] || { echo "$status $stderr"; return 1; }
+  [ "$(request_count)" -eq 0 ] && [ "$(claude_calls)" -eq 0 ]
+}
+
+@test "owner-run scripts without the environment line: mail-backfill.sh, files-backfill.sh and m365-approve.sh take each unset principal key from settings.local.json's env; a set variable wins; no other key is taken; no settings file -> ZYGGY_TENANT is not set as before" {
+  local settings="$BATS_TEST_TMPDIR/settings.local.json" no_principal=(env -u ZYGGY_MEMORY_ROOT -u ZYGGY_TENANT -u ZYGGY_USER -u ZYGGY_TIMEZONE)
+  backfill_setup
+  jq -n --arg root "$ZYGGY_MEMORY_ROOT" '{env: {ZYGGY_MEMORY_ROOT: $root, ZYGGY_TENANT: "acme", ZYGGY_USER: "alice",
+    ZYGGY_TIMEZONE: "Europe/Brussels", ZYGGY_HOOKS: "off"}}' > "$settings"
+  seed_proposal p1
+  # past the configuration: the backfills stop at the missing claude, the terminal lists the row (ZYGGY_HOOKS not taken)
+  PATH="$(path_without claude)" ZYGGY_M365_SETTINGS="$settings" run --separate-stderr "${no_principal[@]}" "$M365/mail-backfill.sh"
+  [ "$status" -eq 3 ] && [ "$stderr" = 'mail-backfill: claude not found' ] || { echo "$status $stderr"; return 1; }
+  PATH="$(path_without claude)" ZYGGY_M365_SETTINGS="$settings" run --separate-stderr "${no_principal[@]}" "$M365/files-backfill.sh"
+  [ "$status" -eq 3 ] && [ "$stderr" = 'files-backfill: claude not found' ] || { echo "$status $stderr"; return 1; }
+  ZYGGY_M365_SETTINGS="$settings" run --separate-stderr "${no_principal[@]}" "$M365/m365-approve.sh" --list < /dev/null
+  [ "$status" -eq 0 ] && [ -z "$stderr" ] && [[ "$output" == "p1 pending send-draft "* ]] || { echo "$status $output $stderr"; return 1; }
+  # the file's tenant is read (globex has no memory directory) unless ZYGGY_TENANT is set
+  jq '.env.ZYGGY_TENANT = "globex"' "$settings" > "$settings.tmp" && mv "$settings.tmp" "$settings"
+  ZYGGY_M365_SETTINGS="$settings" run --separate-stderr "${no_principal[@]}" "$M365/m365-approve.sh" --list < /dev/null
+  [ "$status" -eq 3 ] && [ "$stderr" = "m365-approve: configuration error: memory directory $ZYGGY_MEMORY_ROOT/globex/alice does not exist (ZYGGY_TENANT/ZYGGY_USER)" ] || { echo "$status $stderr"; return 1; }
+  ZYGGY_M365_SETTINGS="$settings" run --separate-stderr "$M365/m365-approve.sh" --list < /dev/null
+  [ "$status" -eq 0 ] && [[ "$output" == "p1 pending send-draft "* ]] || { echo "$status $output $stderr"; return 1; }
+  # no settings file, or one that is not JSON: the error is unchanged
+  run --separate-stderr env -u ZYGGY_TENANT "$M365/m365-approve.sh" --list < /dev/null
+  [ "$status" -eq 3 ] && [ "$stderr" = 'm365-approve: configuration error: ZYGGY_TENANT is not set' ] || { echo "$status $stderr"; return 1; }
+  printf '{' > "$settings"
+  ZYGGY_M365_SETTINGS="$settings" run --separate-stderr env -u ZYGGY_TENANT "$M365/m365-approve.sh" --list < /dev/null
+  [ "$status" -eq 3 ] && [ "$stderr" = 'm365-approve: configuration error: ZYGGY_TENANT is not set' ] || { echo "$status $stderr"; return 1; }
   [ "$(request_count)" -eq 0 ] && [ "$(claude_calls)" -eq 0 ]
 }
 

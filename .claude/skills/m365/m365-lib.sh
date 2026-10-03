@@ -12,6 +12,7 @@ ZY_SELF=m365
 ZY_M365_SKILL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 ZY_M365_CHECKOUT="$(cd "$ZY_M365_SKILL_DIR/../../.." && pwd -P)"
 ZY_M365_CONFIG="${ZYGGY_M365_CONFIG:-$ZY_M365_CHECKOUT/instance/m365.json}"
+ZY_M365_SETTINGS="${ZYGGY_M365_SETTINGS:-$ZY_M365_CHECKOUT/.claude/settings.local.json}"
 ZY_M365_STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/zyggy/m365"
 ZY_M365_KEY_FILE="${ZYGGY_M365_KEY_FILE:-${XDG_CONFIG_HOME:-$HOME/.config}/zyggy/m365-app.key}"
 ZY_M365_CER_FILE="${ZYGGY_M365_CER_FILE:-${XDG_CONFIG_HOME:-$HOME/.config}/zyggy/m365-app.cer}"
@@ -22,7 +23,7 @@ ZY_M365_PROPOSALS="$ZY_M365_STATE_DIR/proposals.jsonl"
 ZY_M365_APPROVALS="$ZY_M365_STATE_DIR/approvals.jsonl"
 ZY_M365_EXECUTIONS="$ZY_M365_STATE_DIR/executions.jsonl"
 # shellcheck disable=SC2034 # the paths and grammars are read by the scripts that source this library
-readonly ZY_M365_SKILL_DIR ZY_M365_CHECKOUT ZY_M365_CONFIG ZY_M365_STATE_DIR ZY_M365_KEY_FILE ZY_M365_CER_FILE
+readonly ZY_M365_SKILL_DIR ZY_M365_CHECKOUT ZY_M365_CONFIG ZY_M365_SETTINGS ZY_M365_STATE_DIR ZY_M365_KEY_FILE ZY_M365_CER_FILE
 readonly ZY_M365_CREDENTIAL_NAME ZY_M365_PROPOSALS ZY_M365_APPROVALS ZY_M365_EXECUTIONS
 readonly ZY_M365_GUID_RE='^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
 readonly ZY_M365_UPN_RE='^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$'
@@ -42,6 +43,21 @@ readonly ZY_M365_STATUS_RE='^(pending|approved|executed|failed|refused|expired)$
 readonly ZY_M365_EXPIRY_WARN_DAYS=30
 
 # --- configuration ---------------------------------------------------------------------------------------
+
+# The owner-run scripts (the backfills, the approval terminal) started from a plain shell, without the environment
+# line: each principal key that is unset or empty is taken from the "env" object of
+# ${ZYGGY_M365_SETTINGS:-<checkout>/.claude/settings.local.json}, the values a session gets. A set variable wins; no
+# other key is read (never ZYGGY_HOOKS or ZYGGY_NOW); no file, no jq or no string value changes nothing and
+# zy_require_config reports as before.
+zy_m365_principal_from_settings() {
+  local var value
+  [ -f "$ZY_M365_SETTINGS" ] && [ -r "$ZY_M365_SETTINGS" ] && command -v jq > /dev/null || return 0
+  for var in ZYGGY_MEMORY_ROOT ZYGGY_TENANT ZYGGY_USER ZYGGY_TIMEZONE; do
+    [ -z "${!var:-}" ] || continue
+    value="$(jq -r --arg k "$var" '.env[$k] | strings' "$ZY_M365_SETTINGS" 2> /dev/null)" || continue
+    [ -z "$value" ] || export "$var=$value"
+  done
+}
 
 zy_m365_config_error() { # zy_m365_config_error <message>
   zy_die 3 "configuration error: $1"

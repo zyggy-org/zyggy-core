@@ -72,6 +72,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 
+zy_m365_principal_from_settings
 zy_require_config
 command -v jq > /dev/null || die 3 "jq not found"
 # shellcheck disable=SC2119 # no argument: the full validation

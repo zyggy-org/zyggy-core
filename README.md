@@ -220,6 +220,9 @@ failure; stderr lines are prefixed with the script's name.
 Configuration: `instance/m365.json` (`ZYGGY_M365_CONFIG` overrides the path); the key and certificate under
 `${XDG_CONFIG_HOME:-~/.config}/zyggy/m365-app.{key,cer}` (`ZYGGY_M365_KEY_FILE`/`ZYGGY_M365_CER_FILE` override, for
 hand runs and tests); in the unit the key comes from `$CREDENTIALS_DIRECTORY/m365-app-key` (`LoadCredential=`).
+`mail-backfill.sh`, `files-backfill.sh` and `m365-approve.sh` need no environment line: each of `ZYGGY_MEMORY_ROOT`,
+`ZYGGY_TENANT`, `ZYGGY_USER`, `ZYGGY_TIMEZONE` that is unset is read from the `env` of `.claude/settings.local.json`
+(`ZYGGY_M365_SETTINGS` overrides the path, for tests); a set variable wins and no other key is read.
 `ZYGGY_M365_ORIGIN` is exported by `brief.sh` to its child so `propose.sh` records `brief <date>` (else
 `session`); `ZYGGY_M365_RUN_DIR` is the run directory `parse.sh` accepts. Test-only, honoured only with
 `ZYGGY_M365_STUB=1` (which also refuses a real `curl` first on `PATH`): `ZYGGY_RETRY_SCALE`, `ZYGGY_PARSE_TIMEOUT`.
