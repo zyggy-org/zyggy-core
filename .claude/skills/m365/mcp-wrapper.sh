@@ -3,7 +3,7 @@ set -euo pipefail
 # Starts the m365 MCP server for Claude Code (spec 23; .mcp.json names this script): mints a one-hour app-only
 # access token with `graph.sh token`, resolves the pinned @softeria/ms-365-mcp-server installed under ~/.local and
 # replaces itself with it, in a cleared environment holding exactly the eleven contracted variables, in org mode,
-# with ENABLED_TOOLS = the 14-tool allowlist of m365-lib.sh. Nothing is written to stdout before the server owns it.
+# with ENABLED_TOOLS = the 16-tool allowlist of m365-lib.sh. Nothing is written to stdout before the server owns it.
 # usage: mcp-wrapper.sh [--probe]
 #   --probe  start the server once, speak the MCP handshake and tools/list over stdio (20 s at most), print the
 #            allowlisted tools it offers, the tools it registers outside the filter (the six auth tools, denied by the

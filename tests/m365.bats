@@ -36,6 +36,8 @@ setup() {
   ENABLED="$M365_FIXTURES/enabled-tools.txt"
   EXCLUDED="$M365_FIXTURES/excluded-tools.txt"
   TOOLS_JSON="$M365_FIXTURES/tools-list-0.157.2.json"
+  # the D7 action tools (spec 23): never allowed in a run, always denied
+  ACTION_RE='send-shared-mailbox-mail|move-shared-mailbox-message|upload-file-content'
   TENANT=11111111-1111-4111-8111-111111111111
   CLIENT=22222222-2222-4222-8222-222222222222
   TOKEN_URL="https://login.microsoftonline.com/$TENANT/oauth2/v2.0/token"
@@ -253,13 +255,16 @@ last_line() {
 USAGE='(usage: graph.sh cert-init [--rotate|--commit] | token [--key new] [--alg PS256|RS256] | check [--counts] [--other-mailbox <upn>] [--drive <id>] | mail-folders | drives | drive-files <drive-id> | drafts-since <ISO> | message-sender <id> | snapshot draft|message <id> | get draft|message <id> | sent-since <ISO> | send-draft|move|delete --approved <hash>)'
 
 # The spec's app-only allowlist: the /users/{user-id} mail read tools, the two /users Draft tools, the /drives
-# read tools, the file writer and the two /sites/{site-id}/drives read tools (names as endpoints.json has them).
+# read tools, the file writer and the two /sites/{site-id}/drives read tools (names as endpoints.json has them),
+# plus the D7 action tools the pinned server can carry (plan 23 Step R1: send and move; upload-file-content stays
+# excluded — fact 3, the server URL-encodes the <parent-id>:/<name>: form).
 expected_enabled() {
   printf '%s\n' \
     create-shared-mailbox-draft create-shared-mailbox-reply-draft download-bytes-to-file get-drive-delta \
     get-drive-item get-drive-root-item get-shared-mailbox-message get-sharepoint-site-drive-by-id \
     list-drive-item-versions list-folder-files list-shared-mailbox-folder-messages list-shared-mailbox-messages \
-    list-sharepoint-site-drives search-onedrive-files | LC_ALL=C sort
+    list-sharepoint-site-drives search-onedrive-files \
+    move-shared-mailbox-message send-shared-mailbox-mail | LC_ALL=C sort
 }
 
 # --- the tool partition of the pinned version --------------------------------------------------------------
@@ -276,15 +281,25 @@ expected_enabled() {
   [ -z "$(LC_ALL=C sort -u "$ENABLED" "$EXCLUDED" | LC_ALL=C comm -3 - "$ALL")" ] ||
     { echo "enabled ∪ excluded differs from the pinned list"; return 1; }
   [ $(( $(wc -l < "$ENABLED") + $(wc -l < "$EXCLUDED") )) -eq "$(wc -l < "$ALL")" ]
-  [ "$(wc -l < "$ALL")" -gt 300 ]
+  [ "$(wc -l < "$ALL")" -eq 344 ]
+  # D7 on the fact-3 branch (plan 23 Step R1): 16 enabled + 328 excluded
+  [ "$(wc -l < "$ENABLED")" -eq 16 ] && [ "$(wc -l < "$EXCLUDED")" -eq 328 ]
 }
 
-@test "m365: enabled holds exactly the two /users Draft tools, five shared-mailbox tools in total, the drive and site-drive read tools, and no /me, write, send, auth, batch or off-scope tool" {
-  local negative me
+@test "m365: enabled holds exactly the 14 read/Draft tools of Step 1 plus send-shared-mailbox-mail and move-shared-mailbox-message; every other send/reply/forward/update/delete/rename/copy/share/upload tool, graph-batch and the six auth tools stay excluded" {
+  local negative me t
   cmp <(expected_enabled) "$ENABLED"
-  [ "$(grep -c shared-mailbox "$ENABLED")" -eq 5 ]
+  [ "$(grep -c shared-mailbox "$ENABLED")" -eq 7 ]
   [ "$(grep -cE '^create-shared-mailbox-(reply-)?draft$' "$ENABLED")" -eq 2 ]
   [ "$(grep -cE '^create-' "$ENABLED")" -eq 2 ]
+  for t in upload-file-content send-shared-mailbox-draft reply-shared-mailbox-mail reply-all-shared-mailbox-mail \
+    forward-shared-mailbox-mail create-shared-mailbox-reply-all-draft create-shared-mailbox-forward-draft \
+    update-shared-mailbox-message create-upload-session create-onedrive-folder delete-onedrive-file \
+    move-rename-onedrive-item copy-drive-item share-drive-item create-drive-item-share-link delete-drive-item-permission \
+    graph-batch login logout verify-login list-accounts select-account remove-account; do
+    grep -qx -- "$t" "$ALL" || { echo "not in the pinned list: $t"; return 1; }
+    grep -qx -- "$t" "$EXCLUDED" || { echo "not excluded: $t"; return 1; }
+  done
   # the negative list derived from tools-0.157.2.txt: every /me family name, every write verb, the auth and batch
   # tools, every Teams/calendar/contacts/To Do/Planner/OneNote/Excel/directory name
   negative='^(send-|delete-|move-|update-|upload-|share-|copy-|forward-|reply-|add-|set-|mark-|format-|sort-|merge-|unmerge-|clear-|insert-|extract-|cancel-|accept-|decline-|archive-|unarchive-|pin-|unpin-|remove-|select-|start-|stop-|complete-|register-|check-)'
@@ -293,7 +308,8 @@ expected_enabled() {
   negative="$negative|chat|team|channel|calendar|event|contact|todo|task|planner|onenote|notebook|workbook|excel|current-user|my-profile|presence|manager|direct-reports|emoji|meeting|recording|transcript|photo|mailbox-settings|people|insight|reminder"
   negative="$negative|list-drives$|list-users$|^(list|get|create)-mail-|^list-mail-|^(login|logout|verify-login|list-accounts|select-account|remove-account)$"
   negative="$negative|^(get|list|search)-sharepoint-(site|sites|site-by-path|sites-delta|site-item|site-items|site-list|site-lists|site-list-item|site-list-items|list-column|list-columns)$"
-  run grep -E "$negative" "$ENABLED"
+  # exempt exactly the D7 action tool names (their policy is the guard's and the prompt's, plan 23 Step R3)
+  run grep -E "$negative" <(grep -vxE 'send-shared-mailbox-mail|move-shared-mailbox-message|upload-file-content' "$ENABLED")
   [ "$status" -eq 1 ] || { echo "off-scope name enabled: $output"; return 1; }
   # every tool whose Graph path starts with /me is excluded (the tools/list fixture carries "<METHOD> <path>")
   me="$(jq -r '.tools[] | select(.description | test("^[A-Z]+ /me([/ ]|$)")) | .name' "$TOOLS_JSON" | LC_ALL=C sort -u)"
@@ -307,11 +323,12 @@ expected_enabled() {
     | select(.description | test("^(GET|POST) (/users/\\{user-id\\}/|/drives/\\{drive-id\\}|/sites/\\{site-id\\}/drives)|^tool download-bytes-to-file") | not)
     | .name' "$TOOLS_JSON"
   [ "$status" -eq 0 ] && [ -z "$output" ] || { echo "enabled tool off the app-only paths: $output"; return 1; }
-  # the only non-GET tools enabled are the two Draft creations
+  # the only non-GET tools enabled are the two Draft creations and the two D7 action tools
   run jq -r --rawfile en "$ENABLED" '($en | split("\n") | map(select(length > 0))) as $e
     | .tools[] | select(.name as $n | $e | index($n)) | select(.description | test("^GET |^tool ") | not) | .name' "$TOOLS_JSON"
   [ "$status" -eq 0 ]
-  [ "$(printf '%s\n' "$output" | LC_ALL=C sort)" = "$(printf '%s\n' create-shared-mailbox-draft create-shared-mailbox-reply-draft)" ]
+  [ "$(printf '%s\n' "$output" | LC_ALL=C sort)" = "$(printf '%s\n' create-shared-mailbox-draft create-shared-mailbox-reply-draft \
+    move-shared-mailbox-message send-shared-mailbox-mail)" ]
 }
 
 @test "m365: tools-list-0.157.2.json names exactly the tools of tools-0.157.2.txt and carries the probed schemas (facts 2, 3, 5)" {
@@ -344,6 +361,29 @@ expected_enabled() {
   # provenance: the fixture names the pinned version and its derivation
   jq -e '.source.package == "@softeria/ms-365-mcp-server" and .source.version == "0.157.2" and (.source.integrity | startswith("sha512-"))' \
     "$TOOLS_JSON" > /dev/null
+  jq -e '.source.counts.enabled == 16 and .source.counts.excluded == 328' "$TOOLS_JSON" > /dev/null
+}
+
+@test "m365: tools-list-0.157.2.json gives the three D7 action tools their probed inputSchema (Step R1: facts 2-4)" {
+  jq -e '[.tools[] | select(.name | IN("send-shared-mailbox-mail","upload-file-content","move-shared-mailbox-message"))]
+    | length == 3 and all(.inputSchema.properties | length > 0)' "$TOOLS_JSON" > /dev/null
+  # send: userId in the path; body.Message (the 25 message fields incl. the three recipient lists, attachments, from and
+  # body.contentType text|html) and body.SaveToSentItems, whose published default is false (the guard requires true)
+  jq -e '.tools[] | select(.name == "send-shared-mailbox-mail") | .inputSchema.properties
+    | (.userId.in == "path") and (.confirm.type == "boolean")
+    and (.body.properties.SaveToSentItems.default == false)
+    and (.body.properties.Message.properties | (keys | length == 25)
+      and has("toRecipients") and has("ccRecipients") and has("bccRecipients") and has("attachments") and has("from")
+      and (.body.properties.contentType.enum == ["text","html"])
+      and (.toRecipients.items.properties.emailAddress.properties | has("address")))' "$TOOLS_JSON" > /dev/null
+  # move: userId and messageId in the path, body.DestinationId (capitalised as client.js has it)
+  jq -e '.tools[] | select(.name == "move-shared-mailbox-message") | .inputSchema.properties
+    | (.userId.in == "path") and (.messageId.in == "path") and (.body.properties | keys == ["DestinationId"])' \
+    "$TOOLS_JSON" > /dev/null
+  # upload: driveId and driveItemId in the path (URL-encoded by the server — fact 3), body a base64 string (fact 4)
+  jq -e '.tools[] | select(.name == "upload-file-content") | .inputSchema.properties
+    | (.driveId.in == "path") and (.driveItemId.in == "path") and (.body.type == "string")
+    and (.body.description | test("Base64"))' "$TOOLS_JSON" > /dev/null
 }
 
 # --- the fixture configuration ----------------------------------------------------------------------------
@@ -1529,8 +1569,8 @@ expected_enabled() {
 
 # --- mcp-wrapper.sh: the server start (Step 4, AC-34, AC-43, AC-44) ---------------------------------------------
 
-# Step 1's ENABLED_TOOLS, verbatim (plan 23 "Probe findings").
-STEP1_REGEX='^(create-shared-mailbox-draft|create-shared-mailbox-reply-draft|download-bytes-to-file|get-drive-delta|get-drive-item|get-drive-root-item|get-shared-mailbox-message|get-sharepoint-site-drive-by-id|list-drive-item-versions|list-folder-files|list-shared-mailbox-folder-messages|list-shared-mailbox-messages|list-sharepoint-site-drives|search-onedrive-files)$'
+# The ENABLED_TOOLS regex of Step R1 (Step 1's 14 plus send-shared-mailbox-mail and move-shared-mailbox-message)
+R1_REGEX='^(create-shared-mailbox-draft|create-shared-mailbox-reply-draft|download-bytes-to-file|get-drive-delta|get-drive-item|get-drive-root-item|get-shared-mailbox-message|get-sharepoint-site-drive-by-id|list-drive-item-versions|list-folder-files|list-shared-mailbox-folder-messages|list-shared-mailbox-messages|list-sharepoint-site-drives|move-shared-mailbox-message|search-onedrive-files|send-shared-mailbox-mail)$'
 SERVER_ENV_NAMES='ENABLED_TOOLS HOME LC_ALL MS365_MCP_CLIENT_ID MS365_MCP_OAUTH_TOKEN MS365_MCP_ORG_MODE MS365_MCP_TENANT_ID MS365_MCP_TOKEN_CACHE_PATH MS365_MCP_USE_KEYTAR NODE_OPTIONS PATH'
 AUTH_LINE='auth tools registered outside the filter: list-accounts login logout remove-account select-account verify-login (denied by settings)'
 
@@ -1620,20 +1660,20 @@ server_log() { # the server stub's log, or nothing
     "PATH=/usr/bin:/bin:$HOME/.local/bin" "MS365_MCP_TOKEN_CACHE_PATH=$STATE/never-written.json"; do
     grep -qxF "value=$name" <<< "$log" || { echo "missing value=$name"; echo "$log"; return 1; }
   done
-  [ "$(grep '^value=ENABLED_TOOLS=' <<< "$log")" = "value=ENABLED_TOOLS=$STEP1_REGEX" ] || { echo "$log"; return 1; }
+  [ "$(grep '^value=ENABLED_TOOLS=' <<< "$log")" = "value=ENABLED_TOOLS=$R1_REGEX" ] || { echo "$log"; return 1; }
   ! grep -qE 'EXPECTED_USERNAME|ALLOWED_SCOPES|MS365_MCP_HTTP|READ_ONLY|GH_TOKEN|CREDENTIALS_DIRECTORY|ZYGGY_' <<< "$log"
   [ ! -e "$STATE/never-written.json" ]
   # one token request, nothing else
   [ "$(urls)" = "POST $TOKEN_URL" ] || { urls; return 1; }
 }
 
-@test "wrapper --probe: tools: 14, the enabled names sorted, the six auth tools reported outside the filter, the env names; exit 0" {
+@test "wrapper --probe: tools: 16, the enabled names sorted, the six auth tools reported outside the filter, the env names; exit 0" {
   install_m365_server_stub
   run --separate-stderr wrapper --probe < /dev/null
   [ "$status" -eq 0 ] || { echo "$status $stderr / $output"; return 1; }
   [ "$stderr" = "key: file" ] || { echo "$stderr"; return 1; }
   local expected
-  expected="$(printf 'tools: 14\n'; cat "$ENABLED"; printf '%s\n' "$AUTH_LINE" "env: $SERVER_ENV_NAMES")"
+  expected="$(printf 'tools: 16\n'; cat "$ENABLED"; printf '%s\n' "$AUTH_LINE" "env: $SERVER_ENV_NAMES")"
   [ "$output" = "$expected" ] || { diff <(printf '%s\n' "$expected") <(printf '%s\n' "$output"); return 1; }
   # the handshake the server saw, and the token it got
   [ "$(grep '^rpc=' "$SERVER_STUB_LOG" | tr '\n' ' ')" = "rpc=initialize rpc=notifications/initialized rpc=tools/list " ] ||
@@ -1648,7 +1688,7 @@ server_log() { # the server stub's log, or nothing
   [ "$stripped" != "$PATH" ] || { echo "stub dir not on PATH: $PATH"; return 1; }
   PATH="$stripped" run --separate-stderr wrapper --probe < /dev/null
   [ "$status" -eq 0 ] || { echo "$status $stderr / $output"; return 1; }
-  [ "$(head -n 1 <<< "$output")" = 'tools: 14' ] || { echo "$output"; return 1; }
+  [ "$(head -n 1 <<< "$output")" = 'tools: 16' ] || { echo "$output"; return 1; }
   grep -qx 'token=match' "$SERVER_STUB_LOG"
 }
 
@@ -1673,7 +1713,7 @@ server_log() { # the server stub's log, or nothing
   ZYGGY_HOOKS=off run --separate-stderr wrapper < /dev/null
   [ "$status" -eq 0 ] && grep -qx 'token=match' "$SERVER_STUB_LOG" || { echo "$status $stderr"; return 1; }
   ZYGGY_HOOKS=off run --separate-stderr wrapper --probe < /dev/null
-  [ "$status" -eq 0 ] && [ "${output%%$'\n'*}" = "tools: 14" ] || { echo "$status $output $stderr"; return 1; }
+  [ "$status" -eq 0 ] && [ "${output%%$'\n'*}" = "tools: 16" ] || { echo "$status $output $stderr"; return 1; }
 }
 
 # --- propose.sh and the m365-approve.sh consent terminal (Step 5) -----------------------------------------------------
@@ -2584,18 +2624,19 @@ expected_proposals_section() {
   [ ! -e "$EXECUTIONS" ]
 }
 
-@test "brief: the claude argv is exactly -p \"/morning-brief <mailbox> <inbox id> <drive ids> <run-dir>\" with the contracted flags, the 14 m365 tools + state/facts/parse/propose + Read(state) allowed and the 330 + graph.sh + m365-approve.sh + the outbound channels denied; the child has ZYGGY_HOOKS=off, ZYGGY_M365_ORIGIN=brief 2026-09-30, the run dir and the four keys, stdin /dev/null (no tty), the project directory as cwd, no token" {
+@test "brief: the claude argv is exactly -p \"/morning-brief <mailbox> <inbox id> <drive ids> <run-dir>\" with the contracted flags, the 14 read/Draft m365 tools + state/facts/parse/propose + Read(state) allowed and the 328 + the two action tools + graph.sh + m365-approve.sh + the outbound channels denied; the child has ZYGGY_HOOKS=off, ZYGGY_M365_ORIGIN=brief 2026-09-30, the run dir and the four keys, stdin /dev/null (no tty), the project directory as cwd, no token" {
   local allow deny run_dir want
   brief_setup
   run --separate-stderr brief
   [ "$status" -eq 0 ] || { echo "$status $output $stderr"; return 1; }
   allow="$( {
-    sed 's/^/mcp__m365__/' "$ENABLED"
+    grep -vxE "$ACTION_RE" "$ENABLED" | sed 's/^/mcp__m365__/'
     printf '%s\n' 'Bash(.claude/skills/m365/state.sh *)' 'Bash(.claude/skills/m365/facts.sh *)' \
       'Bash(.claude/skills/m365/parse.sh *)' 'Bash(.claude/skills/m365/propose.sh *)' 'Read(~/.local/state/zyggy/m365/**)'
   } | paste -sd, -)"
   deny="$( {
     sed 's/^/mcp__m365__/' "$EXCLUDED"
+    grep -xE "$ACTION_RE" "$ENABLED" | sed 's/^/mcp__m365__/'
     printf '%s\n' 'Bash(.claude/skills/m365/graph.sh *)' 'Bash(.claude/skills/m365/m365-approve.sh *)' WebFetch WebSearch \
       mcp__plugin_playwright_playwright Edit Write NotebookEdit 'Bash(curl *)' 'Bash(wget *)' 'Bash(git *)' 'Bash(npm *)' \
       'Bash(npx *)' 'Bash(node *)'

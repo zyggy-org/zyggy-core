@@ -364,13 +364,13 @@ m365_lib_value() { # m365_lib_value <bash expression> → printed by a shell tha
   bash -c 'source "$1" && source "$2" && eval "printf \"%s\\n\" $3"' _ "$HOOKS/lib.sh" "$M365_LIB" "$1"
 }
 
-@test "repo: permissions.deny = the three path rules, the two m365 Bash rules, then mcp__m365__ + every line of excluded-tools.txt (330), in that order" {
+@test "repo: permissions.deny = the three path rules, the two m365 Bash rules, then mcp__m365__ + every line of excluded-tools.txt (328), in that order" {
   local s="$REPO_ROOT/.claude/settings.json"
   jq -e '.permissions.deny[0:5] == ["Read(~/.config/zyggy/**)","Edit(~/.cache/zyggy/repos/**)","Edit(~/.local/state/zyggy/**)","Bash(.claude/skills/m365/graph.sh *)","Bash(.claude/skills/m365/m365-approve.sh *)"]' "$s"
-  [ "$(wc -l < "$M365_TOOLS/excluded-tools.txt")" -eq 330 ]
+  [ "$(wc -l < "$M365_TOOLS/excluded-tools.txt")" -eq 328 ]
   diff <(jq -r '.permissions.deny[5:][]' "$s") <(sed 's/^/mcp__m365__/' "$M365_TOOLS/excluded-tools.txt")
-  [ "$(jq '.permissions.deny | length' "$s")" -eq 335 ]
-  [ "$(jq '.permissions.deny | unique | length' "$s")" -eq 335 ]
+  [ "$(jq '.permissions.deny | length' "$s")" -eq 333 ]
+  [ "$(jq '.permissions.deny | unique | length' "$s")" -eq 333 ]
 }
 
 @test "repo: the deny list names graph-batch and the six auth tools the server registers outside ENABLED_TOOLS" {
@@ -390,16 +390,17 @@ m365_lib_value() { # m365_lib_value <bash expression> → printed by a shell tha
   [ -z "$output" ] || { echo "enabled and denied: $output"; return 1; }
 }
 
-@test "repo: no enabled tool name sends, moves, deletes, updates, forwards or replies" {
-  run grep -nE 'send|move|delete|update|forward|reply-(shared|mail|all)' "$M365_TOOLS/enabled-tools.txt"
+@test "repo: no enabled tool name sends, moves, deletes, updates, forwards or replies but the two D7 action tools (Step R1)" {
+  run grep -nE 'send|move|delete|update|forward|reply-(shared|mail|all)|upload' \
+    <(grep -vxE 'send-shared-mailbox-mail|move-shared-mailbox-message' "$M365_TOOLS/enabled-tools.txt")
   [ "$status" -eq 1 ] || { echo "$output"; return 1; }
 }
 
-@test "repo: m365-lib.sh's ENABLED_TOOLS is Step 1's regex, = ^( + enabled-tools.txt joined by | + )\$; its two arrays are the fixture lists" {
-  local step1='^(create-shared-mailbox-draft|create-shared-mailbox-reply-draft|download-bytes-to-file|get-drive-delta|get-drive-item|get-drive-root-item|get-shared-mailbox-message|get-sharepoint-site-drive-by-id|list-drive-item-versions|list-folder-files|list-shared-mailbox-folder-messages|list-shared-mailbox-messages|list-sharepoint-site-drives|search-onedrive-files)$'
+@test "repo: m365-lib.sh's ENABLED_TOOLS is Step R1's regex, = ^( + enabled-tools.txt joined by | + )\$; its two arrays are the fixture lists" {
+  local r1='^(create-shared-mailbox-draft|create-shared-mailbox-reply-draft|download-bytes-to-file|get-drive-delta|get-drive-item|get-drive-root-item|get-shared-mailbox-message|get-sharepoint-site-drive-by-id|list-drive-item-versions|list-folder-files|list-shared-mailbox-folder-messages|list-shared-mailbox-messages|list-sharepoint-site-drives|move-shared-mailbox-message|search-onedrive-files|send-shared-mailbox-mail)$'
   local regex
   regex="$(m365_lib_value '"$ZY_M365_ENABLED_TOOLS"')"
-  [ "$regex" = "$step1" ] || { echo "$regex"; return 1; }
+  [ "$regex" = "$r1" ] || { echo "$regex"; return 1; }
   [ "$regex" = "^($(paste -sd'|' "$M365_TOOLS/enabled-tools.txt"))$" ] || { echo "$regex"; return 1; }
   diff <(m365_lib_value '"${ZY_M365_TOOLS_ENABLED[@]}"') "$M365_TOOLS/enabled-tools.txt"
   diff <(m365_lib_value '"${ZY_M365_TOOLS_EXCLUDED[@]}"') "$M365_TOOLS/excluded-tools.txt"
@@ -510,12 +511,19 @@ M365_SKILLS=(morning-brief mail-backfill files-backfill m365)
   ! grep -viE 'never' <<< "$output"
 }
 
-@test "repo: the run allow and deny constants match the fixture lists; propose.sh is allowed in the brief only; graph.sh and m365-approve.sh are denied in every run" {
-  local r allow deny
-  diff <(m365_lib_value '"${ZY_M365_BRIEF_ALLOW[@]}"' | sed -n 's/^mcp__m365__//p') "$M365_TOOLS/enabled-tools.txt"
+@test "repo: the run allow and deny constants match the fixture lists; the D7 action tools are denied in every run; propose.sh is allowed in the brief only; graph.sh and m365-approve.sh are denied in every run" {
+  local r t allow deny
+  diff <(m365_lib_value '"${ZY_M365_BRIEF_ALLOW[@]}"' | sed -n 's/^mcp__m365__//p') \
+    <(grep -vxE 'send-shared-mailbox-mail|move-shared-mailbox-message' "$M365_TOOLS/enabled-tools.txt")
+  diff <(m365_lib_value '"${ZY_M365_ACTION_TOOLS[@]}"') \
+    <(printf '%s\n' move-shared-mailbox-message send-shared-mailbox-mail upload-file-content)
   for r in BRIEF MAIL_BACKFILL FILES_BACKFILL; do
     allow="$(m365_lib_value "\"\${ZY_M365_${r}_ALLOW[@]}\"")"
     deny="$(m365_lib_value "\"\${ZY_M365_${r}_DENY[@]}\"")"
+    # the D7 action tools are denied in every run, each exactly once
+    for t in move-shared-mailbox-message send-shared-mailbox-mail upload-file-content; do
+      [ "$(grep -cxF "mcp__m365__$t" <<< "$deny")" -eq 1 ] || { echo "$r: $t not denied exactly once"; return 1; }
+    done
     # every excluded tool is denied; no rule is both allowed and denied; every allowed tool is an enabled one
     run comm -23 <(sed 's/^/mcp__m365__/' "$M365_TOOLS/excluded-tools.txt" | LC_ALL=C sort) <(LC_ALL=C sort <<< "$deny")
     [ -z "$output" ] || { echo "$r: excluded not denied: $output"; return 1; }

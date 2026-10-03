@@ -29,7 +29,7 @@ whether the password matched — never the token. The real-git tests clone bare 
 No network, no tenant, no real `claude`. Fixture mailbox `alice@acme.example` in `fixtures/m365/m365.json` (three
 fixture GUIDs, the only ones in the tree).
 
-- **The pinned tool lists** `fixtures/m365/tools-0.157.2.txt`, `enabled-tools.txt` (14), `excluded-tools.txt` (330)
+- **The pinned tool lists** `fixtures/m365/tools-0.157.2.txt`, `enabled-tools.txt` (16), `excluded-tools.txt` (328)
   and `tools-list-0.157.2.json` were generated from the package's endpoint list, never typed; `repo.bats` proves they
   partition and that the deny list, `ENABLED_TOOLS` and the run allow/deny lists derive from them.
 - **The curl stub** (`fixtures/graph/curl-stub.sh`, installed by `install_curl_stub`) is reached through `env -i`, so

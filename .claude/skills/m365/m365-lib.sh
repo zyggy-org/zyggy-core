@@ -324,10 +324,11 @@ zy_m365_executed() { # zy_m365_executed <row id>
 
 # --- the pinned server's tool partition (plan 23 Step 1; generated from tests/fixtures/m365/*-tools.txt, never typed) ----
 
-# The ENABLED_TOOLS filter handed to @softeria/ms-365-mcp-server@0.157.2: the 14 allowlisted tools, anchored. The
-# server compiles it case-insensitively and exits on an invalid one. repo.bats proves it equals the fixture list.
+# The ENABLED_TOOLS filter handed to @softeria/ms-365-mcp-server@0.157.2: the 16 allowlisted tools (Step 1's 14 plus the
+# two D7 action tools the pinned server can carry, Step R1), anchored. The server compiles it case-insensitively and
+# exits on an invalid one. repo.bats proves it equals the fixture list.
 # shellcheck disable=SC2034 # read by mcp-wrapper.sh
-readonly ZY_M365_ENABLED_TOOLS='^(create-shared-mailbox-draft|create-shared-mailbox-reply-draft|download-bytes-to-file|get-drive-delta|get-drive-item|get-drive-root-item|get-shared-mailbox-message|get-sharepoint-site-drive-by-id|list-drive-item-versions|list-folder-files|list-shared-mailbox-folder-messages|list-shared-mailbox-messages|list-sharepoint-site-drives|search-onedrive-files)$'
+readonly ZY_M365_ENABLED_TOOLS='^(create-shared-mailbox-draft|create-shared-mailbox-reply-draft|download-bytes-to-file|get-drive-delta|get-drive-item|get-drive-root-item|get-shared-mailbox-message|get-sharepoint-site-drive-by-id|list-drive-item-versions|list-folder-files|list-shared-mailbox-folder-messages|list-shared-mailbox-messages|list-sharepoint-site-drives|move-shared-mailbox-message|search-onedrive-files|send-shared-mailbox-mail)$'
 # shellcheck disable=SC2034 # the allowlist as names (mcp-wrapper.sh --probe splits the offered tools with it)
 readonly -a ZY_M365_TOOLS_ENABLED=(
   create-shared-mailbox-draft
@@ -343,7 +344,9 @@ readonly -a ZY_M365_TOOLS_ENABLED=(
   list-shared-mailbox-folder-messages
   list-shared-mailbox-messages
   list-sharepoint-site-drives
+  move-shared-mailbox-message
   search-onedrive-files
+  send-shared-mailbox-mail
 )
 # shellcheck disable=SC2034 # every other tool of the pinned version: unloaded by the filter and denied by name in
 # the template settings (permissions.deny, mcp__m365__<name>)
@@ -607,7 +610,6 @@ readonly -a ZY_M365_TOOLS_EXCLUDED=(
   merge-excel-range
   move-mail-message
   move-rename-onedrive-item
-  move-shared-mailbox-message
   parse-teams-url
   pin-chat-message
   reauthorize-subscription
@@ -631,7 +633,6 @@ readonly -a ZY_M365_TOOLS_EXCLUDED=(
   send-mail
   send-my-activity-notification
   send-shared-mailbox-draft
-  send-shared-mailbox-mail
   set-channel-message-reaction
   set-chat-message-reaction
   set-my-presence
@@ -682,6 +683,10 @@ readonly -a ZY_M365_TOOLS_EXCLUDED=(
 # shellcheck disable=SC2034 # the six auth tools the server registers outside the filter in stdio mode (Step 1
 # finding): the settings deny list is their only defence; mcp-wrapper.sh --probe reports them
 readonly -a ZY_M365_AUTH_TOOLS=(list-accounts login logout remove-account select-account verify-login)
+# shellcheck disable=SC2034 # the D7 action tools (spec 23): asked in the session, guarded and logged by the hooks,
+# denied in every unattended run. upload-file-content is among them although the pinned server cannot carry its
+# new-file form (Step R1, fact 3): it stays excluded, so it is denied twice.
+readonly -a ZY_M365_ACTION_TOOLS=(move-shared-mailbox-message send-shared-mailbox-mail upload-file-content)
 
 # --- the unattended claude runs (brief.sh, mail-backfill.sh, files-backfill.sh) ---------------------------------------
 
@@ -691,15 +696,27 @@ readonly -a ZY_M365_RUN_DENY_COMMON=('Bash(.claude/skills/m365/graph.sh *)' 'Bas
   WebFetch WebSearch mcp__plugin_playwright_playwright Edit Write NotebookEdit 'Bash(curl *)' 'Bash(wget *)' 'Bash(git *)'
   'Bash(npm *)' 'Bash(npx *)' 'Bash(node *)')
 
-# What a morning-brief run's model may use (spec 23 run allowlist): the 14 tools the server loads, the four scripts it
-# writes through (state, facts, parse, and propose — a proposal row, never an execution) and reads of the state dir.
+# What a morning-brief run's model may use (spec 23 run allowlist): the 14 read/Draft tools the server loads (never an
+# action tool), the four scripts it writes through (state, facts, parse, and propose — a proposal row, never an
+# execution) and reads of the state dir.
 ZY_M365_BRIEF_ALLOW=()
-for zy_t in "${ZY_M365_TOOLS_ENABLED[@]}"; do ZY_M365_BRIEF_ALLOW+=("mcp__m365__$zy_t"); done
+for zy_t in "${ZY_M365_TOOLS_ENABLED[@]}"; do
+  case " ${ZY_M365_ACTION_TOOLS[*]} " in
+    *" $zy_t "*) ;;
+    *) ZY_M365_BRIEF_ALLOW+=("mcp__m365__$zy_t") ;;
+  esac
+done
 ZY_M365_BRIEF_ALLOW+=('Bash(.claude/skills/m365/state.sh *)' 'Bash(.claude/skills/m365/facts.sh *)'
   'Bash(.claude/skills/m365/parse.sh *)' 'Bash(.claude/skills/m365/propose.sh *)' 'Read(~/.local/state/zyggy/m365/**)')
-# What it may never use: every other tool of the pinned server and the common deny list.
+# What it may never use: every other tool of the pinned server, the action tools the server loads, and the common
+# deny list — every m365 tool is named exactly once.
 ZY_M365_BRIEF_DENY=()
 for zy_t in "${ZY_M365_TOOLS_EXCLUDED[@]}"; do ZY_M365_BRIEF_DENY+=("mcp__m365__$zy_t"); done
+for zy_t in "${ZY_M365_TOOLS_ENABLED[@]}"; do
+  case " ${ZY_M365_ACTION_TOOLS[*]} " in
+    *" $zy_t "*) ZY_M365_BRIEF_DENY+=("mcp__m365__$zy_t") ;;
+  esac
+done
 ZY_M365_BRIEF_DENY+=("${ZY_M365_RUN_DENY_COMMON[@]}")
 
 # What a mail-backfill batch's model may use (owner-started, may run unwatched, facts only): the three /users mail
@@ -709,8 +726,9 @@ ZY_M365_MAIL_BACKFILL_ALLOW=()
 for zy_t in "${ZY_M365_MAIL_READ_TOOLS[@]}"; do ZY_M365_MAIL_BACKFILL_ALLOW+=("mcp__m365__$zy_t"); done
 ZY_M365_MAIL_BACKFILL_ALLOW+=('Bash(.claude/skills/m365/state.sh *)' 'Bash(.claude/skills/m365/facts.sh *)'
   'Read(~/.local/state/zyggy/m365/**)')
-# What it may never use: the 330, the other eleven allowlisted tools (the two Draft tools, the drive tools,
-# download-bytes-to-file), parse.sh, propose.sh and the common deny list — every m365 tool is named exactly once.
+# What it may never use: the 328, the other thirteen allowlisted tools (the two Draft tools, the drive tools,
+# download-bytes-to-file, the two action tools), parse.sh, propose.sh and the common deny list — every m365 tool is
+# named exactly once.
 ZY_M365_MAIL_BACKFILL_DENY=()
 for zy_t in "${ZY_M365_TOOLS_EXCLUDED[@]}"; do ZY_M365_MAIL_BACKFILL_DENY+=("mcp__m365__$zy_t"); done
 for zy_t in "${ZY_M365_TOOLS_ENABLED[@]}"; do
@@ -724,9 +742,9 @@ ZY_M365_MAIL_BACKFILL_DENY+=('Bash(.claude/skills/m365/parse.sh *)' 'Bash(.claud
 
 # What a files-backfill batch's model may use (owner-started, may run unwatched, facts only; plan step 20a): the batch
 # arrives in the prompt — files-backfill.sh lists, filters and keeps the cursor — so only download-bytes-to-file (a
-# disk write bounded by the run directory and parse.sh), facts.sh and parse.sh. What it may never use: the 330, the
-# 13 other allowlisted tools (the drive reads, the mail reads, the two Draft tools), state.sh, propose.sh and the
-# common deny list — every m365 tool is named exactly once.
+# disk write bounded by the run directory and parse.sh), facts.sh and parse.sh. What it may never use: the 328, the
+# 15 other allowlisted tools (the drive reads, the mail reads, the two Draft tools, the two action tools), state.sh,
+# propose.sh and the common deny list — every m365 tool is named exactly once.
 ZY_M365_FILES_BACKFILL_ALLOW=()
 ZY_M365_FILES_BACKFILL_DENY=()
 for zy_t in "${ZY_M365_TOOLS_EXCLUDED[@]}"; do ZY_M365_FILES_BACKFILL_DENY+=("mcp__m365__$zy_t"); done

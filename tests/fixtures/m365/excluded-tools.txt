@@ -257,7 +257,6 @@ logout
 merge-excel-range
 move-mail-message
 move-rename-onedrive-item
-move-shared-mailbox-message
 parse-teams-url
 pin-chat-message
 reauthorize-subscription
@@ -281,7 +280,6 @@ send-draft-message
 send-mail
 send-my-activity-notification
 send-shared-mailbox-draft
-send-shared-mailbox-mail
 set-channel-message-reaction
 set-chat-message-reaction
 set-my-presence

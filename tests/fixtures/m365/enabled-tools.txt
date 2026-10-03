@@ -11,4 +11,6 @@ list-folder-files
 list-shared-mailbox-folder-messages
 list-shared-mailbox-messages
 list-sharepoint-site-drives
+move-shared-mailbox-message
 search-onedrive-files
+send-shared-mailbox-mail

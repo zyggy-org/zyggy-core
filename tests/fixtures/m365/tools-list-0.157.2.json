@@ -3,14 +3,14 @@
     "package": "@softeria/ms-365-mcp-server",
     "version": "0.157.2",
     "integrity": "sha512-07Elnb0oIqgalywK6pK7KNxUuLDoOs+mraMCjluM3jeUYeO5DMkpS55HgdKiYoLAlpyxxytWFqhiDUVfah7ghg==",
-    "derivation": "generated from dist/endpoints.json (one tool per toolName, --org-mode), the UTILITY_TOOLS of dist/graph-tools.js and the auth tools of dist/auth-tools.js; descriptions are '<METHOD> <Graph path> — <text>' cut to 80; input schemas kept for the tools the prompts use",
+    "derivation": "generated from dist/endpoints.json (one tool per toolName, --org-mode), the UTILITY_TOOLS of dist/graph-tools.js and the auth tools of dist/auth-tools.js; descriptions are '<METHOD> <Graph path> — <text>' cut to 80; input schemas kept for the tools the prompts use; the three D7 action tools' schemas rendered from dist/generated/client.js (plan 23 Step R1)",
     "counts": {
       "endpoints": 334,
       "utilities": 4,
       "auth": 6,
       "all": 344,
-      "enabled": 14,
-      "excluded": 330
+      "enabled": 16,
+      "excluded": 328
     }
   },
   "tools": [
@@ -3013,7 +3013,36 @@
       "name": "move-shared-mailbox-message",
       "description": "POST /users/{user-id}/messages/{message-id}/move — Move a message in another us…",
       "inputSchema": {
-        "type": "object"
+        "type": "object",
+        "properties": {
+          "body": {
+            "type": "object",
+            "properties": {
+              "DestinationId": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": true
+          },
+          "userId": {
+            "type": "string",
+            "in": "path"
+          },
+          "messageId": {
+            "type": "string",
+            "in": "path"
+          },
+          "includeHeaders": {
+            "type": "boolean"
+          },
+          "excludeResponse": {
+            "type": "boolean"
+          },
+          "confirm": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": true
       },
       "annotations": {
         "readOnlyHint": false
@@ -3263,7 +3292,197 @@
       "name": "send-shared-mailbox-mail",
       "description": "POST /users/{user-id}/sendMail — Send the message specified in the request body…",
       "inputSchema": {
-        "type": "object"
+        "type": "object",
+        "properties": {
+          "body": {
+            "type": "object",
+            "properties": {
+              "Message": {
+                "type": "object",
+                "description": "[Note: Simplified from 35 properties to 25 most common ones]",
+                "properties": {
+                  "id": {},
+                  "createdDateTime": {},
+                  "lastModifiedDateTime": {},
+                  "body": {
+                    "type": "object",
+                    "properties": {
+                      "content": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "contentType": {
+                        "type": "string",
+                        "enum": [
+                          "text",
+                          "html"
+                        ]
+                      }
+                    },
+                    "additionalProperties": true
+                  },
+                  "subject": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "attachments": {
+                    "type": "array",
+                    "items": {
+                      "type": "object"
+                    }
+                  },
+                  "singleValueExtendedProperties": {},
+                  "multiValueExtendedProperties": {},
+                  "importance": {},
+                  "from": {
+                    "type": "object",
+                    "properties": {
+                      "emailAddress": {
+                        "type": "object",
+                        "properties": {
+                          "address": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "name": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "additionalProperties": true
+                      }
+                    },
+                    "additionalProperties": true
+                  },
+                  "toRecipients": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "emailAddress": {
+                          "type": "object",
+                          "properties": {
+                            "address": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "name": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            }
+                          },
+                          "additionalProperties": true
+                        }
+                      },
+                      "additionalProperties": true
+                    }
+                  },
+                  "categories": {},
+                  "changeKey": {},
+                  "bccRecipients": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "emailAddress": {
+                          "type": "object",
+                          "properties": {
+                            "address": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "name": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            }
+                          },
+                          "additionalProperties": true
+                        }
+                      },
+                      "additionalProperties": true
+                    }
+                  },
+                  "bodyPreview": {},
+                  "ccRecipients": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "emailAddress": {
+                          "type": "object",
+                          "properties": {
+                            "address": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "name": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            }
+                          },
+                          "additionalProperties": true
+                        }
+                      },
+                      "additionalProperties": true
+                    }
+                  },
+                  "conversationId": {},
+                  "conversationIndex": {},
+                  "flag": {},
+                  "hasAttachments": {},
+                  "inferenceClassification": {},
+                  "internetMessageHeaders": {},
+                  "internetMessageId": {},
+                  "isDeliveryReceiptRequested": {},
+                  "isDraft": {}
+                },
+                "additionalProperties": true
+              },
+              "SaveToSentItems": {
+                "type": [
+                  "boolean",
+                  "null"
+                ],
+                "default": false
+              }
+            },
+            "additionalProperties": true
+          },
+          "userId": {
+            "type": "string",
+            "in": "path"
+          },
+          "includeHeaders": {
+            "type": "boolean"
+          },
+          "excludeResponse": {
+            "type": "boolean"
+          },
+          "confirm": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": true
       },
       "annotations": {
         "readOnlyHint": false
@@ -3703,7 +3922,31 @@
       "name": "upload-file-content",
       "description": "PUT /drives/{drive-id}/items/{driveItem-id}/content — The content stream, if th…",
       "inputSchema": {
-        "type": "object"
+        "type": "object",
+        "properties": {
+          "body": {
+            "type": "string",
+            "description": "Base64-encoded file content. The server decodes it and PUTs the raw bytes to Microsoft Graph."
+          },
+          "driveId": {
+            "type": "string",
+            "in": "path"
+          },
+          "driveItemId": {
+            "type": "string",
+            "in": "path"
+          },
+          "includeHeaders": {
+            "type": "boolean"
+          },
+          "excludeResponse": {
+            "type": "boolean"
+          },
+          "confirm": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": true
       },
       "annotations": {
         "readOnlyHint": false

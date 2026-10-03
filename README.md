@@ -58,7 +58,7 @@ consent files `proposals.jsonl`, `approvals.jsonl`, `executions.jsonl`).
   interactive session's shell could fake a terminal and write an approval row) — that residual risk is accepted by
   the owner and bounded by the template's deny rules and `security.md`, not by the scripts.
 - The `m365` tool lists are generated from the pinned server, never typed: `ENABLED_TOOLS`, the `m365-lib.sh` arrays
-  and the 330 `mcp__m365__*` deny rules of `.claude/settings.json` derive from `tests/fixtures/m365/*-tools.txt`, and
+  and the 328 `mcp__m365__*` deny rules of `.claude/settings.json` derive from `tests/fixtures/m365/*-tools.txt`, and
   `tests/repo.bats` proves they agree (the six auth tools and `graph-batch` stay denied).
 
 ## Instance-owned paths
