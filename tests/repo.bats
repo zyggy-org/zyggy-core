@@ -17,10 +17,10 @@ load helpers
   # every Bash command starts in the project directory, so a cd into a clone never persists (spec 32)
   jq -e '.env == {"PLAYWRIGHT_MCP_HEADLESS":"true","PLAYWRIGHT_MCP_BROWSER":"chromium","PLAYWRIGHT_MCP_ISOLATED":"true","CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR":"1"}' "$s"
   # the model's file tools never read the GitHub credential and never edit a clone (spec 32); the m365 rules that
-  # follow them are asserted by the m365 tests below (spec 23)
-  jq -e '.permissions | keys == ["deny"]' "$s"
+  # follow them and the ask rules of the D7 action tools are asserted by the m365 tests below (spec 23)
+  jq -e '.permissions | keys == ["ask","deny"]' "$s"
   jq -e '.permissions.deny[0:2] == ["Read(~/.config/zyggy/**)","Edit(~/.cache/zyggy/repos/**)"]' "$s"
-  jq -e '.hooks | keys == ["SessionStart","Stop"]' "$s"
+  jq -e '.hooks | keys == ["PostToolUse","PreToolUse","SessionStart","Stop"]' "$s"
   jq -e '.hooks.SessionStart | length == 1' "$s"
   jq -e '.hooks.SessionStart[0].matcher == "startup|resume|clear|compact"' "$s"
   jq -e '.hooks.SessionStart[0].hooks | map(.args[0]) == ["identity","index","daily"]' "$s"
@@ -364,13 +364,37 @@ m365_lib_value() { # m365_lib_value <bash expression> → printed by a shell tha
   bash -c 'source "$1" && source "$2" && eval "printf \"%s\\n\" $3"' _ "$HOOKS/lib.sh" "$M365_LIB" "$1"
 }
 
-@test "repo: permissions.deny = the three path rules, the two m365 Bash rules, then mcp__m365__ + every line of excluded-tools.txt (328), in that order" {
+@test "repo: permissions.deny = the three path rules, the graph.sh Bash rule, then mcp__m365__ + every line of excluded-tools.txt (328), in that order (AC-37)" {
   local s="$REPO_ROOT/.claude/settings.json"
-  jq -e '.permissions.deny[0:5] == ["Read(~/.config/zyggy/**)","Edit(~/.cache/zyggy/repos/**)","Edit(~/.local/state/zyggy/**)","Bash(.claude/skills/m365/graph.sh *)","Bash(.claude/skills/m365/m365-approve.sh *)"]' "$s"
+  jq -e '.permissions.deny[0:4] == ["Read(~/.config/zyggy/**)","Edit(~/.cache/zyggy/repos/**)","Edit(~/.local/state/zyggy/**)","Bash(.claude/skills/m365/graph.sh *)"]' "$s"
   [ "$(wc -l < "$M365_TOOLS/excluded-tools.txt")" -eq 328 ]
-  diff <(jq -r '.permissions.deny[5:][]' "$s") <(sed 's/^/mcp__m365__/' "$M365_TOOLS/excluded-tools.txt")
-  [ "$(jq '.permissions.deny | length' "$s")" -eq 333 ]
-  [ "$(jq '.permissions.deny | unique | length' "$s")" -eq 333 ]
+  diff <(jq -r '.permissions.deny[4:][]' "$s") <(sed 's/^/mcp__m365__/' "$M365_TOOLS/excluded-tools.txt")
+  [ "$(jq '.permissions.deny | length' "$s")" -eq 332 ]
+  [ "$(jq '.permissions.deny | unique | length' "$s")" -eq 332 ]
+  ! grep -qE 'm365-approve|propose' "$s"
+}
+
+@test "repo: permissions.ask = the D7 action tools the server loads (send, move); ask ⊆ enabled, ask ∩ deny = ∅; no mcp__m365__ in any allow list (template, instance); no PermissionRequest hook; PreToolUse m365-guard.sh and PostToolUse m365-log.sh in exec form with the action-tool matcher and timeout 20 (AC-37)" {
+  local s="$REPO_ROOT/.claude/settings.json" i="$REPO_ROOT/instance/settings.local.json" e m f
+  cmp "$s" <(jq --indent 2 . "$s")
+  jq -e '.permissions.ask == ["mcp__m365__send-shared-mailbox-mail","mcp__m365__move-shared-mailbox-message"]' "$s"
+  run comm -23 <(jq -r '.permissions.ask[] | sub("^mcp__m365__"; "")' "$s" | LC_ALL=C sort) <(LC_ALL=C sort "$M365_TOOLS/enabled-tools.txt")
+  [ -z "$output" ] || { echo "asked but not enabled: $output"; return 1; }
+  run comm -12 <(jq -r '.permissions.ask[]' "$s" | LC_ALL=C sort) <(jq -r '.permissions.deny[]' "$s" | LC_ALL=C sort)
+  [ -z "$output" ] || { echo "asked and denied: $output"; return 1; }
+  # the third action tool stays denied with the excluded tools (Step R1, fact 3)
+  jq -e '.permissions.deny | index("mcp__m365__upload-file-content") != null' "$s"
+  for f in "$s" "$i"; do
+    [ -f "$f" ] || continue
+    jq -e '[.permissions.allow // [] | .[] | select(startswith("mcp__m365__"))] == []' "$f" || { echo "m365 tool allowed in $f"; return 1; }
+  done
+  jq -e '.hooks | has("PermissionRequest") | not' "$s"
+  m='^mcp__m365__(send-shared-mailbox-mail|upload-file-content|move-shared-mailbox-message)$'
+  for e in PreToolUse:m365-guard.sh PostToolUse:m365-log.sh; do
+    jq -e --arg ev "${e%%:*}" --arg h "${e#*:}" --arg m "$m" '.hooks[$ev] == [{matcher: $m, hooks: [{type: "command",
+      command: ("${CLAUDE_PROJECT_DIR}/.claude/hooks/" + $h), timeout: 20}]}]' "$s" || { echo "hook entry: $e"; return 1; }
+    [ -x "$REPO_ROOT/.claude/hooks/${e#*:}" ] || { echo "not executable: ${e#*:}"; return 1; }
+  done
 }
 
 @test "repo: the deny list names graph-batch and the six auth tools the server registers outside ENABLED_TOOLS" {

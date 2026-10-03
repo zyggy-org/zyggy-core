@@ -1,0 +1,1 @@
+{"session_id":"00000000-0000-0000-0000-000000000000","transcript_path":"/tmp/transcript.jsonl","cwd":"/w","permission_mode":"default","hook_event_name":"PreToolUse","tool_name":"mcp__m365__move-shared-mailbox-message","tool_input":{"userId":"alice@acme.example","messageId":"m1","body":{"DestinationId":"junkemail"}}}

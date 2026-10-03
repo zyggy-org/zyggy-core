@@ -1269,6 +1269,167 @@ server_log() { # the server stub's log, or nothing
   [ "$status" -eq 0 ] && [ "${output%%$'\n'*}" = "tools: 16" ] || { echo "$status $output $stderr"; return 1; }
 }
 
+# --- the D7 hooks: m365-guard.sh (PreToolUse) and m365-log.sh (PostToolUse) (Step R3, AC-35, AC-36) ---------------
+
+GUARD="$REPO_ROOT/.claude/hooks/m365-guard.sh"
+LOG_HOOK="$REPO_ROOT/.claude/hooks/m365-log.sh"
+
+# The guard on a fixture (hook-<name>.json) or on stdin; every stdout and stderr is kept for the leak check.
+guard_on() { # guard_on <fixture name>
+  run --separate-stderr "$GUARD" < "$M365_FIXTURES/hook-$1.json"
+  printf '%s\n%s\n' "$output" "$stderr" >> "$BATS_TEST_TMPDIR/guard-outputs"
+}
+
+deny_json() { # deny_json <reason> → the one refusal shape
+  jq -nc --arg r "m365-guard: refused: $1" \
+    '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $r}}'
+}
+
+assert_deny() { # assert_deny <fixture> <reason>
+  guard_on "$1"
+  [ "$status" -eq 0 ] && [ "$output" = "$(deny_json "$2")" ] ||
+    { printf 'fixture %s\nstatus %s\nstdout %s\nwant   %s\nstderr %s\n' "$1" "$status" "$output" "$(deny_json "$2")" "$stderr"; return 1; }
+}
+
+assert_defer() { # assert_defer <fixture> — no output, exit 0: the ask rule prompts
+  guard_on "$1"
+  [ "$status" -eq 0 ] && [ -z "$output" ] || { printf 'fixture %s\nstatus %s\nstdout %s\nstderr %s\n' "$1" "$status" "$output" "$stderr"; return 1; }
+}
+
+# A fixture with its upload content replaced by <n> decoded bytes (the size cases are built, not committed).
+upload_of_size() { # upload_of_size <n> <name>
+  head -c "$1" /dev/zero | tr '\0' 'x' | base64 -w0 > "$M365_FIXTURES_TMP/content-$2.b64"
+  jq -c --rawfile b "$M365_FIXTURES_TMP/content-$2.b64" '.tool_input.body = $b' "$M365_FIXTURES/hook-upload-clean.json" \
+    > "$M365_FIXTURES_TMP/hook-$2.json"
+}
+
+guard_matrix() { # the AC-35 matrix, run once per ZYGGY_HOOKS setting
+  local f
+  # send: the clean call defers; every way the prompt could mislead or the audit could be defeated is refused
+  for f in send-clean send-save-true send-lowercase-keys send-4000 send-10-recipients; do assert_defer "$f" || return 1; done
+  assert_deny send-attachment "attachments are not allowed"
+  assert_deny send-bcc "Bcc is not allowed"
+  assert_deny send-html "only plain-text bodies"
+  assert_deny send-no-contenttype "only plain-text bodies"
+  assert_deny send-long "body over 4000 characters"
+  assert_deny send-11-recipients "more than 10 recipients"
+  assert_deny send-save-false "saveToSentItems must stay true"
+  assert_deny send-other-mailbox "only the configured mailbox"
+  assert_deny send-malformed-address "malformed address"
+  assert_deny send-no-recipient "no recipient"
+  assert_deny send-duplicate-keys "the body names a field twice"
+  assert_deny send-stray-arg "unexpected argument bccRecipients"
+  assert_deny send-from "from, sender and replyTo are not allowed"
+  assert_deny send-headers "message field not allowed"
+  # upload (the guard's branch is written although the pinned server cannot carry the new-file form — Step R1, fact 3)
+  assert_defer upload-clean
+  assert_deny upload-exists "target exists (would overwrite)"
+  assert_deny upload-item-id "only the new-file form <parent-id>:/<name>:"
+  assert_deny upload-foreign-drive "drive not allowed"
+  for f in upload-name-slash upload-name-backslash upload-name-dotdot upload-name-control; do
+    assert_deny "$f" "invalid file name" || return 1
+  done
+  assert_deny upload-docx "extension not allowed"
+  assert_deny upload-not-base64 "content is not base64"
+  assert_deny upload-parent-file "parent is not a folder"
+  assert_deny upload-parent-absent "parent is not a folder"
+  upload_of_size 262144 upload-max
+  upload_of_size 262145 upload-big
+  run --separate-stderr "$GUARD" < "$M365_FIXTURES_TMP/hook-upload-max.json"
+  [ "$status" -eq 0 ] && [ -z "$output" ] || { echo "upload-max: $status $output $stderr"; return 1; }
+  run --separate-stderr "$GUARD" < "$M365_FIXTURES_TMP/hook-upload-big.json"
+  [ "$status" -eq 0 ] && [ "$output" = "$(deny_json "content over 262144 bytes")" ] || { echo "upload-big: $status $output $stderr"; return 1; }
+  # move: the three names and a non-excluded folder id defer; recoverable deletions, purges, excluded and unknown refuse
+  for f in move-deleteditems move-archive move-inbox move-folder-id move-lowercase-key; do assert_defer "$f" || return 1; done
+  for f in move-recoverable move-purges move-junkemail move-excluded-id move-unknown-id move-no-destination; do
+    assert_deny "$f" "destination not allowed" || return 1
+  done
+  assert_deny move-other-mailbox "only the configured mailbox"
+  # a tool the guard does not own passes untouched (the settings matcher never sends one)
+  assert_defer other-tool
+}
+
+@test "guard (AC-35): the matrix with ZYGGY_HOOKS unset and with ZYGGY_HOOKS=off — clean calls defer to the ask rule (no output, exit 0); every out-of-policy call gets exactly the deny JSON with its reason; Graph only through graph.sh's reads, never a write" {
+  M365_FIXTURES_TMP="$BATS_TEST_TMPDIR/hook-fixtures"
+  mkdir -p "$M365_FIXTURES_TMP"
+  guard_matrix
+  ZYGGY_HOOKS=off guard_matrix
+  # the lookups were GETs on the items and the mail folders, with the token POST before each graph.sh call
+  [ -z "$(urls | grep -vE '^GET |^POST https://login\.microsoftonline\.com/')" ] || { urls; return 1; }
+  urls | grep -qF "GET $GRAPH_URL/drives/b!onedrive0001/items/01PARENT0001:/notes.md?\$select=id"
+  urls | grep -qF "GET $GRAPH_URL/drives/b!onedrive0001/items/01PARENT0001?\$select=id,folder,root"
+  urls | grep -qF "GET $GRAPH_URL/users/$UPN/mailFolders?"
+}
+
+@test "guard (AC-35): never allow, never ask, never a token, a mail body or file content in any output; a send needs no Graph call; a disabled action -> action disabled for this instance" {
+  local enc
+  M365_FIXTURES_TMP="$BATS_TEST_TMPDIR/hook-fixtures"
+  mkdir -p "$M365_FIXTURES_TMP"
+  guard_matrix
+  enc="$(printf 'UPLOADTEXT-NEVER-LOGGED' | base64 -w0 | cut -c1-24)"
+  run grep -nE '"(allow|ask)"|STUBACCESS|BODYTEXT-NEVER-STORED|UPLOADTEXT-NEVER-LOGGED|'"$enc"'|Hello Carol' "$BATS_TEST_TMPDIR/guard-outputs"
+  [ "$status" -eq 1 ] || { echo "$output"; return 1; }
+  run grep -cE '"(allow|ask)"' "$GUARD"
+  [ "$output" = 0 ]
+  : > "$CURL_STUB_LOG"
+  assert_defer send-clean
+  [ "$(request_count)" -eq 0 ]
+  cfg '.actions.enabled = ["send", "move"]'
+  assert_deny upload-clean "action disabled for this instance"
+  cfg '.actions.enabled = []'
+  assert_deny send-clean "action disabled for this instance"
+  assert_deny move-archive "action disabled for this instance"
+}
+
+@test "guard (AC-35): fails closed — graph.sh failing (500, 403), a bad configuration, ZYGGY_TENANT unset, input that is not hook JSON -> exit 2, one stderr line, no stdout" {
+  local f
+  scenario 'items/01PARENT0001\?:500'
+  guard_on upload-clean
+  [ "$status" -eq 2 ] && [ -z "$output" ] && [ "$stderr" = 'm365-guard: graph.sh item-kind failed' ] || { echo "$status $output $stderr"; return 1; }
+  scenario 'mailFolders\?:403:graph-forbidden.json'
+  guard_on move-folder-id
+  [ "$status" -eq 2 ] && [ -z "$output" ] && [ "$stderr" = 'm365-guard: graph.sh mail-folders failed' ] || { echo "$status $output $stderr"; return 1; }
+  cfg '.tenant_id = "x"'
+  guard_on send-clean
+  [ "$status" -eq 2 ] && [ -z "$output" ] && [ "$stderr" = 'm365-guard: configuration error: tenant_id is not a GUID' ] || { echo "$status $output $stderr"; return 1; }
+  install_m365_fixture_config
+  run --separate-stderr env -u ZYGGY_TENANT "$GUARD" < "$M365_FIXTURES/hook-send-clean.json"
+  [ "$status" -eq 2 ] && [ -z "$output" ] && [ "$stderr" = 'm365-guard: configuration error: ZYGGY_TENANT is not set' ] || { echo "$status $output $stderr"; return 1; }
+  for f in '' 'not json' '{"tool_name": "mcp__m365__send-shared-mailbox-mail"}' '[]'; do
+    run --separate-stderr "$GUARD" <<< "$f"
+    [ "$status" -eq 2 ] && [ -z "$output" ] && [ "$(printf '%s\n' "$stderr" | wc -l)" -eq 1 ] && [[ "$stderr" == 'm365-guard: '* ]] ||
+      { echo "[$f] $status $output $stderr"; return 1; }
+  done
+}
+
+@test "log (AC-36): a send, an upload and a move each append one body-free row {ts, session_id, tool, summary, status} to actions.jsonl (600, in the 700 state dir); an error result -> status error: <code>; another tool -> no row" {
+  local body_len f
+  body_len="$(jq '.tool_input.body.Message.body.content | length' "$M365_FIXTURES/hook-send-clean.json")"
+  for f in post-send-ok post-upload-ok post-move-ok post-send-error post-move-error-text; do
+    run --separate-stderr "$LOG_HOOK" < "$M365_FIXTURES/hook-$f.json"
+    [ "$status" -eq 0 ] && [ -z "$output" ] && [ -z "$stderr" ] || { echo "$f: $status $output $stderr"; return 1; }
+  done
+  run --separate-stderr "$LOG_HOOK" < "$M365_FIXTURES/hook-other-tool.json"
+  [ "$status" -eq 0 ] && [ -z "$output" ]
+  [ "$(stat -c %a "$STATE/actions.jsonl")" = 600 ] && [ "$(stat -c %a "$STATE")" = 700 ]
+  [ "$(wc -l < "$STATE/actions.jsonl")" -eq 5 ]
+  jq -s -e --arg n "$body_len" '
+    (map(keys) | all(. == ["session_id","status","summary","tool","ts"]))
+    and all(.[]; .session_id == "00000000-0000-0000-0000-000000000000" and (.ts | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:]{8}Z$")))
+    and (map(.tool) == ["send-shared-mailbox-mail","upload-file-content","move-shared-mailbox-message","send-shared-mailbox-mail","move-shared-mailbox-message"])
+    and (.[0].summary == "to carol@example.org,dave@example.org subject \"Zyggy D7 test\" body \($n) chars")
+    and (.[1].summary == "drive b!onedrive0001 parent 01PARENT0001 name notes.md size 1024")
+    and (.[2].summary == "message m1 -> archive")
+    and (map(.status) == ["ok","ok","ok","error: ErrorAccessDenied","error: ErrorItemNotFound"])' "$STATE/actions.jsonl" ||
+    { cat "$STATE/actions.jsonl"; return 1; }
+  # never the body, the upload content (or its base64), a token
+  run grep -nE "BODYTEXT-NEVER-STORED|UPLOADTEXT-NEVER-LOGGED|$(printf 'UPLOADTEXT-NEVER-LOGGED' | base64 -w0 | cut -c1-24)|Hello Carol|STUBACCESS" "$STATE/actions.jsonl"
+  [ "$status" -eq 1 ] || { echo "$output"; return 1; }
+  # not hook JSON -> exit 2, one line, no row
+  run --separate-stderr "$LOG_HOOK" <<< 'nope'
+  [ "$status" -eq 2 ] && [[ "$stderr" == 'm365-log: '* ]] && [ "$(wc -l < "$STATE/actions.jsonl")" -eq 5 ]
+}
+
 # --- facts.sh and parse.sh, the validators (Step 6) ----------------------------------------------------------------
 
 facts() {

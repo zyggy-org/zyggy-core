@@ -41,6 +41,30 @@
           }
         ]
       }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "^mcp__m365__(send-shared-mailbox-mail|upload-file-content|move-shared-mailbox-message)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/m365-guard.sh",
+            "timeout": 20
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "^mcp__m365__(send-shared-mailbox-mail|upload-file-content|move-shared-mailbox-message)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/m365-log.sh",
+            "timeout": 20
+          }
+        ]
+      }
     ]
   },
   "enabledPlugins": {
@@ -53,12 +77,15 @@
     "CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR": "1"
   },
   "permissions": {
+    "ask": [
+      "mcp__m365__send-shared-mailbox-mail",
+      "mcp__m365__move-shared-mailbox-message"
+    ],
     "deny": [
       "Read(~/.config/zyggy/**)",
       "Edit(~/.cache/zyggy/repos/**)",
       "Edit(~/.local/state/zyggy/**)",
       "Bash(.claude/skills/m365/graph.sh *)",
-      "Bash(.claude/skills/m365/m365-approve.sh *)",
       "mcp__m365__accept-calendar-event",
       "mcp__m365__add-excel-table-rows",
       "mcp__m365__add-group-member",
