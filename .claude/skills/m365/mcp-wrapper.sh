@@ -43,7 +43,7 @@ zy_m365_load_config
 
 # The pinned package is installed with npm's prefix ~/.local (runbook 13); a server found anywhere else — a
 # package runner's cache, a system prefix, a symlink out of ~/.local — is not the reviewed one and never started.
-bin="$(command -v "$ZY_M365_SERVER_BIN" || true)"
+bin="$(zy_m365_user_bin "$ZY_M365_SERVER_BIN")"
 [ -n "$bin" ] || die 3 "$ZY_M365_SERVER_BIN not found — $ZY_M365_INSTALL_HINT"
 real="$(readlink -f -- "$bin")"
 home_real="$(readlink -f -- "$HOME")"

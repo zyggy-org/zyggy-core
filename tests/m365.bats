@@ -1602,6 +1602,16 @@ server_log() { # the server stub's log, or nothing
   grep -qx 'argv=--org-mode' "$SERVER_STUB_LOG"
 }
 
+@test "wrapper: ms-365-mcp-server under \$HOME/.local/bin is found when that directory is not on PATH (a systemd unit's PATH) -> --probe exit 0" {
+  install_m365_server_stub
+  local stripped="${PATH//"$HOME/.local/bin:"/}"
+  [ "$stripped" != "$PATH" ] || { echo "stub dir not on PATH: $PATH"; return 1; }
+  PATH="$stripped" run --separate-stderr wrapper --probe < /dev/null
+  [ "$status" -eq 0 ] || { echo "$status $stderr / $output"; return 1; }
+  [ "$(head -n 1 <<< "$output")" = 'tools: 14' ] || { echo "$output"; return 1; }
+  grep -qx 'token=match' "$SERVER_STUB_LOG"
+}
+
 @test "wrapper --probe: mode notools -> exit 6 'offered 0 tools'; badregex -> exit 6 'server rejected ENABLED_TOOLS'; leaky -> exit 6 naming a tool outside the filter" {
   install_m365_server_stub notools
   run --separate-stderr wrapper --probe < /dev/null
@@ -2084,6 +2094,22 @@ FACTS_USAGE='(usage: facts.sh --kind brief|mail-backfill|files-backfill --source
   printf 'PK fake docx bytes\n' > "$ZYGGY_M365_RUN_DIR/report.docx"
   ZYGGY_HOOKS=off run --separate-stderr parse "$ZYGGY_M365_RUN_DIR/report.docx"
   [ "$status" -eq 0 ] && [ ! -e "$ZYGGY_M365_RUN_DIR/report.docx" ]
+}
+
+@test "parse: markitdown under \$HOME/.local/bin (pipx) is found when that directory is not on PATH (a systemd unit's PATH)" {
+  install_markitdown_stub
+  local stub_dir; stub_dir="$(dirname "$(command -v markitdown)")"
+  mkdir -p "$HOME/.local"
+  rm -rf "$HOME/.local/bin"
+  mv "$stub_dir" "$HOME/.local/bin"
+  export MARKITDOWN_STUB_LOG="$HOME/.local/bin/markitdown-stub.log"
+  PATH="${PATH//"$stub_dir:"/}"
+  ! command -v markitdown > /dev/null
+  printf 'PK fake docx bytes
+' > "$ZYGGY_M365_RUN_DIR/report.docx"
+  run --separate-stderr parse "$ZYGGY_M365_RUN_DIR/report.docx"
+  [ "$status" -eq 0 ] && [ "$stderr" = 'parse: report.docx 29 lines, 1 withheld' ] || { echo "$status $stderr"; return 1; }
+  grep -qx "argv=$ZYGGY_M365_RUN_DIR/report.docx" "$MARKITDOWN_STUB_LOG"
 }
 
 @test "parse: big.pdf -> the text cut at 20000 bytes followed by [cut at 20000 bytes]; the input deleted" {

@@ -71,7 +71,7 @@ command -v jq > /dev/null || die 3 "jq not found"
 zy_m365_load_config
 max_bytes="$(jq -r '[.brief.file_max_bytes, .files_backfill.file_max_bytes] | min' <<< "$ZY_M365_CONFIG_JSON")"
 cap_bytes="$(jq -r '[.brief.file_text_cap_bytes, .files_backfill.file_text_cap_bytes] | min' <<< "$ZY_M365_CONFIG_JSON")"
-markitdown="$(command -v markitdown || true)"
+markitdown="$(zy_m365_user_bin markitdown)"
 [ -n "$markitdown" ] || die 3 "markitdown not found — runbook 13 \"MarkItDown\""
 command -v timeout > /dev/null || die 3 "timeout not found"
 timeout_s="$ZY_PARSE_TIMEOUT_S"

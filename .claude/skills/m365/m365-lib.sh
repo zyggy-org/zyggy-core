@@ -246,6 +246,17 @@ zy_m365_kind_of() { # zy_m365_kind_of <action>
 
 # True on an attended terminal: stdin and stdout are a tty (the owner's SSH session; a pseudo-tty in CI). A unit,
 # a pipe and `claude -p` fail it.
+# The path of a user-installed program (npm prefix ~/.local, pipx): PATH first, then $HOME/.local/bin, which a
+# systemd unit's PATH (claude-remote, the brief unit) does not carry; prints nothing when neither has it.
+zy_m365_user_bin() { # zy_m365_user_bin <name>
+  local found
+  found="$(command -v "$1" 2> /dev/null || true)"
+  if [ -z "$found" ] && [ -x "$HOME/.local/bin/$1" ]; then
+    found="$HOME/.local/bin/$1"
+  fi
+  printf '%s' "$found"
+}
+
 zy_m365_tty() {
   [ -t 0 ] && [ -t 1 ]
 }
