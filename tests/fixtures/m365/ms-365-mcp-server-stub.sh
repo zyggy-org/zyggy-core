@@ -52,7 +52,8 @@ fi
 for arg in "$@"; do
   if [ "$arg" = --http ]; then
     # node gets the environment the server got: bash's own PWD, SHLVL and _ removed
-    exec env -u PWD -u SHLVL -u _ node "$fixtures/http-stub.mjs" "$@"
+    node_bin="$(cat "$here/node.path" 2> /dev/null || true)"
+    exec env -u PWD -u SHLVL -u _ "${node_bin:-node}" "$fixtures/http-stub.mjs" "$@"
   fi
 done
 

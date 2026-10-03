@@ -189,6 +189,9 @@ install_m365_server_stub() { # install_m365_server_stub [mode]
   cp "$FIXTURES/m365/ms-365-mcp-server-stub.sh" "$d/ms-365-mcp-server"
   chmod +x "$d/ms-365-mcp-server"
   cp "$FIXTURES/m365/tools-list-0.157.2.json" "$FIXTURES/graph/token-ok.json" "$FIXTURES/m365/http-stub.mjs" "$d/fixtures/"
+  # the HTTP mode runs node under the cleared PATH mcp-server.sh gives it: record where node is (on CI
+  # /usr/local/bin, which that PATH lacks)
+  command -v node > "$d/node.path" || true
   printf '%s' "${1:-ok}" > "$d/server-stub.mode"
   export PATH="$d:$PATH" SERVER_STUB_LOG="$d/server-stub.log"
 }
