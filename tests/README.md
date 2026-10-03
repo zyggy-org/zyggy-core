@@ -36,23 +36,23 @@ fixture GUIDs, the only ones in the tree).
   it finds its routes (`routes.tsv`), scenario file and log from its own path. It logs every request before
   deciding, with `bearer=present|absent`, `client_assertion=present|absent`, `client_secret=…` and `destinationId=…`
   markers — never a token —, saves the client assertion it received to `assertion.jwt` beside itself for the
-  signature checks, and refuses `/me` (98), `DELETE` (97), an empty `destinationId` (96) and any write but
-  `…/send` and `…/move` (99).
+  signature checks, and refuses `/me` (98), `DELETE` (97) and any write but the token request (99): `graph.sh`
+  only reads.
 - **The key pair** is generated per test by real `openssl` (`install_m365_keypair`); no key material is committed.
 - **The server stub** (`ms-365-mcp-server-stub.sh`, `install_m365_server_stub`) logs variable names, the five
   non-secret values and `token=match|mismatch|absent`, and answers `tools/list` filtered by the received regex plus
   the six auth tools, as the real server does. **The `claude` stub** (`claude-stub.sh`, `install_claude_stub`) logs
   argv, environment and whether stdin is a terminal, runs the scripted model actions (`*-actions.sh`) and prints a
   `claude-result-*.json`. **The MarkItDown stub** (`markitdown-stub.sh`) prints `parsed-<name>.txt`.
-- **The approval terminal** runs under a pseudo-terminal: `run_on_pty <answers-file> <command…>`
-  (`fixtures/m365/pty.bash`) wraps `script -qfec` with one answer per line (`answers-*.txt`); "no terminal" tests run
-  with `< /dev/null` instead. Never run `m365-approve.sh` interactively in CI.
-- **The consent fixtures** (`proposals-*.jsonl`, `approvals-*.jsonl`, `executions-p1.jsonl`) carry `@H1@`-style
-  placeholders: the tests compute each hash from the row's snapshot with the library's definition (`jq -S -c`, then
-  `sha256sum`) and never hand-type one.
+- **The hook fixtures** `fixtures/m365/hook-*.json` are the JSON Claude Code sends to `m365-guard.sh` (PreToolUse,
+  one file per case of the guard matrix) and `m365-log.sh` (`hook-post-*.json`, with a `tool_response` in the
+  success and error forms); their `tool_input` is shaped as the pinned server's schemas (`userId`, `messageId`,
+  `driveId`, `driveItemId`, `body` with `Message`/`SaveToSentItems` or `DestinationId`, upload content in base64).
+  The two upload size cases are built by the test (`upload_of_size`), not committed.
 - Every test's teardown greps outputs, temp files and stub logs for the fixture token `STUBACCESS`, a private-key
-  header and the body marker `BODYTEXT-NEVER-STORED` (allowed only on the terminal capture `pty.out`).
-- `expected/m365-*` (check line, approval screen, proposals list and section, facts files, receipt, journal lines)
-  are hand-derived from the spec's grammar before the script existed, like every expected file.
+  header and the body marker `BODYTEXT-NEVER-STORED`, and the state dir's logs (`brief.jsonl`, `actions.jsonl`)
+  also for the upload marker `UPLOADTEXT-NEVER-LOGGED`.
+- `expected/m365-*` (check line, suggestions section, facts files, receipt, journal lines) are hand-derived from the
+  spec's grammar before the script existed, like every expected file.
 
 `.gitattributes` marks `expected/` and `fixtures/` as `-text`: their bytes are frozen and never normalised.

@@ -37,7 +37,7 @@ command, never piped.
    (`<path>` as given, at most 100 characters, without brackets; `<modified date>` as given). Refused lines are
    counted, not retried; its stderr line gives the accepted, refused and duplicate counts.
 
-Never: another tool or route (browser, web, `curl`, an API, another script); `graph.sh`, `m365-approve.sh` or
+Never: another tool or route (browser, web, `curl`, an API, another script); `graph.sh` or
 `mcp-wrapper.sh`; a download outside `<run-dir>`; a file that is not on the batch's lines. Your final message is
 exactly one line, nothing else (listed = `<n>`; parsed + skipped = listed; the sums of facts.sh's counts):
 `files-backfill batch: listed <n>, parsed <p>, skipped <s> (type <a>, size <b>, path 0, parse error <d>, secret pattern <e>), facts <f> (<dd> dup, <r> refused)`

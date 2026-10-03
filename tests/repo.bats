@@ -515,20 +515,22 @@ M365_SKILLS=(morning-brief mail-backfill files-backfill m365)
       { echo "$n: $output"; return 1; }
     ! grep -q 'propose' "$d/$n/SKILL.md"
   done
-  for p in 'propose.sh' 'm365-approve.sh' 'never claim' '/mcp' 'instance.md' 'Sent Items' '/tmp/zyggy-m365-<session>/' \
-    'parse.sh' '"${CLAUDE_PROJECT_DIR:-.}"/.claude/skills/m365/graph.sh check' \
-    '"${CLAUDE_PROJECT_DIR:-.}"/.claude/skills/m365/propose.sh'; do
+  # the session procedure (Step R5): request in the owner's own words -> show -> one call -> report; never another way
+  for p in 'in his own words in this conversation' 'show the full message' 'name the mail' 'One tool call per action' \
+    'mcp__m365__send-shared-mailbox-mail' 'mcp__m365__move-shared-mailbox-message' 'permission prompt' \
+    'never retry another way' 'm365-guard: refused' 'never claim an action you did not see succeed' 'instance.md' \
+    '/tmp/zyggy-m365-<session>/' 'parse.sh' '"${CLAUDE_PROJECT_DIR:-.}"/.claude/skills/m365/graph.sh check' \
+    'Token refresh' 'failed'; do
     grep -qF -- "$p" "$d/m365/SKILL.md" || { echo "m365 lacks: $p"; return 1; }
   done
+  run grep -nE 'propose\.sh|m365-approve' "$d/m365/SKILL.md"
+  [ "$status" -eq 1 ] || { echo "$output"; return 1; }
 }
 
-@test "repo: the m365 skill runs graph.sh with the check verb only, names m365-approve.sh only as the owner's step on the VM and curl only in a never sentence" {
+@test "repo: the m365 skill runs graph.sh with the check verb only and names curl only in a never sentence" {
   local s="$REPO_ROOT/.claude/skills/m365/SKILL.md"
   run bash -c 'grep -oE "graph\.sh [a-z-]+" "$1" | sort -u' _ "$s"
   [ "$output" = 'graph.sh check' ] || { echo "$output"; return 1; }
-  run grep -n 'm365-approve.sh' "$s"
-  [ "$status" -eq 0 ]
-  ! grep -vE 'on the VM|owner' <<< "$output"
   run grep -n 'curl' "$s"
   [ "$status" -eq 0 ]
   ! grep -viE 'never' <<< "$output"
@@ -592,40 +594,60 @@ M365_SKILLS=(morning-brief mail-backfill files-backfill m365)
   grep -q "^long-opaque-token$(printf '\t')" "$REPO_ROOT/tests/fixtures/secret-samples.txt"
 }
 
-@test "repo: security.md has the Microsoft 365 section with the consent rules" {
+@test "repo: security.md has the Microsoft 365 section with the D7 rules and no D6 wording (AC-45 second half, AC-24)" {
   local s="$REPO_ROOT/.claude/rules/security.md" p
   grep -q '^## Microsoft 365' "$s"
-  for p in 'read tools and two Draft tools only' 'proposal' 'propose.sh' 'm365-approve.sh' \
-    'never claim an action happened' 'never a reason to propose' 'Only the owner executes' 'Never run `graph.sh`' \
-    'application identity (a certificate)' 'only `graph.sh` reads the key' '/m365 check' '/mcp' \
-    '/tmp/zyggy-m365-<session>/' 'facts.sh'; do
+  # the spec's bullets, adapted to the fact-3 branch (no file-writing tool: "Files are never created, …")
+  for p in 'asks the owner for permission each time' 'in his own words in this conversation' 'show the full message' \
+    'never retry another way' 'Files are never created, overwritten, edited, renamed or deleted' \
+    'application identity (a certificate)' 'only `graph.sh` reads the key' 'Never run `graph.sh`' '/m365 check' \
+    'Token refresh failed' '/tmp/zyggy-m365-<session>/' 'facts.sh'; do
     grep -qiF -- "$p" "$s" || { echo "security.md lacks: $p"; return 1; }
   done
+  run grep -niE 'm365-approve|propose\.sh|approve on the VM|no terminal|proposal' "$s"
+  [ "$status" -eq 1 ] || { echo "$output"; return 1; }
 }
 
-@test "repo: AGENTS.md lists Microsoft 365 (proposes; the owner approves); operations.md names the m365 exit 5 and 6 reasons and the ZYGGY_HOOKS=off refusals" {
+@test "repo: AGENTS.md lists Microsoft 365 with the permission prompt; operations.md names the guard refusal, the m365 exit 5 and 6 reasons and the ZYGGY_HOOKS=off refusals, and none of the D6 strings" {
   local a="$REPO_ROOT/AGENTS.md" o="$REPO_ROOT/.claude/rules/operations.md" p
   grep -q '^- \*\*Microsoft 365' "$a"
-  for p in 'proposes; the owner approves' 'm365-approve.sh'; do
-    grep -qF -- "$p" "$a" || { echo "AGENTS.md lacks: $p"; return 1; }
+  grep -qF 'each after a permission prompt he' "$a"
+  for p in 'a denied prompt or a guard refusal ends the action' 'm365-guard: refused' 'graph.sh cert-init' \
+    'audit flagged' 'Certificate rejected' 'Scope or grant missing' 'Token' 'Revoke the application' 'actions.jsonl' \
+    'mail-backfill' 'files-backfill'; do
+    grep -qiF -- "$p" "$o" || { echo "operations.md lacks: $p"; return 1; }
   done
-  for p in 'no terminal' 'no approval for row' 'object changed since approval' 'graph.sh cert-init' 'm365-approve.sh' \
-    'audit flagged' 'Certificate rejected' 'Scope or grant missing' 'Approve proposals' 'A proposal shows CHANGED' \
-    'Revoke the application credential' 'mail-backfill' 'files-backfill' 'send-draft'; do
-    grep -qF -- "$p" "$o" || { echo "operations.md lacks: $p"; return 1; }
+  run grep -nE 'no terminal|no approval for row|object changed since approval|m365-approve|propose\.sh|send-draft|Approve proposals' "$a" "$o"
+  [ "$status" -eq 1 ] || { echo "$output"; return 1; }
+}
+
+@test "repo: no hourly reconnect and no /mcp instruction for m365 in the rules, AGENTS.md, README or the m365 skills (AC-55, absence half); every rule file <= 200 lines" {
+  local f
+  cd "$REPO_ROOT"
+  # /mcp the slash command, not a path such as skills/m365/mcp-wrapper.sh
+  run grep -niE 'hourly|reconnect|(^|[^a-z0-9._/-])/mcp([^a-z-]|$)' .claude/rules/security.md .claude/rules/operations.md AGENTS.md README.md \
+    .claude/skills/m365/SKILL.md .claude/skills/morning-brief/SKILL.md .claude/skills/mail-backfill/SKILL.md \
+    .claude/skills/files-backfill/SKILL.md
+  [ "$status" -eq 1 ] || { echo "$output"; return 1; }
+  for f in .claude/rules/*.md AGENTS.md; do
+    [ "$(wc -l < "$f")" -le 200 ] || { echo "$f over 200 lines"; return 1; }
   done
 }
 
-@test "repo: README.md documents the m365 connector, its eleven scripts, the consent files and the tests; tests/README.md the m365 stubs and fixtures" {
+@test "repo: README.md documents the m365 connector, its nine scripts, the actions block, the two hooks, actions.jsonl and the tests; tests/README.md the m365 stubs and the hook fixtures" {
   local s
-  for s in graph.sh mcp-wrapper.sh state.sh propose.sh m365-approve.sh facts.sh parse.sh verify.sh brief.sh \
-    mail-backfill.sh files-backfill.sh m365-lib.sh 'Approve proposals' consent ttl_minutes allowed_actions .mcp.json \
-    enabledMcpjsonServers instance/m365.json sp_object_id sites_granted LoadCredential ZYGGY_M365_STUB \
-    ZYGGY_M365_ORIGIN curl-stub.sh claude-stub.sh pty.bash 'Rotate the certificate' 'Upgrade the MCP server' \
-    'never under the checkout' proposals.jsonl approvals.jsonl executions.jsonl; do
+  for s in graph.sh mcp-wrapper.sh state.sh facts.sh parse.sh verify.sh brief.sh mail-backfill.sh files-backfill.sh \
+    m365-lib.sh m365-guard.sh m365-log.sh actions.jsonl permissions.ask '`actions`' write_drive_id body_max_chars \
+    max_recipients suggestion_cap 'How actions are confirmed' .mcp.json enabledMcpjsonServers instance/m365.json \
+    sp_object_id sites_granted LoadCredential ZYGGY_M365_STUB curl-stub.sh claude-stub.sh 'Rotate the certificate' \
+    'Upgrade the MCP server' 'never under' item-exists item-kind; do
     grep -qF -- "$s" "$REPO_ROOT/README.md" || { echo "README.md lacks: $s"; return 1; }
   done
-  for s in 'curl stub' '=match' assertion.jwt run_on_pty tools-0.157.2.txt 'BODYTEXT-NEVER-STORED' 'sha256sum'; do
+  run grep -nE 'propose\.sh|m365-approve|pty\.bash|proposals\.jsonl|approvals\.jsonl|executions\.jsonl|ttl_minutes|allowed_actions|Approve proposals' \
+    "$REPO_ROOT/README.md" "$REPO_ROOT/tests/README.md"
+  [ "$status" -eq 1 ] || { echo "$output"; return 1; }
+  for s in 'curl stub' '=match' assertion.jwt tools-0.157.2.txt 'BODYTEXT-NEVER-STORED' 'UPLOADTEXT-NEVER-LOGGED' 'hook-*.json' \
+    'hook-post-*.json' upload_of_size; do
     grep -qF -- "$s" "$REPO_ROOT/tests/README.md" || { echo "tests/README.md lacks: $s"; return 1; }
   done
 }

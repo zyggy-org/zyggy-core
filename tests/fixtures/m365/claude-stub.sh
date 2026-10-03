@@ -4,7 +4,7 @@ set -euo pipefail
 # Not reached through env -i, so it reads its settings from the environment the orchestrator gives the child:
 # CLAUDE_STUB_LOG (where to log), CLAUDE_STUB_RESULT (the file whose content is printed as the run's result; empty
 # or absent → nothing printed), CLAUDE_STUB_ACTIONS (a script run first, emulating what the model does with its
-# tools — e.g. propose.sh calls), CLAUDE_STUB_SLEEP (seconds to sleep before answering), CLAUDE_STUB_EXIT (exit code).
+# tools — e.g. state.sh and facts.sh calls), CLAUDE_STUB_SLEEP (seconds to sleep before answering), CLAUDE_STUB_EXIT (exit code).
 # Logs before acting: one "call" line, every argument (arg=…), the stdin byte count, the run's ZYGGY_* environment,
 # the working directory, whether stdin is a terminal, and whether any environment value carries an access token
 # (token-in-env=yes|no: any JWT-shaped value — the value itself is never logged). Never contacts anything.

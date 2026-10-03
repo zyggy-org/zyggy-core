@@ -36,7 +36,7 @@ directory), one call per command, never piped.
    `.claude/skills/m365/state.sh set backfill-watermark <folder-id> <oldest receivedDateTime listed>`
    (`YYYY-MM-DDTHH:MM:SSZ`, fractions dropped). If the listing was empty or a step failed, do not set it.
 
-Never: another tool or route (browser, web, `curl`, an API, another script); `graph.sh`, `m365-approve.sh` or
+Never: another tool or route (browser, web, `curl`, an API, another script); `graph.sh` or
 `mcp-wrapper.sh`; a second listing beyond the batch. Your final message is exactly one line, nothing else (the
 sums of facts.sh's counts; messages = how many the listing returned):
 `mail-backfill batch: messages <n>, facts <f> (<d> dup, <s> refused)`.
