@@ -11,14 +11,15 @@ instance's Claude Code sessions** (remote control or `claude -p` are started the
 |------|-----------|
 | `AGENTS.md` | The assistant's identity and rules (≤ 200 lines); the only instruction file |
 | `.claude/rules/memory.md`, `security.md`, `operations.md` | The detailed rules `AGENTS.md` summarises |
-| `.claude/settings.json` | Hook wiring (`SessionStart` × 3, `Stop`), `enabledPlugins` (project scope) and `env` for the browser plugin (headless, Chromium, in-memory profile), `permissions.ask` (the `m365` action tools: each call is a permission prompt), `permissions.deny` (the credential, clone-cache and state-directory path rules, `Bash(.claude/skills/m365/graph.sh *)` and every `m365` tool outside the allowlist), the `PreToolUse`/`PostToolUse` wiring of `m365-guard.sh` and `m365-log.sh` (no `PermissionRequest` hook); stored as `jq --indent 2` writes it, so Claude Code's own rewrites leave the tree clean |
-| `.claude/hooks/session-start.sh` | Prints one memory digest section: `identity`, `index` or `daily` |
+| `.claude/settings.json` | Hook wiring (`SessionStart` × 3, `Stop`), `enabledPlugins` (project scope) and `env` for the browser plugin (headless, Chromium, in-memory profile), `permissions.allow` (exactly `Bash(zyggy dream request)` and `Bash(zyggy dream status:*)`, for the `dream` skill), `permissions.ask` (the `m365` action tools: each call is a permission prompt), `permissions.deny` (the credential, clone-cache and state-directory path rules, `Bash(.claude/skills/m365/graph.sh *)` and every `m365` tool outside the allowlist), the `PreToolUse`/`PostToolUse` wiring of `m365-guard.sh` and `m365-log.sh` (no `PermissionRequest` hook); stored as `jq --indent 2` writes it, so Claude Code's own rewrites leave the tree clean |
+| `.claude/hooks/session-start.sh` | A thin launcher: `exec zyggy memory digest <identity|index|daily>` (the `zyggy` binary, deliverable 28); one stderr line and exit 0 when `zyggy` is missing |
 | `.claude/hooks/stop.sh` | Appends one `[observed]` line per turn to `daily/<date>.md` |
 | `.claude/hooks/m365-guard.sh` | `PreToolUse` for the `m365` action tools: refuses every call outside `instance/m365.json` `actions` before the permission prompt (deny-only; fails closed with exit 2) |
 | `.claude/hooks/m365-log.sh` | `PostToolUse` for the `m365` action tools: one body-free row per call in `actions.jsonl` |
 | `.claude/hooks/lib.sh` | Shared shell functions: configuration check, front matter, secret check, atomic append |
 | `.claude/hooks/secret-patterns.txt` | Secret patterns (`name<TAB>ERE[<TAB>flags]`); data, not code |
 | `.claude/skills/remember/` | The `remember` skill and `remember.sh` (owner-stated facts into `inbox/`) |
+| `.claude/skills/dream/` | The model-invocable `dream` skill: asks for a dream run (`zyggy dream request`) and quotes `zyggy dream status`; the run is the instance's `zyggy-dream` service, never the session |
 | `.claude/skills/seed-memory/` | The owner-invoked seeding interview for a fresh memory repository |
 | `.claude/skills/github-inventory/` | The owner-invoked `github-inventory` skill and `inventory.sh`: one `[observed]` line per repository the read-only token can see, into `inbox/` |
 | `.claude/skills/github-clone/` | The `github-clone` skill, `clone.sh` and `askpass.sh`: a read-only, shallow clone of one repository of the owner's own account into the clone cache, read as data |
@@ -180,7 +181,7 @@ reloads the instructions and re-runs the digest.
 
 | Script | Exit codes | Output |
 |--------|-----------|--------|
-| `session-start.sh identity\|index\|daily` | 0 ok, 3 configuration error, 4 unknown section | One section on stdout, capped (6,000 / 6,000 / 8,000 bytes; `ZYGGY_DIGEST_BYTES_*` override, clamped to 9,500) |
+| `session-start.sh identity\|index\|daily` | `zyggy memory digest`'s: 0 ok, 3 configuration error, 4 unknown section; 0 with one stderr line when `zyggy` is missing | One section on stdout, capped (6,000 / 6,000 / 8,000 bytes; `ZYGGY_DIGEST_BYTES_*` override, clamped to 9,500); `index` lists one line per category of `private/` and `business/`, then files by `updated` |
 | `stop.sh` | 0 always, 3 configuration error | Nothing on stdout; one stderr line on a refusal or the daily cap |
 | `remember.sh [--scope …] [--tag …] [--source …] -- "<fact>"` | 0 kept, 2 refused (secret), 3 configuration, 4 usage | `remembered: <path>` and the line |
 | `inventory.sh [--max <1..500>] \| inventory.sh --check` | 0 done, 3 configuration (env, memory dir, `gh`/`jq`, token file, exclusion file), 4 usage, 5 refused (unattended, `ZYGGY_HOOKS=off`), 6 GitHub request failed | `inventory: <path>` + counts line + the lines in a `<zyggy-github-inventory>` fence; `--check`: one summary line, writes nothing |

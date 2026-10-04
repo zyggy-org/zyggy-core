@@ -18,7 +18,9 @@ load helpers
   jq -e '.env == {"PLAYWRIGHT_MCP_HEADLESS":"true","PLAYWRIGHT_MCP_BROWSER":"chromium","PLAYWRIGHT_MCP_ISOLATED":"true","CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR":"1"}' "$s"
   # the model's file tools never read the GitHub credential and never edit a clone (spec 32); the m365 rules that
   # follow them and the ask rules of the D7 action tools are asserted by the m365 tests below (spec 23)
-  jq -e '.permissions | keys == ["ask","deny"]' "$s"
+  jq -e '.permissions | keys == ["allow","ask","deny"]' "$s"
+  # the dream skill may only ask for a run and read its status (spec 28); nothing else is pre-approved
+  jq -e '.permissions.allow == ["Bash(zyggy dream request)","Bash(zyggy dream status:*)"]' "$s"
   jq -e '.permissions.deny[0:2] == ["Read(~/.config/zyggy/**)","Edit(~/.cache/zyggy/repos/**)"]' "$s"
   jq -e '.hooks | keys == ["PostToolUse","PreToolUse","SessionStart","Stop"]' "$s"
   jq -e '.hooks.SessionStart | length == 1' "$s"
@@ -65,6 +67,21 @@ scripts() { # every shell script under .claude/, relative to the repo root
 
 @test "repo: no CLAUDE.md variant exists anywhere in the tree" {
   [ -z "$(cd "$REPO_ROOT" && find . -path ./.git -prune -o \( -name CLAUDE.md -o -name CLAUDE.local.md \) -print)" ]
+}
+
+@test "repo: the dream skill is model-invocable, runs only the two allowed commands and never edits memory (spec 28)" {
+  local d="$REPO_ROOT/.claude/skills/dream/SKILL.md"
+  [ "$(head -n 1 "$d")" = "---" ]
+  [ "$(zy_fm "$d" name)" = dream ]
+  [ -n "$(zy_fm "$d" description)" ]
+  [ -z "$(zy_fm "$d" disable-model-invocation)" ]
+  grep -qF 'zyggy dream request' "$d"
+  grep -qF 'zyggy dream status' "$d"
+  grep -qF 'Never edit memory files yourself' "$d"
+  run grep -nE 'zyggy (dream [a-z]+|memory)' "$d"
+  run grep -oE 'zyggy [a-z]+ [a-z]+' "$d"
+  [ -z "$(printf '%s\n' "$output" | grep -vxE 'zyggy dream (request|status)')" ]
+  [ "$(wc -l < "$d")" -le 60 ]
 }
 
 @test "repo: remember, seed-memory and github-inventory SKILL.md front matter are as contracted" {

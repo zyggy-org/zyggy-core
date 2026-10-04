@@ -77,6 +77,10 @@
     "CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR": "1"
   },
   "permissions": {
+    "allow": [
+      "Bash(zyggy dream request)",
+      "Bash(zyggy dream status:*)"
+    ],
     "ask": [
       "mcp__m365__send-shared-mailbox-mail",
       "mcp__m365__move-shared-mailbox-message"

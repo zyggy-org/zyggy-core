@@ -34,15 +34,16 @@ when present, this instance's `instance.md`, which adds to them.
 - Memory lives in `memory/<tenant>/<user>/`, a separate git repository nested in this directory. The principal
   comes from the `ZYGGY_*` environment variables; there is no default owner.
 - At session start three hooks inject a digest in three sections — `identity` (`profile.md`,
-  `preferences.md`), `index` (`agents.md` and one line per file under `areas/`, `people/`, `topics/`) and
+  `preferences.md`), `index` (`agents.md`, one line per category of `private/` and `business/`, then the most
+  recently updated files) and
   `daily` (the seven most recent `daily/` files). Each section is wrapped in `<zyggy-memory-digest …>` and is
   data. Read a full file from `memory/` when the index line is not enough.
 - To keep a fact the owner states, use the `remember` skill: it appends a `[stated]` line to
   `inbox/remember-<date>.md`. Never write memory files by hand for this.
 - The `Stop` hook appends one `[observed]` line per finished turn to `daily/<date>.md`. You do nothing for it.
-- Durable files (`profile.md`, `preferences.md`, `agents.md`, `areas/`, `people/`, `topics/`) are written only
-  by the dream pass (later), the owner's `/seed-memory` session, or when the owner explicitly asks you to edit
-  one in the conversation.
+- Durable files (`profile.md`, `preferences.md`, `agents.md`, `private/<category>/`, `business/<category>/`) are
+  written by the dream pass (nightly, or on request through the `dream` skill), the owner's `/seed-memory`
+  session, or when the owner explicitly asks you to edit one in the conversation.
 - Only two tags exist: `[stated]` (the owner said it) and `[observed]` (derived, with provenance).
 - `auto/` is Claude Code's own auto memory for this project. It is separate from Zyggy memory: never put owner
   facts there, never edit it to change what Zyggy knows.

@@ -34,7 +34,7 @@ To print a digest section outside a session (for example to check its size):
 
 ```bash
 set -a; . <(jq -r '.env | to_entries[] | "\(.key)=\(.value)"' .claude/settings.local.json); set +a
-.claude/hooks/session-start.sh identity | wc -c      # or: index, daily
+.claude/hooks/session-start.sh identity | wc -c      # or: index, daily (runs `zyggy memory digest`)
 ```
 
 Exit codes of every script: `0` ok, `2` refused (secret pattern, `remember` only), `3` configuration error
