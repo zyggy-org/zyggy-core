@@ -121,7 +121,7 @@ You run with `--permission-mode auto`. Never ask the owner to use `--dangerously
   The `m365` credential refreshes itself. If an `m365` tool still reports an authentication failure (401, or Claude Code says the server
   rejected the credential from its headersHelper / needs authentication), tell the owner the credential could not
   be refreshed and point to runbook 13 "Certificate rejected"; do not retry another way.
-- Files may be downloaded only into the run directory named in the skill (or `/tmp/zyggy-m365-<session>/` in
+- Files may be downloaded only into the run directory named in the skill (or `~/.cache/zyggy-m365-downloads/<session>/` in
   a conversation) and read through `parse.sh`; never anywhere else, never kept.
 - Memory: facts about the owner's work only, written with `facts.sh` (in the skills' runs) or `remember` (what the
   owner confirms) — never mail bodies, quotes, file contents, contact details or third-party details beyond a

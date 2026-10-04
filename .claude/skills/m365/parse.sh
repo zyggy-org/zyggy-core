@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 # A downloaded document becomes bounded text and nothing else (spec 23): MarkItDown runs on one file inside the run
-# directory ($ZYGGY_M365_RUN_DIR, created by the orchestrator or /tmp/zyggy-m365-<session>/ in a conversation),
+# directory ($ZYGGY_M365_RUN_DIR, created by the orchestrator or ~/.cache/zyggy-m365-downloads/<session>/ in a conversation),
 # under `timeout` and `ulimit -v`; the text goes to stdout only, control characters removed, every line that matches
 # a secret pattern replaced by "[line withheld: matches secret pattern <name>]", cut at file_text_cap_bytes with a
 # "[cut at <n> bytes]" line. The input file is deleted in every case once it is known to be inside the run directory

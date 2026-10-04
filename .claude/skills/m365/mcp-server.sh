@@ -72,6 +72,8 @@ server=(env -i
   "$real" --org-mode --http "$listen" --http-local-file-tools --no-dynamic-registration)
 
 if [ "$probe" -eq 0 ]; then
+  # download-bytes-to-file writes into the callers' run directories under the shared download root
+  zy_m365_download_root
   exec "${server[@]}"
 fi
 

@@ -19,8 +19,12 @@ ZY_M365_CREDENTIAL_NAME=m365-app-key
 # The action log (spec 23 D7): one body-free row per call of an action tool, written by the PostToolUse hook
 # m365-log.sh. 0600, append-only.
 ZY_M365_ACTIONS="$ZY_M365_STATE_DIR/actions.jsonl"
+# The download root, shared with the server: zyggy-m365-mcp.service has a private /tmp and may write only its own
+# cache and this directory, so every run directory download-bytes-to-file writes into lives here (0700 each).
+ZY_M365_DOWNLOAD_ROOT="$HOME/.cache/zyggy-m365-downloads"
 # shellcheck disable=SC2034 # the paths and grammars are read by the scripts that source this library
 readonly ZY_M365_SKILL_DIR ZY_M365_CHECKOUT ZY_M365_CONFIG ZY_M365_SETTINGS ZY_M365_STATE_DIR ZY_M365_KEY_FILE ZY_M365_CER_FILE
+readonly ZY_M365_DOWNLOAD_ROOT
 # shellcheck disable=SC2034 # ZY_M365_ACTIONS is read by .claude/hooks/m365-log.sh
 readonly ZY_M365_CREDENTIAL_NAME ZY_M365_ACTIONS
 readonly ZY_M365_GUID_RE='^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
@@ -48,6 +52,25 @@ zy_m365_port() {
   if [[ ! "$ZY_M365_PORT" =~ ^[0-9]{4,5}$ ]] || [ "$ZY_M365_PORT" -lt 1024 ] || [ "$ZY_M365_PORT" -gt 65535 ]; then
     zy_die 3 "configuration error: ZYGGY_M365_PORT '$ZY_M365_PORT' is not a port in 1024..65535"
   fi
+}
+
+# The download root, created 0700 when missing; exit 3 when it is not a writable directory.
+zy_m365_download_root() {
+  if [ ! -e "$ZY_M365_DOWNLOAD_ROOT" ]; then
+    { mkdir -p -- "${ZY_M365_DOWNLOAD_ROOT%/*}" && mkdir -m 700 -- "$ZY_M365_DOWNLOAD_ROOT"; } 2> /dev/null || true
+  fi
+  if [ ! -d "$ZY_M365_DOWNLOAD_ROOT" ] || [ -L "$ZY_M365_DOWNLOAD_ROOT" ] || [ ! -w "$ZY_M365_DOWNLOAD_ROOT" ]; then
+    zy_die 3 "configuration error: the download root $ZY_M365_DOWNLOAD_ROOT is not a writable directory — runbook 13 \"MCP server down\""
+  fi
+}
+
+# zy_m365_run_dir <name>: a fresh 0700 run directory <name>.XXXXXX under the download root, printed on stdout.
+zy_m365_run_dir() {
+  local d
+  zy_m365_download_root
+  d="$(mktemp -d -p "$ZY_M365_DOWNLOAD_ROOT" "$1.XXXXXX")" || zy_die 3 "cannot create a run directory in $ZY_M365_DOWNLOAD_ROOT"
+  chmod 700 "$d"
+  printf '%s\n' "$d"
 }
 
 # --- configuration ---------------------------------------------------------------------------------------

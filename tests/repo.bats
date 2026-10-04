@@ -535,7 +535,7 @@ M365_SKILLS=(morning-brief mail-backfill files-backfill m365)
   for p in 'in his own words in this conversation' 'show the full message' 'name the mail' 'One tool call per action' \
     'mcp__m365__send-shared-mailbox-mail' 'mcp__m365__move-shared-mailbox-message' 'permission prompt' \
     'never retry another way' 'm365-guard: refused' 'never claim an action you did not see succeed' 'instance.md' \
-    '/tmp/zyggy-m365-<session>/' 'parse.sh' '"${CLAUDE_PROJECT_DIR:-.}"/.claude/skills/m365/graph.sh check' \
+    '~/.cache/zyggy-m365-downloads/<session>/' 'parse.sh' '"${CLAUDE_PROJECT_DIR:-.}"/.claude/skills/m365/graph.sh check' \
     'credential refreshes itself' 'Certificate rejected'; do
     grep -qF -- "$p" "$d/m365/SKILL.md" || { echo "m365 lacks: $p"; return 1; }
   done
@@ -617,7 +617,7 @@ M365_SKILLS=(morning-brief mail-backfill files-backfill m365)
   for p in 'asks the owner for permission each time' 'in his own words in this conversation' 'show the full message' \
     'never retry another way' 'Files are never created, overwritten, edited, renamed or deleted' \
     'application identity (a certificate)' 'only `graph.sh` reads the key' 'Never run `graph.sh`' '/m365 check' \
-    'credential refreshes itself' 'Certificate rejected' '/tmp/zyggy-m365-<session>/' 'facts.sh'; do
+    'credential refreshes itself' 'Certificate rejected' '~/.cache/zyggy-m365-downloads/<session>/' 'facts.sh'; do
     grep -qiF -- "$p" "$s" || { echo "security.md lacks: $p"; return 1; }
   done
   run grep -niE 'm365-approve|propose\.sh|approve on the VM|no terminal|proposal' "$s"

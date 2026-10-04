@@ -1386,6 +1386,19 @@ stub_request() { # stub_request <json body> [token-ok|token-expired|none]
   [ "$status" -eq 4 ]
 }
 
+@test "server: the download root \$HOME/.cache/zyggy-m365-downloads (shared with the callers: the unit's /tmp is private) is created 0700 before the server starts; one that is not a writable directory -> exit 3 naming it, no server" {
+  local root="$HOME/.cache/zyggy-m365-downloads"
+  start_http_server
+  stop_http_server
+  [ -d "$root" ] && [ "$(stat -c %a "$root")" = 700 ] || { ls -la "$HOME/.cache"; return 1; }
+  rm -rf "$root" "$SERVER_STUB_LOG"
+  printf 'x' > "$root"
+  run --separate-stderr "$SERVER_SH"
+  [ "$status" -eq 3 ] && [[ "$stderr" == "m365: configuration error: the download root $root is not a writable directory"* ]] ||
+    { echo "$status $stderr"; return 1; }
+  [ ! -e "$SERVER_STUB_LOG" ] || ! grep -q '^argv=' "$SERVER_STUB_LOG"
+}
+
 @test "http stub (AC-53): POST /mcp without a bearer or with an expired one -> 401 + WWW-Authenticate, nothing past the door; with the fixture token -> initialize, tools/list (the allowlist, no auth tools, download-bytes-to-file present), tools/call answered; token=match logged, never the token" {
   local r
   start_http_server
@@ -1979,7 +1992,7 @@ assert_reads_only() {
 # --- brief.sh: the morning brief end to end against the claude stub (Steps 8 and R4, AC-38, AC-43, AC-44, AC-46) -----
 
 BRIEF_PROMPT_HEAD='/morning-brief alice@acme.example AQMkInbox0001 b!onedrive0001 b!ops0001 b!opsarchive0001'
-BRIEF_RUN_DIR_RE='^/.+/zyggy-m365-brief-2026-09-30\.[A-Za-z0-9]{6}$'
+BRIEF_RUN_DIR_RE='^/.+/.cache/zyggy-m365-downloads/zyggy-m365-brief-2026-09-30\.[A-Za-z0-9]{6}$'
 
 brief() {
   "$M365/brief.sh" "$@"
@@ -2017,8 +2030,8 @@ brief_jsonl_last() {
   tail -n 1 "$STATE/brief.jsonl"
 }
 
-no_run_dirs() { # no brief run directory is left in the temp directory
-  [ -z "$(find "${TMPDIR:-/tmp}" -maxdepth 1 -name 'zyggy-m365-brief-*' 2> /dev/null)" ]
+no_run_dirs() { # no brief run directory is left in the download root or the temp directory
+  [ -z "$(find "$HOME/.cache/zyggy-m365-downloads" "${TMPDIR:-/tmp}" -maxdepth 1 -name 'zyggy-m365-brief-*' 2> /dev/null)" ]
 }
 
 @test "brief: happy path -> exit 0; last stdout line byte-equal to expected/m365-journal-ok.txt (suggestions 2, from the model's counts line); key: file on stderr; brief.jsonl (600) line with suggestions 2; receipt audit ok without consent fields; one remember line; the run dir gone; claude called once; nothing but reads requested, no actions.jsonl" {
@@ -2557,7 +2570,7 @@ mb_deny() {
 
 FB_USAGE_GLOB='files-backfill: *\(usage: files-backfill.sh \[--drive <name>\] \[--reset\])'
 FB_DONE='files-backfill: done — drives 3 (excluded 0, forbidden 0), listed 25, parsed 20, skipped 5 (type 4, size 1, path 0, parse error 0, secret pattern 0), facts 16 (0 duplicates dropped, 0 refused), batches 4, turns 56, cost 1.52 (cap 60.0)'
-FB_RUN_DIR_RE='^/.+/zyggy-m365-files\.[A-Za-z0-9]{6}$'
+FB_RUN_DIR_RE='^/.+/.cache/zyggy-m365-downloads/zyggy-m365-files\.[A-Za-z0-9]{6}$'
 FB_GRANT='runbook 13 "Grant another site"'
 
 files_backfill() {
@@ -2627,7 +2640,7 @@ fb_deny() {
 }
 
 # Every run directory a batch was given: 0700 while the batch ran, distinct, gone afterwards; parse.sh deleted the
-# downloaded document; no run directory of this backfill left in TMPDIR.
+# downloaded document; no run directory of this backfill left in the download root or TMPDIR.
 assert_run_dirs_gone() {
   local d mode rest
   [ -n "$(fb_batches)" ] || { echo "no batch ran"; return 1; }
@@ -2638,7 +2651,8 @@ assert_run_dirs_gone() {
     [[ "$rest" != *left=yes* ]] || { echo "document left in $d"; return 1; }
   done < <(fb_batches)
   [ -z "$(fb_batches | awk '{ print $3 }' | sort | uniq -d)" ] || { echo "a run dir was reused"; return 1; }
-  [ -z "$(find "${TMPDIR:-/tmp}" -maxdepth 1 -name 'zyggy-m365-files.*' 2> /dev/null)" ] || { echo "run dir in TMPDIR"; return 1; }
+  [ -z "$(find "$HOME/.cache/zyggy-m365-downloads" "${TMPDIR:-/tmp}" -maxdepth 1 -name 'zyggy-m365-files.*' 2> /dev/null)" ] ||
+    { echo "run dir left behind"; return 1; }
 }
 
 @test "files-backfill: ZYGGY_HOOKS=off -> exit 5 refused: unattended run, before the arguments and the configuration; nothing written, no request, no claude" {
@@ -2915,7 +2929,7 @@ assert_run_dirs_gone() {
   [ "$status" -eq 6 ] && [ "$(stderr_last)" = 'files-backfill: claude run failed (error_during_execution) — runbook 13 "Model run failed"' ] ||
     { echo "$status $output $stderr"; return 1; }
   [ "$(claude_calls)" -eq 1 ]
-  [ -z "$(find "${TMPDIR:-/tmp}" -maxdepth 1 -name 'zyggy-m365-files.*' 2> /dev/null)" ]
+  [ -z "$(find "$HOME/.cache/zyggy-m365-downloads" "${TMPDIR:-/tmp}" -maxdepth 1 -name 'zyggy-m365-files.*' 2> /dev/null)" ]
   jq -e '.drives["b!onedrive0001"].batches == 0 and .drives["b!onedrive0001"].done == false and .total_batches == 0
     and (.total_cost * 100 | round) == 5 and .total_turns == 3' "$(files_checkpoint)" || { cat "$(files_checkpoint)"; return 1; }
   [ -z "$("$STATE_SH" get files-backfill-watermark 'b!onedrive0001')" ]

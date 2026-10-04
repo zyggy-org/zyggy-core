@@ -129,8 +129,7 @@ done < <(jq -r '.[].id' "$work/drives.json")
 # --- 3. the model run -------------------------------------------------------------------------------------------------------
 
 # The run directory: downloads land here, parse.sh reads only here; its name carries the date for the prompt.
-run_dir="$(mktemp -d -t "zyggy-m365-brief-$date.XXXXXX")"
-chmod 700 "$run_dir"
+run_dir="$(zy_m365_run_dir "zyggy-m365-brief-$date")"
 export ZYGGY_M365_RUN_DIR="$run_dir"
 max_turns="$(zy_m365_cfg .brief.max_turns)"
 budget="$(zy_m365_cfg .brief.budget_usd)"

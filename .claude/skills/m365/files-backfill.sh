@@ -351,8 +351,7 @@ while IFS=$'\t' read -r id name site; do
     fi
     stop="$(cap_reason)"
     [ -z "$stop" ] || break 2
-    run_dir="$(mktemp -d -t zyggy-m365-files.XXXXXX)"
-    chmod 700 "$run_dir"
+    run_dir="$(zy_m365_run_dir zyggy-m365-files)"
     export ZYGGY_M365_RUN_DIR="$run_dir"
     args_for "/files-backfill $id $run_dir $ok"$'\n<zyggy-m365-data>\n'"$lines</zyggy-m365-data>"
     rc=0
