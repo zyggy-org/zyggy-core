@@ -677,3 +677,13 @@ M365_SKILLS=(morning-brief mail-backfill files-backfill m365)
     [ "$status" -eq 0 ] && [ "$output" = "$name" ] || { echo "$name: got '$output'"; return 1; }
   done < "$FIXTURES/secret-samples.txt"
 }
+
+@test "repo: an instance's pinned zyggy (instance/zyggy.json) is at least the template's .claude/zyggy-min-version (skipped in the template)" {
+  local pin="$REPO_ROOT/instance/zyggy.json" min version
+  [ -f "$pin" ] || skip "no instance/zyggy.json: this is the template"
+  min="$(cat "$REPO_ROOT/.claude/zyggy-min-version")"
+  version="$(jq -r '.version' "$pin")"
+  [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "instance/zyggy.json version '$version' is not x.y.z"; return 1; }
+  [ "$(printf '%s\n%s\n' "$min" "$version" | sort -V | head -n 1)" = "$min" ] ||
+    { echo "instance/zyggy.json pins $version, the template needs at least $min (runbook: Template needs a newer binary)"; return 1; }
+}
