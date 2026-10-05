@@ -3,7 +3,7 @@
     "m365": {
       "type": "http",
       "url": "http://127.0.0.1:${ZYGGY_M365_PORT:-47365}/mcp",
-      "headersHelper": "${CLAUDE_PROJECT_DIR:-.}/.claude/skills/m365/mcp-auth-header.sh"
+      "headersHelper": "zyggy m365 auth-header"
     }
   }
 }

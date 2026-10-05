@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-# Shared functions for the hooks and skill scripts. Sourced, never executed.
+# Shared functions of stop.sh and the GitHub skill scripts (inventory.sh, clone.sh). Sourced, never executed.
 # Inputs come only from env, arguments and stdin; no tenant, user or path is hard-coded here.
 # LC_ALL=C: ${#s} counts bytes and sort is byte-ordered.
 export LC_ALL=C
@@ -57,49 +57,6 @@ zy_date() { # zy_date <tz> <format>
 zy_now_utc() { zy_date UTC +%Y-%m-%dT%H:%M:%SZ; }
 zy_local_date() { zy_date "$ZYGGY_TIMEZONE" +%F; }
 zy_local_hhmm() { zy_date "$ZYGGY_TIMEZONE" +%H:%M; }
-
-# Byte cap of a digest section: default 6000/6000/8000, ZYGGY_DIGEST_BYTES_<SECTION> overrides, clamped
-# to 9500 so a section never reaches Claude Code's 10,000-character hook-output limit.
-zy_cap_bytes() { # zy_cap_bytes <identity|index|daily>
-  local default var value
-  case "$1" in
-    identity) default=6000 ;;
-    index) default=6000 ;;
-    *) default=8000 ;;
-  esac
-  var="ZYGGY_DIGEST_BYTES_${1^^}"
-  value="${!var:-}"
-  if [[ ! "$value" =~ ^[1-9][0-9]{0,8}$ ]]; then
-    value=$default
-  elif ((value > 9500)); then
-    value=9500
-  fi
-  printf '%s' "$value"
-}
-
-# Print a file without its front matter (the block between a first line --- and the next --- line).
-# A file without front matter is printed whole.
-zy_strip_front_matter() {
-  awk 'NR == 1 && $0 == "---" { fm = 1; next }
-       fm && $0 == "---" { fm = 0; next }
-       !fm { print }' "$1"
-}
-
-# The value of <key>: inside the front matter, surrounding quotes stripped; empty when absent.
-zy_front_matter_value() { # zy_front_matter_value <file> <key>
-  awk -v key="$2" '
-    NR == 1 { if ($0 != "---") exit; next }
-    $0 == "---" { exit }
-    index($0, key ":") == 1 {
-      v = substr($0, length(key) + 2)
-      sub(/^[ \t]+/, "", v); sub(/[ \t]+$/, "", v)
-      if (length(v) >= 2 && ((substr(v, 1, 1) == "\"" && substr(v, length(v), 1) == "\"") ||
-                             (substr(v, 1, 1) == "'\''" && substr(v, length(v), 1) == "'\''")))
-        v = substr(v, 2, length(v) - 2)
-      print v
-      exit
-    }' "$1"
-}
 
 # Collapse to one line: CR, LF and tabs become spaces, runs of spaces one space, trimmed.
 zy_collapse_line() {

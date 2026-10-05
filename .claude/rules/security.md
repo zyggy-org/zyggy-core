@@ -23,7 +23,7 @@ Never write any of these into memory, into a file, or into a note, even when the
 - mail bodies (a one-line summary with sender and date is fine);
 - inferences about anyone's health, mental state or personality.
 
-`remember.sh` enforces the first two groups with `.claude/hooks/secret-patterns.txt` and exits 2
+`zyggy memory remember` enforces the first two groups with `.claude/hooks/secret-patterns.txt` and exits 2
 (`refused: matches secret pattern <name>`). When it refuses, tell the owner the fact was not stored and name
 the pattern. Never repeat the value, never retry with a rephrased, split or encoded version, never store it
 elsewhere. If the refusal is a false positive (for example a long order number), suggest storing the fact
@@ -109,20 +109,20 @@ You run with `--permission-mode auto`. Never ask the owner to use `--dangerously
   attachments, no Bcc, one call per message. Before a move, name the mail (sender, subject, date) and the
   folder. Files are never created, overwritten, edited, renamed or deleted.
 - If the owner denies a prompt, or the guard refuses a call, say so and stop; never retry another way (no other
-  tool, script, `curl`, browser or API).
+  tool, command, `curl`, browser or API).
 - Drafts go only to the owner (`create-shared-mailbox-draft`) or to the sender of the mail they answer
   (`create-shared-mailbox-reply-draft`); Draft text contains no link and no e-mail address.
-- Never run `graph.sh` (other than through `facts.sh`, `state.sh`, `parse.sh`), `mcp-server.sh`,
-  `mcp-auth-header.sh`, `mcp-wrapper.sh`, `brief.sh` or a backfill script yourself.
+- Never run `zyggy m365 auth-header`, `token-test`, `cert-init`, `mcp-server`, `brief`, `mail-backfill` or
+  `files-backfill` yourself (the settings deny them); the runs use only `zyggy m365 state`, `facts` and `parse`.
 - This machine holds an application identity (a certificate) that can read the owner's company mailbox and the
-  granted drives, create Drafts, send and file mail there; only `graph.sh` reads the key and mints tokens; Claude
-  Code fetches a fresh one for each connection to the server. Never read, print, copy or move the key. The one
-  `graph.sh` call you make is `graph.sh check`, when the owner invokes `/m365 check`.
+  granted drives, create Drafts, send and file mail there; only the `zyggy` binary reads the key and mints tokens;
+  Claude Code fetches a fresh one for each connection to the server. Never read, print, copy or move the key. In a
+  conversation you run only `zyggy m365 check` (when the owner invokes `/m365 check`) and `zyggy m365 parse`.
   The `m365` credential refreshes itself. If an `m365` tool still reports an authentication failure (401, or Claude Code says the server
   rejected the credential from its headersHelper / needs authentication), tell the owner the credential could not
   be refreshed and point to runbook 13 "Certificate rejected"; do not retry another way.
 - Files may be downloaded only into the run directory named in the skill (or `~/.cache/zyggy-m365-downloads/<session>/` in
-  a conversation) and read through `parse.sh`; never anywhere else, never kept.
-- Memory: facts about the owner's work only, written with `facts.sh` (in the skills' runs) or `remember` (what the
-  owner confirms) — never mail bodies, quotes, file contents, contact details or third-party details beyond a
-  name, role and organisation.
+  a conversation) and read through `zyggy m365 parse`; never anywhere else, never kept.
+- Memory: facts about the owner's work only, written with `zyggy m365 facts` (in the skills' runs) or `remember`
+  (what the owner confirms) — never mail bodies, quotes, file contents, contact details or third-party details
+  beyond a name, role and organisation.

@@ -5,10 +5,9 @@ bats_require_minimum_version 1.5.0
 
 REPO_ROOT="$(cd "$(dirname "${BATS_TEST_FILENAME}")/.." && pwd)"
 HOOKS="$REPO_ROOT/.claude/hooks"
-REMEMBER="$REPO_ROOT/.claude/skills/remember/remember.sh"
 FIXTURES="$REPO_ROOT/tests/fixtures"
 EXPECTED="$REPO_ROOT/tests/expected"
-export REPO_ROOT HOOKS REMEMBER FIXTURES EXPECTED
+export REPO_ROOT HOOKS FIXTURES EXPECTED
 
 # Export the principal, the clock and an empty project dir for a memory tree under $1.
 export_principal() {
@@ -101,13 +100,6 @@ install_token_file() {
   export ZYGGY_GITHUB_TOKEN_FILE="$BATS_TEST_TMPDIR/token"
 }
 
-# The m365 fixture configuration (tenant acme, user alice, fixture GUIDs only — spec 23) as a per-test copy named
-# by ZYGGY_M365_CONFIG, the scripts' override of <checkout>/instance/m365.json.
-install_m365_fixture_config() {
-  cp "$FIXTURES/m365/m365.json" "$BATS_TEST_TMPDIR/m365.json"
-  export ZYGGY_M365_CONFIG="$BATS_TEST_TMPDIR/m365.json"
-}
-
 # The git spy (tests/fixtures/github/git-spy.sh) as bin/git; mode in git-spy.mode (default ok), log in git-spy.log.
 install_git_spy() {
   mkdir -p "$BATS_TEST_TMPDIR/bin"
@@ -153,79 +145,31 @@ bare_repo_delete() { # bare_repo_delete <owner> <name> <file>
   "${g[@]}" -C "$w" push -q "$BATS_TEST_TMPDIR/remote/$1/$2.git" main
 }
 
-# A throw-away application key pair (RSA 2048, CN zyggy-central, 2 days) in ${XDG_CONFIG_HOME:-$HOME/.config}/zyggy,
-# generated with real openssl per test (never committed): key 0600 in a 0700 directory, certificate 0644. Exports
-# the scripts' path overrides ZYGGY_M365_KEY_FILE / ZYGGY_M365_CER_FILE. Tests of cert-init remove the pair first.
-install_m365_keypair() {
-  local dir="${XDG_CONFIG_HOME:-$HOME/.config}/zyggy"
-  (umask 077 && mkdir -p "$dir" && openssl req -x509 -newkey rsa:2048 -nodes -days 2 -subj /CN=zyggy-central \
-    -keyout "$dir/m365-app.key" -out "$dir/m365-app.cer" 2> /dev/null)
-  chmod 644 "$dir/m365-app.cer"
-  export ZYGGY_M365_KEY_FILE="$dir/m365-app.key" ZYGGY_M365_CER_FILE="$dir/m365-app.cer"
-}
-
-# The curl stub (tests/fixtures/graph/curl-stub.sh) as graph-stub/curl, first on PATH, with a per-test copy of the
-# Graph fixtures and routes beside it (graph.sh runs curl under env -i, so the stub reads everything from its own
-# directory). Log: graph-stub/curl-stub.log; one-shot overrides: graph-stub/curl-stub.scenario (<url-ERE>:<status>
-# [:<body-file>[:<headers-file>]]); the received client assertion: graph-stub/assertion.jwt. ZYGGY_M365_STUB=1 makes
-# graph.sh refuse any other curl; ZYGGY_RETRY_SCALE=0 removes the retry sleeps.
-install_curl_stub() {
-  local d="$BATS_TEST_TMPDIR/graph-stub"
-  mkdir -p "$d/fixtures"
-  cp "$FIXTURES/graph/curl-stub.sh" "$d/curl"
-  chmod +x "$d/curl"
-  cp "$FIXTURES"/graph/*.json "$FIXTURES"/graph/*.hdr "$FIXTURES"/graph/*.mjs "$FIXTURES/graph/routes.tsv" "$d/fixtures/"
-  : > "$d/curl-stub.scenario"
-  export PATH="$d:$PATH" CURL_STUB_DIR="$d" CURL_STUB_LOG="$d/curl-stub.log" ZYGGY_M365_STUB=1 ZYGGY_RETRY_SCALE=0
-}
-
-# The MCP server stub (tests/fixtures/m365/ms-365-mcp-server-stub.sh) as $HOME/.local/bin/ms-365-mcp-server, where
-# the pinned server is installed, with $HOME/.local/bin on PATH. mcp-wrapper.sh starts it in a cleared environment,
-# so the stub reads its mode (default ok; notools, badregex, leaky) and fixtures (the pinned tools/list and the
-# fixture access token) from beside itself and logs to $HOME/.local/bin/server-stub.log (SERVER_STUB_LOG).
-install_m365_server_stub() { # install_m365_server_stub [mode]
-  local d="$HOME/.local/bin"
-  mkdir -p "$d/fixtures"
-  cp "$FIXTURES/m365/ms-365-mcp-server-stub.sh" "$d/ms-365-mcp-server"
-  chmod +x "$d/ms-365-mcp-server"
-  cp "$FIXTURES/m365/tools-list-0.157.2.json" "$FIXTURES/graph/token-ok.json" "$FIXTURES/m365/http-stub.mjs" "$d/fixtures/"
-  # the HTTP mode runs node under the cleared PATH mcp-server.sh gives it: record where node is (on CI
-  # /usr/local/bin, which that PATH lacks)
-  command -v node > "$d/node.path" || true
-  printf '%s' "${1:-ok}" > "$d/server-stub.mode"
-  export PATH="$d:$PATH" SERVER_STUB_LOG="$d/server-stub.log"
-}
-
-# The MarkItDown stub (tests/fixtures/m365/markitdown-stub.sh) as markitdown-stub/markitdown, first on PATH, with the
-# parsed texts (tests/fixtures/m365/parsed-*.txt) beside it; log: markitdown-stub/markitdown-stub.log. A run directory
-# $BATS_TEST_TMPDIR/run is exported as ZYGGY_M365_RUN_DIR (parse.sh parses only files inside it).
-install_markitdown_stub() {
-  local d="$BATS_TEST_TMPDIR/markitdown-stub"
-  mkdir -p "$d/fixtures" "$BATS_TEST_TMPDIR/run"
-  cp "$FIXTURES/m365/markitdown-stub.sh" "$d/markitdown"
-  chmod +x "$d/markitdown"
-  cp "$FIXTURES"/m365/parsed-*.txt "$d/fixtures/"
-  export PATH="$d:$PATH" MARKITDOWN_STUB_LOG="$d/markitdown-stub.log" ZYGGY_M365_RUN_DIR="$BATS_TEST_TMPDIR/run"
-  unset MARKITDOWN_STUB_SLEEP ZYGGY_PARSE_TIMEOUT
-}
-
-# The claude stub (tests/fixtures/m365/claude-stub.sh) as $BATS_TEST_TMPDIR/bin/claude, first on PATH. The orchestrators
-# run it in their own environment (not under env -i): CLAUDE_STUB_LOG is its log, CLAUDE_STUB_RESULT the result file it
-# prints (default claude-result-ok.json); CLAUDE_STUB_ACTIONS, CLAUDE_STUB_SLEEP and CLAUDE_STUB_EXIT start unset.
-install_claude_stub() {
+# The zyggy stub (tests/fixtures/zyggy-stub.sh) as $BATS_TEST_TMPDIR/bin/zyggy, first on PATH; it records argv in
+# ZYGGY_STUB_LOG and stdin in ZYGGY_STUB_STDIN (both under $BATS_TEST_TMPDIR).
+install_zyggy_stub() {
   mkdir -p "$BATS_TEST_TMPDIR/bin"
-  cp "$FIXTURES/m365/claude-stub.sh" "$BATS_TEST_TMPDIR/bin/claude"
-  chmod +x "$BATS_TEST_TMPDIR/bin/claude"
-  export PATH="$BATS_TEST_TMPDIR/bin:$PATH" CLAUDE_STUB_LOG="$BATS_TEST_TMPDIR/claude-stub.log"
-  export CLAUDE_STUB_RESULT="$FIXTURES/m365/claude-result-ok.json"
-  unset CLAUDE_STUB_ACTIONS CLAUDE_STUB_SLEEP CLAUDE_STUB_EXIT BRIEF_ACTIONS_TRY_SEND
+  cp "$FIXTURES/zyggy-stub.sh" "$BATS_TEST_TMPDIR/bin/zyggy"
+  chmod +x "$BATS_TEST_TMPDIR/bin/zyggy"
+  export PATH="$BATS_TEST_TMPDIR/bin:$PATH" ZYGGY_STUB_LOG="$BATS_TEST_TMPDIR/zyggy-stub.log"
+  export ZYGGY_STUB_STDIN="$BATS_TEST_TMPDIR/zyggy-stub.stdin"
+  unset ZYGGY_STUB_EXIT ZYGGY_STUB_STDOUT ZYGGY_STUB_STDERR
+  : > "$ZYGGY_STUB_LOG"
 }
 
-# The logger stub (tests/fixtures/m365/logger-stub.sh) as $BATS_TEST_TMPDIR/bin/logger, first on PATH; it appends
-# "tag=<tag> msg=<message>" to $BATS_TEST_TMPDIR/bin/logger-stub.log (LOGGER_STUB_LOG).
-install_logger_stub() {
-  mkdir -p "$BATS_TEST_TMPDIR/bin"
-  cp "$FIXTURES/m365/logger-stub.sh" "$BATS_TEST_TMPDIR/bin/logger"
-  chmod +x "$BATS_TEST_TMPDIR/bin/logger"
-  export PATH="$BATS_TEST_TMPDIR/bin:$PATH" LOGGER_STUB_LOG="$BATS_TEST_TMPDIR/bin/logger-stub.log"
+# The value of <key> in a file's front matter (the block between a first line --- and the next ---), surrounding
+# quotes stripped; empty when absent.
+front_matter_value() { # front_matter_value <file> <key>
+  awk -v key="$2" '
+    NR == 1 { if ($0 != "---") exit; next }
+    $0 == "---" { exit }
+    index($0, key ":") == 1 {
+      v = substr($0, length(key) + 2)
+      sub(/^[ \t]+/, "", v); sub(/[ \t]+$/, "", v)
+      if (length(v) >= 2 && ((substr(v, 1, 1) == "\"" && substr(v, length(v), 1) == "\"") ||
+                             (substr(v, 1, 1) == "'\''" && substr(v, length(v), 1) == "'\''")))
+        v = substr(v, 2, length(v) - 2)
+      print v
+      exit
+    }' "$1"
 }

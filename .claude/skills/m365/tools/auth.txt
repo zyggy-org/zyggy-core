@@ -1,0 +1,6 @@
+list-accounts
+login
+logout
+remove-account
+select-account
+verify-login

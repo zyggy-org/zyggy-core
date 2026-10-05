@@ -1,0 +1,3 @@
+move-shared-mailbox-message
+send-shared-mailbox-mail
+upload-file-content

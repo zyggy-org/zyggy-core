@@ -148,50 +148,47 @@ scripts() { # every shell script under .claude/, relative to the repo root
   ! grep -v -i 'never' <<< "$output"
 }
 
-@test "repo: the gh stub, the git spy, the curl stub, the MCP server stub, the MarkItDown stub, the claude stub, the brief, the mail-backfill and the files-backfill actions start with the template shebang and set -euo pipefail, are LF and executable in the index, and ci.yml shellchecks all nine" {
+@test "repo: the gh stub, the git spy and the zyggy stub start with the template shebang and set -euo pipefail, are LF and executable in the index, and ci.yml shellchecks all three" {
   local f
   cd "$REPO_ROOT"
-  for f in tests/fixtures/github/gh-stub.sh tests/fixtures/github/git-spy.sh tests/fixtures/graph/curl-stub.sh \
-    tests/fixtures/m365/ms-365-mcp-server-stub.sh tests/fixtures/m365/markitdown-stub.sh tests/fixtures/m365/claude-stub.sh \
-    tests/fixtures/m365/brief-actions.sh tests/fixtures/m365/backfill-actions.sh tests/fixtures/m365/files-actions.sh; do
+  for f in tests/fixtures/github/gh-stub.sh tests/fixtures/github/git-spy.sh tests/fixtures/zyggy-stub.sh; do
     [ "$(head -n 1 "$f")" = "#!/usr/bin/env bash" ] || { echo "$f: shebang"; return 1; }
     head -n 3 "$f" | grep -qx 'set -euo pipefail'
     [ "$(git ls-files -s -- "$f" | cut -d' ' -f1)" = 100755 ] || { echo "$f: mode"; return 1; }
     [ "$(git ls-files --eol -- "$f" | awk '{ print $1 }')" = i/lf ] || { echo "$f: eol"; return 1; }
-    # the m365 fixture scripts are shellchecked through the tests/fixtures/m365/*.sh glob
-    grep -qF "$f" .github/workflows/ci.yml || grep -qF "$(dirname "$f")/*.sh" .github/workflows/ci.yml ||
-      { echo "$f: ci.yml"; return 1; }
+    grep -qF "$f" .github/workflows/ci.yml || { echo "$f: ci.yml"; return 1; }
   done
 }
 
 @test "repo: no token-shaped value outside the secret samples, the patterns, the fixture token helper and the secret fixture page" {
   run git -C "$REPO_ROOT" grep -nE '(github_pat_|ghp_|ghs_)[A-Za-z0-9_]{20,}' -- ':!tests/fixtures/secret-samples.txt' \
     ':!tests/helpers.bash' ':!.claude/hooks/secret-patterns.txt' ':!tests/fixtures/github/repos-secret.json' \
-    ':!tests/fixtures/github/git-spy.sh' ':!tests/fixtures/m365/facts-brief.txt'
+    ':!tests/fixtures/github/git-spy.sh'
   [ "$status" -eq 1 ] || { echo "$output"; return 1; }
 }
 
-@test "repo: skills call their scripts with a working-directory fallback (CLAUDE_PROJECT_DIR is not set in the Bash tool)" {
+@test "repo: skills call their scripts with a working-directory fallback (CLAUDE_PROJECT_DIR is not set in the Bash tool); the remember and m365 skills call zyggy from PATH" {
   run grep -n '"\$CLAUDE_PROJECT_DIR"' "$REPO_ROOT"/.claude/skills/*/SKILL.md
   [ "$status" -eq 1 ] || { echo "$output"; return 1; }
-  grep -qF '"${CLAUDE_PROJECT_DIR:-.}"/.claude/skills/remember/remember.sh' "$REPO_ROOT/.claude/skills/remember/SKILL.md"
   grep -qF '"${CLAUDE_PROJECT_DIR:-.}"/.claude/skills/github-inventory/inventory.sh' \
     "$REPO_ROOT/.claude/skills/github-inventory/SKILL.md"
   grep -qF '"${CLAUDE_PROJECT_DIR:-.}"/.claude/skills/github-clone/clone.sh' \
     "$REPO_ROOT/.claude/skills/github-clone/SKILL.md"
-  # the m365 skill runs in the owner's session; the three run skills run with the project directory as cwd
-  # (brief.sh and the backfills start claude there) and name their scripts relative to it, as the allow rules do
-  grep -qF '"${CLAUDE_PROJECT_DIR:-.}"/.claude/skills/m365/' "$REPO_ROOT/.claude/skills/m365/SKILL.md"
+  # spec 33: the binary is on PATH; no skill names a script under .claude/skills/remember or .claude/skills/m365
+  grep -qF 'zyggy memory remember [--scope project:<name>|machine] -- "<fact as one sentence>"' \
+    "$REPO_ROOT/.claude/skills/remember/SKILL.md"
+  run grep -nE '\.claude/skills/(m365|remember)/[a-z-]+\.sh' "$REPO_ROOT"/.claude/skills/*/SKILL.md
+  [ "$status" -eq 1 ] || { echo "$output"; return 1; }
   local n
-  for n in morning-brief mail-backfill files-backfill; do
-    grep -qF '`.claude/skills/m365/' "$REPO_ROOT/.claude/skills/$n/SKILL.md" || { echo "$n"; return 1; }
+  for n in m365 morning-brief mail-backfill files-backfill; do
+    grep -qF '`zyggy m365 ' "$REPO_ROOT/.claude/skills/$n/SKILL.md" || { echo "$n names no verb"; return 1; }
     run grep -n 'CLAUDE_PROJECT_DIR' "$REPO_ROOT/.claude/skills/$n/SKILL.md"
     [ "$status" -eq 1 ] || { echo "$n: $output"; return 1; }
   done
 }
 
-zy_fm() { # front matter value, using the scripts' own parser
-  bash -c 'source "$1"; zy_front_matter_value "$2" "$3"' _ "$HOOKS/lib.sh" "$1" "$2"
+zy_fm() { # front matter value (tests/helpers.bash)
+  front_matter_value "$1" "$2"
 }
 
 # --- template hygiene (AC-30): template-owned files name no principal and no machine -------------------
@@ -326,7 +323,7 @@ hygiene_words() { # hygiene_words <root> <csv>
 
 @test "repo: shellcheck -S style is clean on hooks, skill scripts and helpers" {
   cd "$REPO_ROOT"
-  run shellcheck -S style .claude/hooks/*.sh .claude/skills/*/*.sh tests/*.bash tests/fixtures/github/gh-stub.sh tests/fixtures/github/git-spy.sh tests/fixtures/graph/curl-stub.sh tests/fixtures/m365/*.sh
+  run shellcheck -S style .claude/hooks/*.sh .claude/skills/*/*.sh tests/*.bash tests/fixtures/github/gh-stub.sh tests/fixtures/github/git-spy.sh tests/fixtures/zyggy-stub.sh
   [ "$status" -eq 0 ] || { echo "$output"; return 1; }
 }
 
@@ -374,33 +371,30 @@ GIT_EXEMPT=(.claude/skills/github-clone/clone.sh)
 
 # --- the m365 connector's settings contract (spec 23 AC-45, plan 23 Step 4) ---------------------------------------
 
+M365_DATA="$REPO_ROOT/.claude/skills/m365/tools"
 M365_TOOLS="$REPO_ROOT/tests/fixtures/m365"
-M365_LIB="$REPO_ROOT/.claude/skills/m365/m365-lib.sh"
 
-m365_lib_value() { # m365_lib_value <bash expression> → printed by a shell that sourced the two libraries
-  bash -c 'source "$1" && source "$2" && eval "printf \"%s\\n\" $3"' _ "$HOOKS/lib.sh" "$M365_LIB" "$1"
-}
+# The successors of the old graph.sh deny rule (spec 33 AC-37): the verbs that mint a token, write the key or start a
+# run are never the model's to run.
+M365_VERB_DENY='["Bash(zyggy m365 auth-header*)","Bash(zyggy m365 token-test*)","Bash(zyggy m365 cert-init*)","Bash(zyggy m365 mcp-server*)","Bash(zyggy m365 brief*)","Bash(zyggy m365 mail-backfill*)","Bash(zyggy m365 files-backfill*)"]'
 
-@test "repo: permissions.deny = the three path rules, the graph.sh Bash rule, then mcp__m365__ + every line of excluded-tools.txt (328), in that order (AC-37)" {
+@test "repo: permissions.deny = the three path rules, the seven zyggy m365 verb rules, then mcp__m365__ + every line of tools/excluded.txt (328), in that order (AC-37)" {
   local s="$REPO_ROOT/.claude/settings.json"
-  jq -e '.permissions.deny[0:4] == ["Read(~/.config/zyggy/**)","Edit(~/.cache/zyggy/repos/**)","Edit(~/.local/state/zyggy/**)","Bash(.claude/skills/m365/graph.sh *)"]' "$s"
-  [ "$(wc -l < "$M365_TOOLS/excluded-tools.txt")" -eq 328 ]
-  diff <(jq -r '.permissions.deny[4:][]' "$s") <(sed 's/^/mcp__m365__/' "$M365_TOOLS/excluded-tools.txt")
-  [ "$(jq '.permissions.deny | length' "$s")" -eq 332 ]
-  [ "$(jq '.permissions.deny | unique | length' "$s")" -eq 332 ]
-  ! grep -qE 'm365-approve|propose' "$s"
+  jq -e '.permissions.deny[0:3] == ["Read(~/.config/zyggy/**)","Edit(~/.cache/zyggy/repos/**)","Edit(~/.local/state/zyggy/**)"]' "$s"
+  jq -e --argjson v "$M365_VERB_DENY" '.permissions.deny[3:10] == $v' "$s"
+  [ "$(wc -l < "$M365_DATA/excluded.txt")" -eq 328 ]
+  diff <(jq -r '.permissions.deny[10:][]' "$s") <(sed 's/^/mcp__m365__/' "$M365_DATA/excluded.txt")
+  [ "$(jq '.permissions.deny | length' "$s")" -eq 338 ]
+  [ "$(jq '.permissions.deny | unique | length' "$s")" -eq 338 ]
+  ! grep -qE 'm365-approve|propose|graph\.sh' "$s"
 }
 
-@test "repo: permissions.ask = the D7 action tools the server loads (send, move); ask ⊆ enabled, ask ∩ deny = ∅; no mcp__m365__ in any allow list (template, instance); no PermissionRequest hook; PreToolUse m365-guard.sh and PostToolUse m365-log.sh in exec form with the action-tool matcher and timeout 20 (AC-37)" {
+@test "repo: permissions.ask = mcp__m365__ + every line of tools/actions.txt; upload is asked and still denied (deny wins); no mcp__m365__ in any allow list (template, instance); no PermissionRequest hook; PreToolUse m365-guard.sh and PostToolUse m365-log.sh in exec form with the action-tool matcher and timeout 20 (AC-37)" {
   local s="$REPO_ROOT/.claude/settings.json" i="$REPO_ROOT/instance/settings.local.json" e m f
   cmp "$s" <(jq --indent 2 . "$s")
-  jq -e '.permissions.ask == ["mcp__m365__send-shared-mailbox-mail","mcp__m365__move-shared-mailbox-message"]' "$s"
-  run comm -23 <(jq -r '.permissions.ask[] | sub("^mcp__m365__"; "")' "$s" | LC_ALL=C sort) <(LC_ALL=C sort "$M365_TOOLS/enabled-tools.txt")
-  [ -z "$output" ] || { echo "asked but not enabled: $output"; return 1; }
+  diff <(jq -r '.permissions.ask[]' "$s") <(sed 's/^/mcp__m365__/' "$M365_DATA/actions.txt")
   run comm -12 <(jq -r '.permissions.ask[]' "$s" | LC_ALL=C sort) <(jq -r '.permissions.deny[]' "$s" | LC_ALL=C sort)
-  [ -z "$output" ] || { echo "asked and denied: $output"; return 1; }
-  # the third action tool stays denied with the excluded tools (Step R1, fact 3)
-  jq -e '.permissions.deny | index("mcp__m365__upload-file-content") != null' "$s"
+  [ "$output" = mcp__m365__upload-file-content ] || { echo "asked and denied: $output"; return 1; }
   for f in "$s" "$i"; do
     [ -f "$f" ] || continue
     jq -e '[.permissions.allow // [] | .[] | select(startswith("mcp__m365__"))] == []' "$f" || { echo "m365 tool allowed in $f"; return 1; }
@@ -414,9 +408,9 @@ m365_lib_value() { # m365_lib_value <bash expression> → printed by a shell tha
   done
 }
 
-@test "repo: the deny list names graph-batch and the six auth tools the server registers outside ENABLED_TOOLS" {
+@test "repo: the deny list names graph-batch and every auth tool of tools/auth.txt (registered outside ENABLED_TOOLS)" {
   local s="$REPO_ROOT/.claude/settings.json" t
-  for t in graph-batch login logout verify-login list-accounts select-account remove-account; do
+  for t in graph-batch $(cat "$M365_DATA/auth.txt"); do
     jq -e --arg t "mcp__m365__$t" '.permissions.deny | index($t) != null' "$s" > /dev/null || { echo "not denied: $t"; return 1; }
   done
 }
@@ -427,25 +421,14 @@ m365_lib_value() { # m365_lib_value <bash expression> → printed by a shell tha
   [ "$(grep -c . <<< "$me")" -gt 100 ] || { echo "too few /me tools: $me"; return 1; }
   run comm -23 <(LC_ALL=C sort <<< "$me") <(jq -r '.permissions.deny[]' "$s" | sed -n 's/^mcp__m365__//p' | LC_ALL=C sort)
   [ -z "$output" ] || { echo "/me tools not denied: $output"; return 1; }
-  run comm -12 <(LC_ALL=C sort "$M365_TOOLS/enabled-tools.txt") <(jq -r '.permissions.deny[]' "$s" | sed -n 's/^mcp__m365__//p' | LC_ALL=C sort)
+  run comm -12 <(LC_ALL=C sort "$M365_DATA/enabled.txt") <(jq -r '.permissions.deny[]' "$s" | sed -n 's/^mcp__m365__//p' | LC_ALL=C sort)
   [ -z "$output" ] || { echo "enabled and denied: $output"; return 1; }
 }
 
 @test "repo: no enabled tool name sends, moves, deletes, updates, forwards or replies but the two D7 action tools (Step R1)" {
   run grep -nE 'send|move|delete|update|forward|reply-(shared|mail|all)|upload' \
-    <(grep -vxE 'send-shared-mailbox-mail|move-shared-mailbox-message' "$M365_TOOLS/enabled-tools.txt")
+    <(grep -vxE 'send-shared-mailbox-mail|move-shared-mailbox-message' "$M365_DATA/enabled.txt")
   [ "$status" -eq 1 ] || { echo "$output"; return 1; }
-}
-
-@test "repo: m365-lib.sh's ENABLED_TOOLS is Step R1's regex, = ^( + enabled-tools.txt joined by | + )\$; its two arrays are the fixture lists" {
-  local r1='^(create-shared-mailbox-draft|create-shared-mailbox-reply-draft|download-bytes-to-file|get-drive-delta|get-drive-item|get-drive-root-item|get-shared-mailbox-message|get-sharepoint-site-drive-by-id|list-drive-item-versions|list-folder-files|list-shared-mailbox-folder-messages|list-shared-mailbox-messages|list-sharepoint-site-drives|move-shared-mailbox-message|search-onedrive-files|send-shared-mailbox-mail)$'
-  local regex
-  regex="$(m365_lib_value '"$ZY_M365_ENABLED_TOOLS"')"
-  [ "$regex" = "$r1" ] || { echo "$regex"; return 1; }
-  [ "$regex" = "^($(paste -sd'|' "$M365_TOOLS/enabled-tools.txt"))$" ] || { echo "$regex"; return 1; }
-  diff <(m365_lib_value '"${ZY_M365_TOOLS_ENABLED[@]}"') "$M365_TOOLS/enabled-tools.txt"
-  diff <(m365_lib_value '"${ZY_M365_TOOLS_EXCLUDED[@]}"') "$M365_TOOLS/excluded-tools.txt"
-  diff <(m365_lib_value '"${ZY_M365_AUTH_TOOLS[@]}"') <(printf '%s\n' list-accounts login logout remove-account select-account verify-login)
 }
 
 @test "repo (AC-52): .mcp.json declares exactly the m365 server over loopback HTTP with the headersHelper — no headers, env, command or args, no GUID, in jq --indent 2 layout" {
@@ -454,34 +437,9 @@ m365_lib_value() { # m365_lib_value <bash expression> → printed by a shell tha
   cmp "$m" <(jq --indent 2 . "$m")
   jq -e 'keys == ["mcpServers"] and (.mcpServers | keys == ["m365"])' "$m"
   jq -e '.mcpServers.m365 == {"type": "http", "url": "http://127.0.0.1:${ZYGGY_M365_PORT:-47365}/mcp",
-    "headersHelper": "${CLAUDE_PROJECT_DIR:-.}/.claude/skills/m365/mcp-auth-header.sh"}' "$m"
+    "headersHelper": "zyggy m365 auth-header"}' "$m"
   run grep -nE '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-' "$m"
   [ "$status" -eq 1 ]
-}
-
-@test "repo: mcp-wrapper.sh never names --http, --login, --read-only, npx, EXPECTED_USERNAME or ALLOWED_SCOPES, and clears the environment once" {
-  local w="$REPO_ROOT/.claude/skills/m365/mcp-wrapper.sh"
-  run grep -nE -- '--http|--login|--read-only|npx|EXPECTED_USERNAME|ALLOWED_SCOPES' "$w"
-  [ "$status" -eq 1 ] || { echo "$output"; return 1; }
-  [ "$(grep -c 'env -i' "$w")" -eq 1 ]
-  grep -qF -- '--org-mode' "$w"
-}
-
-@test "repo (AC-52): mcp-server.sh never names graph.sh's token verb, a token variable, a client secret, npx, --login or the forbidden server flags; binds 127.0.0.1 only (no host setting); clears the environment once; the helper prints with a builtin" {
-  local s="$REPO_ROOT/.claude/skills/m365/mcp-server.sh" h="$REPO_ROOT/.claude/skills/m365/mcp-auth-header.sh"
-  run grep -nE -- '--enable-auth-tools|--enable-dynamic-registration|--enable-attachment-urls|--obo|--trust-proxy-auth|--allow-unauthenticated-discovery|MS365_MCP_OAUTH_TOKEN|MS365_MCP_CLIENT_SECRET|npx|--login|--public-url|graph\.sh"? token' "$s"
-  [ "$status" -eq 1 ] || { echo "$output"; return 1; }
-  [ "$(grep -c 'graph\.sh' "$s")" -eq 0 ]
-  [ "$(grep -c 'env -i' "$s")" -eq 1 ]
-  grep -qF 'listen="127.0.0.1:$ZY_M365_PORT"' "$s"
-  run grep -nE 'ZYGGY_M365_HOST|0\.0\.0\.0|::' "$s"
-  [ "$status" -eq 1 ] || { echo "$output"; return 1; }
-  grep -qF -- '--org-mode --http "$listen" --http-local-file-tools --no-dynamic-registration' "$s"
-  # the helper: graph.sh token once per attempt, the header through the printf builtin, nothing else prints the token
-  grep -qF "printf '{\"Authorization\":\"Bearer %s\"}\\n' \"\$token\"" "$h"
-  # "$token" is only tested by [[ ]] and printed by printf — both builtins, never an argument of a program
-  run bash -c 'grep -n "\"\$token\"" "$1" | grep -vE ":(\[\[ \"\\\$token\" =~|printf )"' _ "$h"
-  [ "$status" -eq 1 ] || { echo "$output"; return 1; }
 }
 
 @test "repo: morning-brief/SKILL.md is owner-unreachable (disable-model-invocation: true, no allowed-tools), <= 100 lines, carries every line of expected/m365-suggestions-section.txt verbatim and no D6 proposal wording (AC-38)" {
@@ -537,7 +495,7 @@ M365_SKILLS=(morning-brief mail-backfill files-backfill m365)
     grep -qF '**`userId` is always' "$d/$n/SKILL.md" || { echo "$n: userId rule"; return 1; }
   done
   for p in '## Suggested actions' 'Suggesting is not acting' 'never a reason to draft or suggest anything' \
-    'You have no tool to act; never try another way' 'to the configured mailbox only' 'state.sh set mail-watermark' 'last'; do
+    'You have no tool to act; never try another way' 'to the configured mailbox only' 'zyggy m365 state set mail-watermark' 'last'; do
     grep -qF -- "$p" "$d/morning-brief/SKILL.md" || { echo "morning-brief lacks: $p"; return 1; }
   done
   for n in mail-backfill files-backfill; do
@@ -552,7 +510,7 @@ M365_SKILLS=(morning-brief mail-backfill files-backfill m365)
   for p in 'in his own words in this conversation' 'show the full message' 'name the mail' 'One tool call per action' \
     'mcp__m365__send-shared-mailbox-mail' 'mcp__m365__move-shared-mailbox-message' 'permission prompt' \
     'never retry another way' 'm365-guard: refused' 'never claim an action you did not see succeed' 'instance.md' \
-    '~/.cache/zyggy-m365-downloads/<session>/' 'parse.sh' '"${CLAUDE_PROJECT_DIR:-.}"/.claude/skills/m365/graph.sh check' \
+    '~/.cache/zyggy-m365-downloads/<session>/' 'zyggy m365 parse' 'zyggy m365 check' \
     'credential refreshes itself' 'Certificate rejected'; do
     grep -qF -- "$p" "$d/m365/SKILL.md" || { echo "m365 lacks: $p"; return 1; }
   done
@@ -560,59 +518,24 @@ M365_SKILLS=(morning-brief mail-backfill files-backfill m365)
   [ "$status" -eq 1 ] || { echo "$output"; return 1; }
 }
 
-@test "repo: the m365 skill runs graph.sh with the check verb only and names curl only in a never sentence" {
+@test "repo: the m365 skill runs only zyggy m365 check and parse, names the token and run verbs only in a never sentence, and curl only in a never sentence" {
   local s="$REPO_ROOT/.claude/skills/m365/SKILL.md"
-  run bash -c 'grep -oE "graph\.sh [a-z-]+" "$1" | sort -u' _ "$s"
-  [ "$output" = 'graph.sh check' ] || { echo "$output"; return 1; }
+  run bash -c 'grep -vi "never" "$1" | grep -oE "zyggy m365 [a-z-]+" | sort -u' _ "$s"
+  [ "$output" = "$(printf '%s\n' 'zyggy m365 check' 'zyggy m365 parse')" ] || { echo "$output"; return 1; }
   run grep -n 'curl' "$s"
+  [ "$status" -eq 0 ]
+  ! grep -viE 'never' <<< "$output"
+  run grep -nE 'auth-header|token-test|cert-init|mcp-server' "$s"
   [ "$status" -eq 0 ]
   ! grep -viE 'never' <<< "$output"
 }
 
-@test "repo: the run allow and deny constants match the fixture lists; the D7 action tools are denied in every run; graph.sh is denied in every run; no run names propose.sh or m365-approve.sh" {
-  local r t allow deny
-  diff <(m365_lib_value '"${ZY_M365_BRIEF_ALLOW[@]}"' | sed -n 's/^mcp__m365__//p') \
-    <(grep -vxE 'send-shared-mailbox-mail|move-shared-mailbox-message' "$M365_TOOLS/enabled-tools.txt")
-  diff <(m365_lib_value '"${ZY_M365_ACTION_TOOLS[@]}"') \
-    <(printf '%s\n' move-shared-mailbox-message send-shared-mailbox-mail upload-file-content)
-  for r in BRIEF MAIL_BACKFILL FILES_BACKFILL; do
-    allow="$(m365_lib_value "\"\${ZY_M365_${r}_ALLOW[@]}\"")"
-    deny="$(m365_lib_value "\"\${ZY_M365_${r}_DENY[@]}\"")"
-    # the D7 action tools are denied in every run, each exactly once
-    for t in move-shared-mailbox-message send-shared-mailbox-mail upload-file-content; do
-      [ "$(grep -cxF "mcp__m365__$t" <<< "$deny")" -eq 1 ] || { echo "$r: $t not denied exactly once"; return 1; }
-    done
-    # every excluded tool is denied; no rule is both allowed and denied; every allowed tool is an enabled one
-    run comm -23 <(sed 's/^/mcp__m365__/' "$M365_TOOLS/excluded-tools.txt" | LC_ALL=C sort) <(LC_ALL=C sort <<< "$deny")
-    [ -z "$output" ] || { echo "$r: excluded not denied: $output"; return 1; }
-    run comm -12 <(LC_ALL=C sort -u <<< "$allow") <(LC_ALL=C sort -u <<< "$deny")
-    [ -z "$output" ] || { echo "$r: allowed and denied: $output"; return 1; }
-    run comm -23 <(sed -n 's/^mcp__m365__//p' <<< "$allow" | LC_ALL=C sort) <(LC_ALL=C sort "$M365_TOOLS/enabled-tools.txt")
-    [ -z "$output" ] || { echo "$r: allowed but not enabled: $output"; return 1; }
-    grep -qxF 'Bash(.claude/skills/m365/graph.sh *)' <<< "$deny" || { echo "$r: graph.sh not denied"; return 1; }
-    run grep -E 'send|move|delete|update|forward|upload' <<< "$(sed -n 's/^mcp__m365__//p' <<< "$allow")"
-    [ "$status" -eq 1 ] || { echo "$r: a write tool is allowed: $output"; return 1; }
-    run grep -E 'propose|approve' <<< "$allow$deny"
-    [ "$status" -eq 1 ] || { echo "$r: a D6 script is named: $output"; return 1; }
-    if [ "$r" != BRIEF ]; then
-      run grep -E 'create-shared-mailbox' <<< "$allow"
-      [ "$status" -eq 1 ] || { echo "$r: a Draft tool is allowed"; return 1; }
-    fi
-  done
-}
-
-@test "repo: the action log is named only as ZY_M365_ACTIONS, the state directory's actions.jsonl, outside the checkout; no script names a D6 consent file" {
-  local f state checkout
+@test "repo: no script names a D6 consent file" {
+  local f
   while IFS= read -r f; do
     run grep -nE '(proposals|approvals|executions)\.jsonl' "$REPO_ROOT/$f"
     [ "$status" -eq 1 ] || { echo "$f: $output"; return 1; }
   done < <(scripts)
-  grep -qxF 'ZY_M365_STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/zyggy/m365"' "$M365_LIB"
-  grep -qxF 'ZY_M365_ACTIONS="$ZY_M365_STATE_DIR/actions.jsonl"' "$M365_LIB"
-  state="$(HOME=/nonexistent/home XDG_STATE_HOME='' m365_lib_value '"$ZY_M365_ACTIONS"')"
-  checkout="$(m365_lib_value '"$ZY_M365_CHECKOUT"')"
-  [ "$state" = /nonexistent/home/.local/state/zyggy/m365/actions.jsonl ] || { echo "$state"; return 1; }
-  [[ "$state" != "$checkout"/* ]]
 }
 
 @test "repo: no GUID, e-mail address, SharePoint host or machine path under .claude/skills/m365/, the three run skills, .mcp.json or README.md" {
@@ -633,8 +556,9 @@ M365_SKILLS=(morning-brief mail-backfill files-backfill m365)
   # the spec's bullets, adapted to the fact-3 branch (no file-writing tool: "Files are never created, …")
   for p in 'asks the owner for permission each time' 'in his own words in this conversation' 'show the full message' \
     'never retry another way' 'Files are never created, overwritten, edited, renamed or deleted' \
-    'application identity (a certificate)' 'only `graph.sh` reads the key' 'Never run `graph.sh`' '/m365 check' \
-    'credential refreshes itself' 'Certificate rejected' '~/.cache/zyggy-m365-downloads/<session>/' 'facts.sh'; do
+    'application identity (a certificate)' 'only the `zyggy` binary reads the key' 'Never run `zyggy m365 auth-header`' \
+    '/m365 check' 'credential refreshes itself' 'Certificate rejected' '~/.cache/zyggy-m365-downloads/<session>/' \
+    'zyggy m365 facts'; do
     grep -qiF -- "$p" "$s" || { echo "security.md lacks: $p"; return 1; }
   done
   run grep -niE 'm365-approve|propose\.sh|approve on the VM|no terminal|proposal' "$s"
@@ -645,9 +569,9 @@ M365_SKILLS=(morning-brief mail-backfill files-backfill m365)
   local a="$REPO_ROOT/AGENTS.md" o="$REPO_ROOT/.claude/rules/operations.md" p
   grep -q '^- \*\*Microsoft 365' "$a"
   grep -qF 'each after a permission prompt he' "$a"
-  for p in 'a denied prompt or a guard refusal ends the action' 'm365-guard: refused' 'graph.sh cert-init' \
+  for p in 'a denied prompt or a guard refusal ends the action' 'm365-guard: refused' 'zyggy m365 cert-init' \
     'audit flagged' 'Certificate rejected' 'Scope or grant missing' 'Token' 'Revoke the application' 'actions.jsonl' \
-    'mail-backfill' 'files-backfill'; do
+    'mail-backfill' 'files-backfill' 'version_mismatch' 'zyggy-min-version' 'ZYGGY_HOOKS=off'; do
     grep -qiF -- "$p" "$o" || { echo "operations.md lacks: $p"; return 1; }
   done
   run grep -nE 'no terminal|no approval for row|object changed since approval|m365-approve|propose\.sh|send-draft|Approve proposals' "$a" "$o"
@@ -672,21 +596,22 @@ M365_SKILLS=(morning-brief mail-backfill files-backfill m365)
   done
 }
 
-@test "repo: README.md documents the m365 connector, its nine scripts, the actions block, the two hooks, actions.jsonl and the tests; tests/README.md the m365 stubs and the hook fixtures" {
-  local s
-  for s in graph.sh mcp-wrapper.sh state.sh facts.sh parse.sh verify.sh brief.sh mail-backfill.sh files-backfill.sh \
-    m365-lib.sh m365-guard.sh m365-log.sh actions.jsonl permissions.ask '`actions`' write_drive_id body_max_chars \
-    max_recipients suggestion_cap 'How actions are confirmed' .mcp.json enabledMcpjsonServers instance/m365.json \
-    sp_object_id sites_granted LoadCredential ZYGGY_M365_STUB curl-stub.sh claude-stub.sh 'Rotate the certificate' \
-    'Upgrade the MCP server' 'never under' item-exists item-kind mcp-server.sh mcp-auth-header.sh headersHelper \
-    zyggy-m365-mcp.service ZYGGY_M365_PORT 'token minted'; do
+@test "repo: README.md documents the m365 connector through its verbs, the remaining shell, the tool data files, the actions block, the two launchers, actions.jsonl and the tests; tests/README.md the zyggy stub and the hook fixtures" {
+  local s v
+  for v in state facts parse check token-test cert-init guard log verify brief mail-backfill files-backfill mcp-server auth-header; do
+    grep -qF -- "zyggy m365 $v" "$REPO_ROOT/README.md" || { echo "README.md lacks: zyggy m365 $v"; return 1; }
+  done
+  for s in 'zyggy memory remember' '### Remaining shell' '### Tool data files' zyggy-min-version m365-guard.sh m365-log.sh \
+    actions.jsonl permissions.ask '`actions`' write_drive_id body_max_chars max_recipients suggestion_cap \
+    'How actions are confirmed' .mcp.json enabledMcpjsonServers instance/m365.json sp_object_id sites_granted \
+    LoadCredential 'Rotate the certificate' 'Upgrade the MCP server' headersHelper zyggy-m365-mcp.service \
+    ZYGGY_M365_PORT version_mismatch launchers.bats zyggy-stub.sh; do
     grep -qF -- "$s" "$REPO_ROOT/README.md" || { echo "README.md lacks: $s"; return 1; }
   done
-  run grep -nE 'propose\.sh|m365-approve|pty\.bash|proposals\.jsonl|approvals\.jsonl|executions\.jsonl|ttl_minutes|allowed_actions|Approve proposals' \
+  run grep -nE 'propose\.sh|m365-approve|pty\.bash|proposals\.jsonl|approvals\.jsonl|executions\.jsonl|ttl_minutes|allowed_actions|Approve proposals|curl-stub\.sh|claude-stub\.sh' \
     "$REPO_ROOT/README.md" "$REPO_ROOT/tests/README.md"
   [ "$status" -eq 1 ] || { echo "$output"; return 1; }
-  for s in 'curl stub' '=match' assertion.jwt tools-0.157.2.txt 'BODYTEXT-NEVER-STORED' 'UPLOADTEXT-NEVER-LOGGED' 'hook-*.json' \
-    'hook-post-*.json' upload_of_size; do
+  for s in 'The `zyggy` stub' zyggy-stub.sh launchers.bats 'hook-*.json' m365-suggestions-section.txt; do
     grep -qF -- "$s" "$REPO_ROOT/tests/README.md" || { echo "tests/README.md lacks: $s"; return 1; }
   done
 }
@@ -705,4 +630,50 @@ M365_SKILLS=(morning-brief mail-backfill files-backfill m365)
   run grep -nF 'tests/fixtures/m365/*.bash' .github/workflows/ci.yml .gitattributes
   [ "$status" -eq 1 ] || { echo "$output"; return 1; }
   [ "${#GIT_EXEMPT[@]}" -eq 1 ]
+}
+
+# --- the template after spec 33: the m365 and remember scripts are verbs of the zyggy binary ----------------------------
+
+@test "repo: no m365 or remember script remains but the two hook launchers; the shell left is the R1 list (AC-36)" {
+  cd "$REPO_ROOT"
+  run git ls-files -- '.claude/skills/m365/*.sh' '.claude/skills/remember/*.sh' tests/remember.bats \
+    'tests/fixtures/m365/*.sh' tests/fixtures/graph
+  [ -z "$output" ] || { echo "$output"; return 1; }
+  [ "$(scripts | paste -sd' ')" = ".claude/hooks/lib.sh .claude/hooks/m365-guard.sh .claude/hooks/m365-log.sh .claude/hooks/session-start.sh .claude/hooks/stop.sh .claude/skills/github-clone/askpass.sh .claude/skills/github-clone/clone.sh .claude/skills/github-inventory/inventory.sh" ] ||
+    { scripts; return 1; }
+  run grep -nE 'zy_m365|m365-lib|zy_cap_bytes|zy_strip_front_matter|zy_front_matter_value' .claude/hooks/lib.sh
+  [ "$status" -eq 1 ] || { echo "$output"; return 1; }
+}
+
+@test "repo: the two hook launchers are at most 30 lines, run zyggy m365 guard|log and touch no data (no jq, sed, awk, case or source)" {
+  local h f
+  for h in m365-guard:guard m365-log:log; do
+    f="$HOOKS/${h%%:*}.sh"
+    [ "$(wc -l < "$f")" -le 30 ] || { echo "$f: too long"; return 1; }
+    grep -qE "zyggy m365 ${h#*:}( |\$)" "$f" || { echo "$f: no zyggy m365 ${h#*:}"; return 1; }
+    run grep -nE '(^|[^a-z_-])(jq|sed|awk|case|source)( |$)' <(grep -vE '^[[:space:]]*#' "$f")
+    [ "$status" -eq 1 ] || { echo "$f: $output"; return 1; }
+  done
+}
+
+@test "repo: every zyggy command the template documents is one the binary has (run against the stub)" {
+  local cmd n=0
+  install_zyggy_stub
+  cd "$REPO_ROOT"
+  while IFS= read -r cmd; do
+    # shellcheck disable=SC2086 # the two words of the command
+    run zyggy ${cmd#zyggy } < /dev/null
+    [ "$status" -eq 0 ] || { echo "$cmd: $output"; return 1; }
+    n=$((n + 1))
+  done < <(grep -ohE '\bzyggy (m365|memory|dream) [a-z-]+' .claude/skills/*/SKILL.md .claude/rules/*.md AGENTS.md README.md \
+    .claude/settings.json .mcp.json .claude/hooks/*.sh | LC_ALL=C sort -u)
+  [ "$n" -ge 12 ] || { echo "only $n documented commands"; return 1; }
+}
+
+@test "repo: the shared secret samples give the same pattern names through lib.sh as through the binary's patterns file (AC-11)" {
+  local name sample
+  while IFS=$'\t' read -r name sample; do
+    run bash -c 'source "$1"; zy_secret_match "$2" && printf "%s" "$ZY_SECRET_NAME"' _ "$HOOKS/lib.sh" "$sample"
+    [ "$status" -eq 0 ] && [ "$output" = "$name" ] || { echo "$name: got '$output'"; return 1; }
+  done < "$FIXTURES/secret-samples.txt"
 }

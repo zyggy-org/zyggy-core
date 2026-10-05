@@ -15,9 +15,16 @@
   untracked because Claude Code writes permission approvals into it. `autoMemoryDirectory` in the same
   file points Claude Code's auto memory at `memory/<tenant>/<user>/auto`.
 - `ZYGGY_HOOKS=off` disables the hook and skill scripts (`github-inventory` and `github-clone` refuse with exit 5;
-  the dream pass will use it). The `m365` timer unit sets it: there `graph.sh cert-init`, `mail-backfill.sh` and
-  `files-backfill.sh` refuse with exit 5, while `brief.sh` and the `graph.sh` reads run; the action tools are
-  denied in every run whatever it says. `ZYGGY_NOW` is for tests only; it must never be set on this machine.
+  the dream pass will use it). The `m365` timer unit sets it: there `zyggy m365 cert-init`,
+  `zyggy m365 mail-backfill` and `zyggy m365 files-backfill` refuse with exit 5 (the backfills are owner-started
+  only), while `zyggy m365 brief` and the other `zyggy m365` verbs run; the action tools are denied in every run
+  whatever it says. `zyggy memory remember` exits 0 and stores nothing. `ZYGGY_NOW` is for tests only; it must
+  never be set on this machine.
+- The `zyggy` binary is on `PATH`; `.claude/zyggy-min-version` names the oldest version this template works with.
+  Binary missing or older than `.claude/zyggy-min-version` → the guard blocks every action
+  (`m365-guard: zyggy not found`, or a usage error turned into a block), the `.mcp.json` headersHelper fails so
+  the `m365` tools are unavailable, and `remember` and the skills' commands report `command not found`: runbook
+  entry "Binary missing or wrong version".
 
 ## Instruction files
 
@@ -37,13 +44,16 @@ set -a; . <(jq -r '.env | to_entries[] | "\(.key)=\(.value)"' .claude/settings.l
 .claude/hooks/session-start.sh identity | wc -c      # or: index, daily (runs `zyggy memory digest`)
 ```
 
-Exit codes of every script: `0` ok, `2` refused (secret pattern, `remember` only), `3` configuration error
-(the stderr line names the cause: a `ZYGGY_*` variable, the memory directory, a missing tool or file), `4` usage
+Exit codes of every script and `zyggy` verb: `0` ok, `2` refused (secret pattern, `remember` only; for the two
+`m365` hooks a block), `3` configuration error (the stderr line names the cause: a `ZYGGY_*` variable, the memory
+directory, `instance/m365.json`, the key, a missing tool or file; for `zyggy m365 brief` and the backfills also
+`configuration error: version_mismatch: …`, the binary is not the pinned one, before any request), `4` usage
 error or unknown section,
 `5` refused — by policy (an unattended run, or for `github-clone` a repository outside the owner's account, a
-fork of a private repository, over the size or clone limit; for the `m365` scripts `audit flagged`, a backfill
-cap reached); `6` a GitHub request failed (`github-inventory`,
-`github-clone`), or a Graph or identity failure (`m365`).
+fork of a private repository, over the size or clone limit; for `zyggy m365` `audit flagged`, a backfill cap
+reached, a stuck folder or an unconfirmed batch); `6` a GitHub request failed (`github-inventory`,
+`github-clone`), or a Graph, identity or model-run failure (`zyggy m365`); `130`/`143` a brief or backfill
+stopped by a signal (Ctrl-C, `systemctl stop`) — a backfill resumes from its checkpoint on the next start.
 
 ## When something reports an error
 
@@ -56,13 +66,17 @@ cap reached); `6` a GitHub request failed (`github-inventory`,
 - Exit 6 from `github-inventory` or `github-clone`: a GitHub request failed. Quote the stderr line to the owner
   and point to the runbook entry "GitHub token rejected". Do not retry with another tool.
 - Exit 5 from `github-clone`: quote the stderr line; do not retry and do not try another way.
-- Exit 6 from an `m365` script (`/m365 check`): quote the stderr line and point to the runbook entry it names —
+- Exit 3 `configuration error: version_mismatch` from `zyggy m365 brief` or a backfill: the binary is not the
+  pinned one; nothing was read. Point to "Binary missing or wrong version"; do not run it another way.
+- Exit 6 from `zyggy m365` (`/m365 check`): quote the stderr line and point to the runbook entry it names —
   "Certificate rejected" (`invalid_client`, clock skew) or "Scope or grant missing" (403). Do not retry with
   another tool. The `m365` credential refreshes itself; if an `m365` tool still reports an authentication failure,
   tell the owner the credential could not be refreshed and point to runbook 13 "Certificate rejected"; do not retry
   another way.
 - A denied prompt or a guard refusal ends the action — report it (`m365-guard: refused: <reason>` names what the
-  policy does not allow, runbook "Guard refused"); never retry it another way.
+  policy does not allow; any other `m365-guard:` line means the guard itself failed and blocked the call; runbook
+  "Guard refused / failed"); never retry it another way. An `m365-log:` error after an
+  action means it ran without an `actions.jsonl` row: tell the owner (runbook "Action without a log row").
 - `audit FLAGGED` in the brief's journal line: the owner reviews the Drafts. A `Send`, `Move` or upload by the
   application in the Exchange/SharePoint audit log without an `actions.jsonl` row means "Revoke the application
   credential" until it is explained.

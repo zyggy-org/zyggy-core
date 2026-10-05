@@ -82,14 +82,21 @@
       "Bash(zyggy dream status:*)"
     ],
     "ask": [
+      "mcp__m365__move-shared-mailbox-message",
       "mcp__m365__send-shared-mailbox-mail",
-      "mcp__m365__move-shared-mailbox-message"
+      "mcp__m365__upload-file-content"
     ],
     "deny": [
       "Read(~/.config/zyggy/**)",
       "Edit(~/.cache/zyggy/repos/**)",
       "Edit(~/.local/state/zyggy/**)",
-      "Bash(.claude/skills/m365/graph.sh *)",
+      "Bash(zyggy m365 auth-header*)",
+      "Bash(zyggy m365 token-test*)",
+      "Bash(zyggy m365 cert-init*)",
+      "Bash(zyggy m365 mcp-server*)",
+      "Bash(zyggy m365 brief*)",
+      "Bash(zyggy m365 mail-backfill*)",
+      "Bash(zyggy m365 files-backfill*)",
       "mcp__m365__accept-calendar-event",
       "mcp__m365__add-excel-table-rows",
       "mcp__m365__add-group-member",

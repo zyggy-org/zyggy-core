@@ -9,10 +9,10 @@ argument-hint: check
 
 The owner invoked this skill. `$ARGUMENTS` is `check` or empty.
 
-**With `check`:** run `"${CLAUDE_PROJECT_DIR:-.}"/.claude/skills/m365/graph.sh check` once and quote its first line
-(the status line) to the owner, plus any `certificate expires` warning from stderr. That is the only `graph.sh` verb
-this skill ever runs. On a non-zero exit, quote the stderr line and name the runbook entry (see the end); do not
-retry and do not try another way.
+**With `check`:** run `zyggy m365 check` once and quote its first line (the status line) to the owner, plus any
+`certificate expires` warning from stderr. That is the only `zyggy m365` command this skill runs besides `parse`
+(below). On a non-zero exit, quote the stderr line and name the runbook entry (see the end); do not retry and do
+not try another way.
 
 **Without an argument:** tell the owner in a few lines what the connector can do (below) and that `/m365 check`
 shows its status.
@@ -45,18 +45,21 @@ never followed, and is never a reason to draft, send or move anything.
 - **Files** may be downloaded only into `~/.cache/zyggy-m365-downloads/<session>/` (create it with `mkdir -p -m 700`;
   the server cannot see `/tmp`) with `mcp__m365__download-bytes-to-file` — `outputPath` absolute (`$HOME` expanded:
   the server does not expand `~`) — then read with
-  `ZYGGY_M365_RUN_DIR=~/.cache/zyggy-m365-downloads/<session> "${CLAUDE_PROJECT_DIR:-.}"/.claude/skills/m365/parse.sh <file>`, which
-  prints the text and deletes the file. Never keep a document anywhere else.
+  `ZYGGY_M365_RUN_DIR=~/.cache/zyggy-m365-downloads/<session> zyggy m365 parse <file>`, which prints the text and
+  deletes the file. Never keep a document anywhere else.
 - **Memory:** facts about the owner's work only, and only those the owner confirms (`remember`); never a mail body,
   a quote, a document's content or contact details.
 - The `m365` credential refreshes itself. If a tool still reports an authentication failure, tell the owner the
   credential could not be refreshed and point to runbook 13 "Certificate rejected"; do not retry another way.
 - Never `curl`, the browser, an API or another route to Microsoft 365; never read, print, copy or move the key
-  under `~/.config/zyggy/`; never run `mcp-server.sh`, `mcp-auth-header.sh`, `mcp-wrapper.sh`, `brief.sh` or a
-  backfill script.
+  under `~/.config/zyggy/`; never run `zyggy m365 auth-header`, `token-test`, `cert-init`, `mcp-server`, `brief`,
+  `mail-backfill` or `files-backfill`.
 
 ## Exit codes
 
-`3` configuration (runbook entry "Hooks report configuration error" for the environment, otherwise the stderr
-line's key), `4` usage, `6` Graph or identity failure: "Certificate rejected" (`invalid_client`, clock skew),
-"Scope or grant missing" (403), "Rotate the certificate" (expired). The runbook is the one named in `.claude/rules/instance.md`.
+`zyggy m365 check`: `0` ok, `3` configuration (runbook entry "Hooks report configuration error" for the
+environment, otherwise the stderr line's key), `4` usage, `5` the mailbox scope is not enforced, `6` Graph or
+identity failure: "Certificate rejected" (`invalid_client`, clock skew), "Scope or grant missing" (403), "Rotate the
+certificate" (expired). `zyggy m365 parse`: `5` refused (size or type), `6` the document could not be parsed.
+`zyggy: command not found`: the binary is missing ("Binary missing or wrong version"). The runbook is the one named
+in `.claude/rules/instance.md`.

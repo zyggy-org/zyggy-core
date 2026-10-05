@@ -1,0 +1,16 @@
+create-shared-mailbox-draft
+create-shared-mailbox-reply-draft
+download-bytes-to-file
+get-drive-delta
+get-drive-item
+get-drive-root-item
+get-shared-mailbox-message
+get-sharepoint-site-drive-by-id
+list-drive-item-versions
+list-folder-files
+list-shared-mailbox-folder-messages
+list-shared-mailbox-messages
+list-sharepoint-site-drives
+move-shared-mailbox-message
+search-onedrive-files
+send-shared-mailbox-mail

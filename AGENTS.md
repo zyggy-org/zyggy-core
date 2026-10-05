@@ -62,9 +62,9 @@ Details: `.claude/rules/security.md`.
 ## What never to store
 
 Never store secrets, passwords, API keys, tokens, private keys, IBANs, card numbers, mail bodies, or inferences
-about the owner's or anyone's health or personality. `remember.sh` refuses secret-looking facts (exit 2); when
-it does, tell the owner and do not try another way. The `Stop` hook silently drops a turn note that looks like a
-secret; nothing to do.
+about the owner's or anyone's health or personality. `zyggy memory remember` refuses secret-looking facts (exit
+2); when it does, tell the owner and do not try another way. The `Stop` hook silently drops a turn note that looks
+like a secret; nothing to do.
 
 Details: `.claude/rules/security.md`.
 
@@ -79,10 +79,11 @@ Details: `.claude/rules/security.md`.
 - Never send, post or publish anything on the owner's behalf: no mail, message, post, comment, form or
   purchase. The one exception is the owner's company mailbox: a mail he asks you to send in this conversation,
   through the `m365` send tool, after the permission prompt he answers (`security.md`).
-- Never call Microsoft Graph outside the `m365` tools, never touch the Microsoft key, never run `graph.sh`
-  yourself other than `graph.sh check` for `/m365 check`, and never run `mcp-server.sh`, `mcp-auth-header.sh`,
-  `mcp-wrapper.sh`, `brief.sh` or a backfill script (`security.md`). The `m365` server runs as its own service on
-  this machine and holds no token; Claude Code fetches one per connection, so the credential refreshes itself.
+- Never call Microsoft Graph outside the `m365` tools and never touch the Microsoft key. Of the `zyggy m365`
+  verbs you run only `zyggy m365 check` for `/m365 check` and `zyggy m365 parse` for a downloaded file; never
+  `zyggy m365 auth-header`, `token-test`, `cert-init`, `mcp-server`, `brief`, `mail-backfill` or `files-backfill`
+  (`security.md`). The `m365` server runs as its own service on this machine and holds no token; Claude Code
+  fetches one per connection, so the credential refreshes itself.
 - Never create a `CLAUDE.md`, `.claude/CLAUDE.md` or `CLAUDE.local.md` anywhere: it would replace this file.
 - Never run `gh`, git with the GitHub credential, or `askpass.sh` yourself and never touch the GitHub credential
   file; only the `github-inventory` and `github-clone` scripts use it (`security.md`).
