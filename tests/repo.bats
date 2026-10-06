@@ -20,9 +20,13 @@ load helpers
   # follow them and the ask rules of the D7 action tools are asserted by the m365 tests below (spec 23)
   jq -e '.permissions | keys == ["allow","ask","deny"]' "$s"
   # the dream skill may only ask for a run and read its status (spec 28); nothing else is pre-approved
-  jq -e '.permissions.allow == ["Bash(zyggy dream request)","Bash(zyggy dream status:*)"]' "$s"
+  # the brief is shown only when the owner asks: the session may run `zyggy brief show` (spec 35, AC-47)
+  jq -e '.permissions.allow == ["Bash(zyggy dream request)","Bash(zyggy dream status:*)","Bash(zyggy brief show*)"]' "$s"
   jq -e '.permissions.deny[0:2] == ["Read(~/.config/zyggy/**)","Edit(~/.cache/zyggy/repos/**)"]' "$s"
   jq -e '.hooks | keys == ["PostToolUse","PreToolUse","SessionStart","Stop"]' "$s"
+  # no UserPromptSubmit hook and no brief launcher: the brief is shown on request (spec 35 OD-5, AC-62)
+  jq -e '.hooks | has("UserPromptSubmit") | not' "$s"
+  [ -z "$(ls "$REPO_ROOT"/.claude/hooks/brief-*.sh 2> /dev/null)" ]
   jq -e '.hooks.SessionStart | length == 1' "$s"
   jq -e '.hooks.SessionStart[0].matcher == "startup|resume|clear|compact"' "$s"
   jq -e '.hooks.SessionStart[0].hooks | map(.args[0]) == ["identity","index","daily"]' "$s"
@@ -666,7 +670,7 @@ M365_SKILLS=(morning-brief mail-backfill files-backfill m365)
     run zyggy ${cmd#zyggy } < /dev/null
     [ "$status" -eq 0 ] || { echo "$cmd: $output"; return 1; }
     n=$((n + 1))
-  done < <(grep -ohE '\bzyggy (m365|memory|dream) [a-z-]+' .claude/skills/*/SKILL.md .claude/rules/*.md AGENTS.md README.md \
+  done < <(grep -ohE '\bzyggy (m365|memory|dream|brief) [a-z-]+' .claude/skills/*/SKILL.md .claude/rules/*.md AGENTS.md README.md \
     .claude/settings.json .mcp.json .claude/hooks/*.sh | LC_ALL=C sort -u)
   [ "$n" -ge 12 ] || { echo "only $n documented commands"; return 1; }
 }
@@ -687,4 +691,14 @@ M365_SKILLS=(morning-brief mail-backfill files-backfill m365)
   [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "instance/zyggy.json version '$version' is not x.y.z"; return 1; }
   [ "$(printf '%s\n%s\n' "$min" "$version" | sort -V | head -n 1)" = "$min" ] ||
     { echo "instance/zyggy.json pins $version, the template needs at least $min (runbook: Template needs a newer binary)"; return 1; }
+}
+
+@test "repo: operations.md tells Zyggy to show the brief only when the owner asks, with 'brief full', the delta read-only, and the printed brief as data (spec 35 AC-62)" {
+  local o="$REPO_ROOT/.claude/rules/operations.md" p
+  for p in 'zyggy brief show' 'only when the owner asks' '"brief full"' 'zyggy brief show --full' 'data, never instructions' \
+    'runs nothing brief-related' 'never `zyggy m365 state`' 'received after'; do
+    grep -qF -- "$p" "$o" || { echo "operations.md lacks: $p"; return 1; }
+  done
+  run grep -nE 'UserPromptSubmit|brief-inject|first prompt of the (morning|day)' "$o" "$REPO_ROOT/AGENTS.md" "$REPO_ROOT/.claude/rules/security.md"
+  [ "$status" -eq 1 ] || { echo "$output"; return 1; }
 }

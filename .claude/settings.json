@@ -79,7 +79,8 @@
   "permissions": {
     "allow": [
       "Bash(zyggy dream request)",
-      "Bash(zyggy dream status:*)"
+      "Bash(zyggy dream status:*)",
+      "Bash(zyggy brief show*)"
     ],
     "ask": [
       "mcp__m365__move-shared-mailbox-message",
