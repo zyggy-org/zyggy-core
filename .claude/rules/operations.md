@@ -15,7 +15,7 @@
   untracked because Claude Code writes permission approvals into it. `autoMemoryDirectory` in the same
   file points Claude Code's auto memory at `memory/<tenant>/<user>/auto`.
 - `ZYGGY_HOOKS=off` disables the hook and skill scripts (`github-inventory` and `github-clone` refuse with exit 5;
-  the dream pass will use it). The `m365` timer unit sets it: there `zyggy m365 cert-init`,
+  the dream unit sets it). The `m365` timer unit sets it: there `zyggy m365 cert-init`,
   `zyggy m365 mail-backfill` and `zyggy m365 files-backfill` refuse with exit 5 (the backfills are owner-started
   only), while `zyggy m365 brief` and the other `zyggy m365` verbs run; the action tools are denied in every run
   whatever it says. `zyggy memory remember` exits 0 and stores nothing. `ZYGGY_NOW` is for tests only; it must
@@ -91,6 +91,5 @@ stopped by a signal (Ctrl-C, `systemctl stop`) — a backfill resumes from its c
 
 ## What comes later
 
-These will be added by later deliverables and do not exist yet: the nightly dream pass (consolidates `inbox/`
-and `daily/` into the durable files and commits memory), Telegram, personal mail, social accounts, and jobs on the
-owner's laptops. Until they exist, say so when asked.
+These will be added by later deliverables and do not exist yet: Telegram, personal mail, social accounts, and jobs
+on the owner's laptops. Until they exist, say so when asked. (The nightly dream pass exists: see `AGENTS.md`.)

@@ -28,11 +28,11 @@ Ask one block, wait for the answers, write them, show what you wrote, then move 
 2. **preferences.md** — tone and length of answers; when to act without asking vs when to ask first; quiet hours
    and days; channels you will use (remote control now, Telegram later); things you never want done or said;
    how you want memory diffs reviewed.
-3. **areas/** — every ongoing project, responsibility or trip (one file each: name, goal, status, deadline,
+3. **areas** — every ongoing project, responsibility or trip (one file each: name, goal, status, deadline,
    people involved, machine/repository if any) — Zyggy itself is one.
-4. **people/** — up to ten people who matter for the assistant's work (name, relation, context, what to
+4. **people** — up to ten people who matter for the assistant's work (name, relation, context, what to
    remember, contact preference).
-5. **topics/** — habits, tastes, recurring subjects, tools you use, subscriptions and accounts (names only, never
+5. **topics** — habits, tastes, recurring subjects, tools you use, subscriptions and accounts (names only, never
    credentials).
 6. **agents.md** — confirmation of the three machines and what each may be asked to do today.
 
@@ -43,8 +43,10 @@ Ask one block, wait for the answers, write them, show what you wrote, then move 
 - `profile.md`, `preferences.md`, `agents.md`: keep the existing front matter, or create the file with front
   matter (`name`, `description`, `updated`) when it does not exist; set `description` to a short
   summary under 150 characters naming the people and projects the file mentions, set `updated` to today.
-- `areas/`, `people/`, `topics/`: one file per item, slug in lowercase with hyphens (`areas/house-move.md`,
-  `people/marie.md`), with front matter `name`, `description`, `updated` and, when useful, `aliases`.
+- Areas, people and topics: one file per item under its side — `private/` for the owner's private life,
+  `business/` for his work — and the category `areas/`, `people/` or `topics/`, slug in lowercase with hyphens
+  (`private/areas/house-move.md`, `business/people/marie.md`), with front matter `name`, `description`, `updated`
+  and, when useful, `aliases`. Write into an existing category only; new categories are the dream pass's.
 - Link related files with `[[slug]]`.
 - `preferences.md` records the language the owner wants answers in.
 - Never write a password, key, token, IBAN, card number or health/personality inference, even if the owner
@@ -54,6 +56,6 @@ Ask one block, wait for the answers, write them, show what you wrote, then move 
 
 Run `git -C "$ZYGGY_MEMORY_ROOT" status` and `git -C "$ZYGGY_MEMORY_ROOT" diff --stat` and show the output, and
 ask the owner whether to commit the seed. On a yes: stage only the seeded durable files (`profile.md`,
-`preferences.md`, `agents.md`, `areas/`, `people/`, `topics/` — not `daily/`, not `inbox/`),
+`preferences.md`, `agents.md` and the files written under `private/` and `business/` — not `daily/`, not `inbox/`),
 `git -C "$ZYGGY_MEMORY_ROOT" commit -m "seed <today>"`, `git -C "$ZYGGY_MEMORY_ROOT" push`, and show the result.
 Without a yes, nothing is committed.
