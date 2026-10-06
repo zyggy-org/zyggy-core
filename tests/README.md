@@ -42,7 +42,8 @@ proves the missing-binary path.
 - `repo.bats` runs every `zyggy` command the skills, rules and `README.md` document against the stub, and checks
   that the settings rules equal the tool data files under `.claude/skills/m365/tools/` and that `.mcp.json` names
   `zyggy m365 auth-header`.
-- `expected/m365-suggestions-section.txt` is hand-derived from the brief's grammar, like every expected file; the
-  morning-brief skill must carry each of its lines verbatim.
+- The morning-brief skill's contract (spec 35: `mail.json`, the three classes, no brief Draft, no watermark write, the
+  structured result) is asserted sentence by sentence in `repo.bats`; the former `expected/m365-suggestions-section.txt`
+  went with the brief Draft.
 
 `.gitattributes` marks `expected/` and `fixtures/` as `-text`: their bytes are frozen and never normalised.

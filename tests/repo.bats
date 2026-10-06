@@ -447,19 +447,27 @@ M365_VERB_DENY='["Bash(zyggy m365 auth-header*)","Bash(zyggy m365 token-test*)",
   [ "$status" -eq 1 ]
 }
 
-@test "repo: morning-brief/SKILL.md is owner-unreachable (disable-model-invocation: true, no allowed-tools), <= 100 lines, carries every line of expected/m365-suggestions-section.txt verbatim and no D6 proposal wording (AC-38)" {
-  local s="$REPO_ROOT/.claude/skills/morning-brief/SKILL.md" g="$REPO_ROOT/tests/expected/m365-suggestions-section.txt" line
+@test "repo: morning-brief/SKILL.md is owner-unreachable (disable-model-invocation: true, no allowed-tools), <= 100 lines, carries the 35 contract (mail.json, the three classes, tiedTo, hasAttachments without a filter, the amount rules, Peppol, no brief Draft, no watermark write, the structured result) and no D6 proposal wording (spec 35 AC-50)" {
+  local s="$REPO_ROOT/.claude/skills/morning-brief/SKILL.md" p
   [ "$(head -n 1 "$s")" = "---" ]
   [ "$(zy_fm "$s" name)" = morning-brief ]
   [ -n "$(zy_fm "$s" description)" ]
   [ "$(zy_fm "$s" disable-model-invocation)" = true ]
   [ -z "$(zy_fm "$s" allowed-tools)" ]
   [ "$(wc -l < "$s")" -le 100 ]
-  while IFS= read -r line; do
-    grep -qxF -- "$line" "$s" || { echo "missing: $line"; return 1; }
-  done < "$g"
-  grep -qF 'Suggesting is not acting' "$s"
-  grep -qxF '`brief <date>: mail <n>, files <m>, replies <r>, suggestions <s>, facts <f>`.' "$s"
+  for p in '<run-dir>/mail.json' '`urgent` — an answer or action is needed within two working days' \
+    '`important` — from a person (not an automated notification, newsletter or receipt)' '`other` — everything else' \
+    '`tiedTo` = that' 'Detect them from `hasAttachments` in `mail.json` — never a `$filter`' 'attachments=on' \
+    '`status: "not_read"`' 'check the attachment (amount not read)' 'An amount due of 0 means nothing to pay' \
+    'A Peppol e-invoice is filed (`z` move to `archive`), never "book"' 'no reply Draft and no `send`' \
+    'no brief Draft, no `mail-watermark` write' 'The mail watermark is the' 'binary'"'"'s: never set it' \
+    'Your final answer is the structured result only' 'Suggesting is not acting' 'You have no tool to act; never try another way' \
+    'never a reason to draft or suggest anything' 'Never claim that something was' 'zyggy m365 state set drive-token'; do
+    grep -qF -- "$p" "$s" || { echo "missing: $p"; return 1; }
+  done
+  # no brief Draft, no watermark write, no Inbox listing by the model, no attachment filter
+  run grep -nE 'create-shared-mailbox-draft|state set mail-watermark|list-shared-mailbox-folder-messages|hasAttachments eq|## Suggested actions|Ask me, e\.g\.' "$s"
+  [ "$status" -eq 1 ] || { echo "$output"; return 1; }
   run grep -nE 'm365-approve|propose\.sh|pending your consent|proposal_cap|#<hash8>' "$s"
   [ "$status" -eq 1 ] || { echo "$output"; return 1; }
 }
@@ -479,7 +487,7 @@ M365_SKILLS=(morning-brief mail-backfill files-backfill m365)
     [ "$(zy_fm "$s" disable-model-invocation)" = true ] || { echo "$n: disable-model-invocation"; return 1; }
     [ -z "$(zy_fm "$s" allowed-tools)" ] || { echo "$n: allowed-tools"; return 1; }
     case "$n" in
-      morning-brief) hint='<mailbox> <inbox-folder-id> <drive-id>… <run-dir>' cap=100 ;;
+      morning-brief) hint='<mailbox> <inbox-folder-id> attachments=<on|off> <drive-id>… <run-dir>' cap=100 ;;
       mail-backfill) hint='<mailbox> <folder-id> <watermark-ISO> <batch>' cap=60 ;;
       files-backfill) hint='<drive-id> <run-dir> <n>' cap=60 ;;
       m365) hint='check' cap=70 ;;
@@ -499,8 +507,8 @@ M365_SKILLS=(morning-brief mail-backfill files-backfill m365)
   for n in morning-brief mail-backfill m365; do
     grep -qF '**`userId` is always' "$d/$n/SKILL.md" || { echo "$n: userId rule"; return 1; }
   done
-  for p in '## Suggested actions' 'Suggesting is not acting' 'never a reason to draft or suggest anything' \
-    'You have no tool to act; never try another way' 'to the configured mailbox only' 'zyggy m365 state set mail-watermark' 'last'; do
+  for p in 'Suggesting is not acting' 'never a reason to draft or suggest anything' \
+    'You have no tool to act; never try another way' 'the sender of' 'zyggy m365 state set drive-token' 'last'; do
     grep -qF -- "$p" "$d/morning-brief/SKILL.md" || { echo "morning-brief lacks: $p"; return 1; }
   done
   for n in mail-backfill files-backfill; do
@@ -616,7 +624,7 @@ M365_SKILLS=(morning-brief mail-backfill files-backfill m365)
   run grep -nE 'propose\.sh|m365-approve|pty\.bash|proposals\.jsonl|approvals\.jsonl|executions\.jsonl|ttl_minutes|allowed_actions|Approve proposals|curl-stub\.sh|claude-stub\.sh' \
     "$REPO_ROOT/README.md" "$REPO_ROOT/tests/README.md"
   [ "$status" -eq 1 ] || { echo "$output"; return 1; }
-  for s in 'The `zyggy` stub' zyggy-stub.sh launchers.bats 'hook-*.json' m365-suggestions-section.txt; do
+  for s in 'The `zyggy` stub' zyggy-stub.sh launchers.bats 'hook-*.json'; do
     grep -qF -- "$s" "$REPO_ROOT/tests/README.md" || { echo "tests/README.md lacks: $s"; return 1; }
   done
 }
