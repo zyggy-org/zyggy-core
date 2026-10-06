@@ -71,8 +71,8 @@ stopped by a signal (Ctrl-C, `systemctl stop`) — a backfill resumes from its c
 - Exit 6 from `zyggy m365` (`/m365 check`): quote the stderr line and point to the runbook entry it names —
   "Certificate rejected" (`invalid_client`, clock skew) or "Scope or grant missing" (403). Do not retry with
   another tool. The `m365` credential refreshes itself; if an `m365` tool still reports an authentication failure,
-  tell the owner the credential could not be refreshed and point to runbook 13 "Certificate rejected"; do not retry
-  another way.
+  tell the owner the credential could not be refreshed and point to runbook 13 "Token refresh failed" ("Certificate rejected" when Microsoft refuses the certificate);
+  do not retry another way.
 - A denied prompt or a guard refusal ends the action — report it (`m365-guard: refused: <reason>` names what the
   policy does not allow; any other `m365-guard:` line means the guard itself failed and blocked the call; runbook
   "Guard refused / failed"); never retry it another way. An `m365-log:` error after an
