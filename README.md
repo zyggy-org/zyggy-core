@@ -346,7 +346,8 @@ git ls-files --eol | grep -v 'i/lf\|i/-text\|i/none'      # must print nothing (
 
 `ZYGGY_HYGIENE_FORBIDDEN` — a comma-separated list of words (the owner's tenant and user names, for example)
 that must not occur in any template-owned file, matched case-insensitively. Set it as a GitHub Actions
-repository variable; CI passes it to `bats`. Unset or empty → that one test is reported as skipped.
+repository **secret**, never a variable: a variable is printed in the run log, and this template's logs are public; CI
+passes it to `bats`. Unset or empty → that one test is reported as skipped.
 
 Fixtures use tenant `acme`, user `alice`. Files under `tests/expected/` are **hand-derived** from the
 contracts and never pasted from script output; see `tests/README.md`. The `github-inventory` tests run against a

@@ -309,8 +309,9 @@ hygiene_words() { # hygiene_words <root> <csv>
   grep -q 'when it does not exist' "$REPO_ROOT/.claude/skills/seed-memory/SKILL.md"
 }
 
-@test "repo: ci.yml passes vars.ZYGGY_HYGIENE_FORBIDDEN to bats" {
-  grep -qF 'ZYGGY_HYGIENE_FORBIDDEN: ${{ vars.ZYGGY_HYGIENE_FORBIDDEN }}' "$REPO_ROOT/.github/workflows/ci.yml"
+@test "repo: ci.yml passes secrets.ZYGGY_HYGIENE_FORBIDDEN to bats (a secret is masked in the run log; a variable is not)" {
+  grep -qF 'ZYGGY_HYGIENE_FORBIDDEN: ${{ secrets.ZYGGY_HYGIENE_FORBIDDEN }}' "$REPO_ROOT/.github/workflows/ci.yml"
+  ! grep -qF 'vars.ZYGGY_HYGIENE_FORBIDDEN' "$REPO_ROOT/.github/workflows/ci.yml"
 }
 
 @test "repo: every .sh under .claude/ starts with #!/usr/bin/env bash and set -euo pipefail within its first 3 lines" {

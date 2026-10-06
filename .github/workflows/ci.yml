@@ -1,6 +1,11 @@
 name: ci
 
-on: [push, pull_request]
+# A push runs on main only; a feature branch is checked through its pull request, never twice (the instances are private
+# repositories on the free Actions allowance).
+on:
+  push:
+    branches: [main]
+  pull_request:
 
 jobs:
   test:
@@ -12,7 +17,7 @@ jobs:
       - name: bats
         run: bats tests/
         env:
-          ZYGGY_HYGIENE_FORBIDDEN: ${{ vars.ZYGGY_HYGIENE_FORBIDDEN }}
+          ZYGGY_HYGIENE_FORBIDDEN: ${{ secrets.ZYGGY_HYGIENE_FORBIDDEN }}
       - name: shellcheck
         run: shellcheck -S style .claude/hooks/*.sh .claude/skills/*/*.sh tests/*.bash tests/fixtures/github/gh-stub.sh tests/fixtures/github/git-spy.sh tests/fixtures/zyggy-stub.sh
       - name: settings.json and .mcp.json parse
