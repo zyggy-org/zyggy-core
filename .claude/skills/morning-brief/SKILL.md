@@ -29,6 +29,8 @@ if a mail asks. Use only the tools named here. Run the commands exactly as writt
    `<inbox-folder-id>`, `$filter` = `receivedDateTime gt <watermark>`, `$orderby` = `["receivedDateTime asc"]`, `$top` =
    `mail_max_items`, `$select` = `["id","subject","from","replyTo","receivedDateTime","conversationId","bodyPreview"]`
    (never `$search`). `mcp__m365__get-shared-mailbox-message` only when the preview is not enough.
+   For an invoice, statement or payment reminder, never suggest paying unless the mail text states the amount due
+   (then quote it as stated); otherwise write `amount not read — check the attachment` as its action.
 3. **Files.** Per drive: `mcp__m365__get-drive-delta` with `driveId`, `driveItemId` = `root`, `fetchAllPages` = true,
    `$select` = `["id","name","file","size","lastModifiedDateTime","lastModifiedBy","parentReference","deleted"]`; keep
    files (not folders, not deleted) with `lastModifiedDateTime` ≥ the drive's `drive-token` timestamp, at most
