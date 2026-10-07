@@ -816,3 +816,19 @@ M365_SKILLS=(morning-brief mail-backfill files-backfill m365)
     [ "$(wc -l < "$f")" -le 200 ] || { echo "$f: more than 200 lines"; return 1; }
   done
 }
+
+@test "repo: an instance's instance/linkedin.json holds only the spec's keys, no secret-shaped value, actions.enabled [\"post\"]; its settings enable both MCP servers (skipped in the template; spec 36 AC-26)" {
+  local l="$REPO_ROOT/instance/linkedin.json" i="$REPO_ROOT/instance/settings.local.json"
+  [ -f "$l" ] || skip "no instance/linkedin.json: this is the template"
+  jq -e . "$l" > /dev/null
+  jq -e 'keys - ["actions","api_version","client_id","expiry_warn_days","member_sub","post","redirect_uri"] == []' "$l"
+  jq -e '(.actions | keys == ["enabled"]) and .actions.enabled == ["post"]' "$l"
+  jq -e '(.post // {} | keys - ["max_chars"]) == []' "$l"
+  jq -e '.client_id | test("^[A-Za-z0-9]{1,64}$")' "$l"
+  jq -e '.redirect_uri | test("^(https://|http://localhost[:/])[^?#]*$")' "$l"
+  run grep -niE 'secret|token|password' "$l"
+  [ "$status" -eq 1 ] || { echo "$output"; return 1; }
+  run bash -c 'source "$1"; zy_secret_match "$(cat "$2")" && printf "%s" "$ZY_SECRET_NAME"' _ "$HOOKS/lib.sh" "$l"
+  [ "$status" -ne 0 ] || { echo "instance/linkedin.json matches secret pattern $output"; return 1; }
+  jq -e '.enabledMcpjsonServers == ["m365","linkedin"]' "$i"
+}
