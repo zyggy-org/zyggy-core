@@ -103,6 +103,18 @@ stopped by a signal (Ctrl-C, `systemctl stop`) — a backfill resumes from its c
 - Replies the owner sent from another mailbox (not copied into this one) cannot be seen: such a mail still reads
   as unanswered.
 
+## LinkedIn
+
+- `zyggy linkedin auth status` (exit 0 connected · 3 configuration · 5 not connected, expired or scope missing),
+  `auth start` (prints the sign-in link; 0 · 3 · 4) and `auth finish` (the landed address on stdin; 0 · 3 · 4 ·
+  5 refused · 6 LinkedIn failed) are run only as the `linkedin` skill says. A connection lasts 60 days and is renewed
+  only by the owner ("connect LinkedIn"); `auth status` warns from 7 days before.
+- `publish_post` answers `published: <urn> — <link>` or one of `refused`, `not_connected`, `token_expired`,
+  `forbidden`, `version_retired`, `rate_limited`, `rejected`, `outcome_unknown`, `configuration_error`, each with its
+  detail and runbook 15 entry. It is never retried by itself; `outcome_unknown` means the owner checks his profile.
+- Every unattended run denies `mcp__linkedin__*` and `Bash(zyggy linkedin *)` and loads no `linkedin` server; the
+  server refuses to start under `ZYGGY_HOOKS=off` (exit 5).
+
 ## Headless runs
 
 - The owner's checks use `claude -p --no-session-persistence --permission-mode auto …`. Without
@@ -112,5 +124,5 @@ stopped by a signal (Ctrl-C, `systemctl stop`) — a backfill resumes from its c
 
 ## What comes later
 
-These will be added by later deliverables and do not exist yet: Telegram, personal mail, social accounts, and jobs
-on the owner's laptops. Until they exist, say so when asked. (The nightly dream pass exists: see `AGENTS.md`.)
+These will be added by later deliverables and do not exist yet: Telegram, personal mail, social accounts other
+than LinkedIn posts, and jobs on the owner's laptops. Until they exist, say so when asked. (The nightly dream pass exists: see `AGENTS.md`.)

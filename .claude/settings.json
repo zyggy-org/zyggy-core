@@ -82,12 +82,14 @@
       "Bash(zyggy dream status:*)",
       "Bash(zyggy brief show*)",
       "Bash(zyggy brief items *)",
-      "Bash(zyggy brief idea *)"
+      "Bash(zyggy brief idea *)",
+      "Bash(zyggy linkedin auth *)"
     ],
     "ask": [
       "mcp__m365__move-shared-mailbox-message",
       "mcp__m365__send-shared-mailbox-mail",
-      "mcp__m365__upload-file-content"
+      "mcp__m365__upload-file-content",
+      "mcp__linkedin__publish_post"
     ],
     "deny": [
       "Read(~/.config/zyggy/**)",
@@ -427,7 +429,10 @@
       "mcp__m365__update-todo-task-list",
       "mcp__m365__upload-file-content",
       "mcp__m365__upload-my-profile-photo",
-      "mcp__m365__verify-login"
+      "mcp__m365__verify-login",
+      "Bash(zyggy linkedin mcp-server*)",
+      "Read(~/.local/state/zyggy/linkedin/**)",
+      "Edit(~/.config/zyggy/**)"
     ]
   }
 }

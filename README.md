@@ -23,10 +23,11 @@ instance's Claude Code sessions** (remote control or `claude -p` are started the
 | `.claude/skills/seed-memory/` | The owner-invoked seeding interview for a fresh memory repository |
 | `.claude/skills/github-inventory/` | The owner-invoked `github-inventory` skill and `inventory.sh`: one `[observed]` line per repository the read-only token can see, into `inbox/` |
 | `.claude/skills/github-clone/` | The `github-clone` skill, `clone.sh` and `askpass.sh`: a read-only, shallow clone of one repository of the owner's own account into the clone cache, read as data |
-| `.mcp.json` | The one project MCP server, `m365`: `type: http` on `http://127.0.0.1:${ZYGGY_M365_PORT:-47365}/mcp` with `headersHelper` = `zyggy m365 auth-header` (a fresh token per connection; no `headers`, `env` or id; a missing binary fails the connection, so it fails closed without a launcher); the server itself runs as the instance's `zyggy-m365-mcp.service` (`zyggy m365 mcp-server`); an instance enables it with `enabledMcpjsonServers` |
+| `.mcp.json` | The one project MCP server, `m365`: `type: http` on `http://127.0.0.1:${ZYGGY_M365_PORT:-47365}/mcp` with `headersHelper` = `zyggy m365 auth-header` (a fresh token per connection; no `headers`, `env` or id; a missing binary fails the connection, so it fails closed without a launcher); the server itself runs as the instance's `zyggy-m365-mcp.service` (`zyggy m365 mcp-server`); an instance enables it with `enabledMcpjsonServers`. The second server, `linkedin`: `type: stdio`, `command: zyggy`, `args: ["linkedin", "mcp-server"]`, no `env`; one tool, `publish_post`, asked before every call (`permissions.ask`); enabled by the instance's `enabledMcpjsonServers` |
 | `.claude/skills/m365/` | The `m365` connector (the owner's company Microsoft 365): the owner-invoked `m365` skill (`/m365 check` and the conversation rules) and the tool data files `tools/` (see [Tool data files](#tool-data-files)); every program it needs is a [`zyggy` verb](#zyggy-verbs) |
+| `.claude/skills/linkedin/` | The model-invocable `linkedin` skill: `zyggy linkedin auth status` first, "connect LinkedIn" (`auth start`, the landed address into `auth finish` on stdin), a draft in the owner's voice shown with its character count and visibility, and `publish_post` only after his explicit go; comments and profile texts are suggestions to paste |
 | `.claude/skills/morning-brief/`, `mail-backfill/`, `files-backfill/` | The prompts of the three `claude -p` runs started by `zyggy m365 brief`, `zyggy m365 mail-backfill`, `zyggy m365 files-backfill` (`disable-model-invocation: true`) |
-| `.claude/zyggy-min-version` | One line: the oldest `zyggy` version this template works with (`0.2.0`); an instance's pin must be at least this (`repo.bats` fails an instance whose `instance/zyggy.json` is older) |
+| `.claude/zyggy-min-version` | One line: the oldest `zyggy` version this template works with (`0.4.0`); an instance's pin must be at least this (`repo.bats` fails an instance whose `instance/zyggy.json` is older) |
 | `tests/fixtures/github/` | Fixture API pages, the `gh` stub (`gh-stub.sh`) and the git spy (`git-spy.sh`) — no network in CI |
 | `tests/fixtures/zyggy-stub.sh` | The `zyggy` stub put first on `PATH` by the launcher and wiring tests: records argv and stdin, exits as told |
 | `tests/fixtures/m365/` | The pinned tool lists (`tools-0.157.2.txt`, `enabled-tools.txt`, `excluded-tools.txt`, `tools-list-0.157.2.json`) the data files are checked against, and the hook input `hook-send-clean.json` fed to the two launchers |
@@ -263,6 +264,22 @@ failure, 130/143 a model run stopped by a signal. Stderr lines keep their prefix
 | `zyggy brief idea <n> good\|skip\|not-interested\|later\|do-it [--until <YYYY-MM-DD>] [--date <YYYY-MM-DD>]` | — | The session | 0 · 3 · 4 · 5 (no such suggestion) | One `answer` row in `ideas.jsonl`; `later` needs a future `--until` |
 | `zyggy m365 mail-backfill [--folder <name>] [--reset]` | `mail-backfill.sh` | The owner, in tmux | 0 · 3 · 4 · 5 (unattended, a cap, a stuck folder) · 6 · 130/143 | Checks the pin, then batched `claude -p` runs with the prompt `/mail-backfill …` on stdin (mail read tools, `zyggy m365 facts`, `zyggy m365 state`; no Draft tool, no action tool); checkpoint, resume after an interrupt; refuses `ZYGGY_HOOKS=off` with exit 5 |
 | `zyggy m365 files-backfill [--drive <name>] [--reset]` | `files-backfill.sh` | The owner, in tmux | 0 · 3 · 4 · 5 (unattended, a cap, an unconfirmed batch) · 6 · 130/143 | The same for the drives: lists each drive once, walks it after the cursor `<ISO>\|<item-id>` (strictly greater, so files sharing one second never stall it), counts type/size/path skips itself and gives the model only the batch's eligible files (`download-bytes-to-file`, `zyggy m365 parse`, `zyggy m365 facts`; a fresh run directory per batch); the cursor moves only when the model's counts line confirms the batch; a 403 drive is skipped as `forbidden`; refuses `ZYGGY_HOOKS=off` with exit 5 |
+
+### LinkedIn (deliverable 36)
+
+| Verb | Who runs it | Exit codes | Contract |
+|------|-------------|-----------|----------|
+| `zyggy linkedin auth start` | The `linkedin` skill, when the owner says "connect LinkedIn" | 0 · 3 · 4 | Prints one sign-in link (`openid profile w_member_social`) and keeps its one-time state 0600 for 30 minutes |
+| `zyggy linkedin auth finish` (stdin: the landed address) | The `linkedin` skill | 0 · 3 · 4 · 5 (state, cancelled, other account) · 6 | One token exchange and one account read; writes `~/.config/zyggy/linkedin/token.json` 0600; prints `connected: <name>, expires <date>` — never the code, the secret or the token |
+| `zyggy linkedin auth status` | The `linkedin` skill, first | 0 · 3 · 5 (not connected, expired, scope missing) | `connected: <name>, expires <date> (<n> days)`, with a warning from `expiry_warn_days` before the end |
+| `zyggy linkedin mcp-server` | Claude Code (`.mcp.json`), in an attended session | 0 · 3 · 4 · 5 (`ZYGGY_HOOKS=off`) | MCP over stdio, one tool `publish_post {text, visibility}`: local checks, one `POST /rest/posts`, never retried, one row in `~/.local/state/zyggy/linkedin/actions.jsonl`, one `[observed]` fact in `inbox/linkedin-<date>.md` |
+
+Configuration: `instance/linkedin.json` (`client_id`, `redirect_uri`, `member_sub`, `api_version`, `actions.enabled`,
+`post.max_chars`, `expiry_warn_days`); the client secret in `~/.config/zyggy/linkedin/client-secret` (or
+`$CREDENTIALS_DIRECTORY/linkedin-client-secret`), placed by the owner over SSH. The settings ask before
+`mcp__linkedin__publish_post`, deny `Bash(zyggy linkedin mcp-server*)`, `Read(~/.local/state/zyggy/linkedin/**)` and
+`Edit(~/.config/zyggy/**)`, and allow `Bash(zyggy linkedin auth *)`. Every unattended run loads no `linkedin` server
+and denies `mcp__linkedin__*` and `Bash(zyggy linkedin *)`.
 
 Inside the three runs the model may call exactly `Bash(zyggy m365 state *)`, `Bash(zyggy m365 facts *)` and
 `Bash(zyggy m365 parse *)` (the files backfill has no `state`); `.claude/settings.json` denies
