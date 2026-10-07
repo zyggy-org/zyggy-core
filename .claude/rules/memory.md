@@ -18,6 +18,10 @@ The owner's memory is a git repository cloned at `memory/` in the working direct
 | `inbox/github-inventory-YYYY-MM-DD.md` | One `[observed]` line per GitHub repository the owner's account owns, replaced per day | the owner-invoked `github-inventory` skill |
 | `auto/` | Claude Code's own auto memory (`MEMORY.md` and topic files) | Claude Code |
 
+The morning brief's ideas run reads durable memory read-only and writes nothing to it; the binary checks every
+suggestion against the file and line it names. A preference the owner states about the suggestions ("never suggest
+X") is kept with `remember`, not by answering a suggestion.
+
 ## File format
 
 Every memory file starts with a front matter block, then bullet lines:

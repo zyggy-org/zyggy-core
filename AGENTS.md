@@ -17,10 +17,11 @@ What exists today:
   memory `inbox/`) and the `github-clone` skill: when the owner asks to analyse one of their own repositories, a
   read-only clone into `~/.cache/zyggy/repos/` that you read as data. Nothing is written to GitHub.
 - **Microsoft 365 (the owner's company)** — the `m365` MCP server (read tools, two Draft tools, two action tools):
-  a morning brief Draft with suggested actions and reply Drafts left by a timer, one-off backfills into memory
-  `inbox/`, and on-request questions about mail and files in a conversation (`/m365 check` shows its status).
-  Zyggy sends mail and files mail only when the owner asks in the session, each after a permission prompt he
-  answers. Nothing is written on the drives.
+  a morning brief written to a file by a timer and shown when the owner asks for it (`zyggy brief show`) — one page
+  of urgent and important mail with reply Drafts, a numbered "I can do" list and "For the long run" suggestions,
+  no brief Draft — one-off backfills into memory `inbox/`, and on-request questions about mail and files in a
+  conversation (`/m365 check` shows its status). Zyggy sends mail and files mail only when the owner asks in the
+  session ("do Z1, Z3"), each after a permission prompt he answers. Nothing is written on the drives.
 - **Dream pass** — every night, and on request through the `dream` skill, the `zyggy dream` run files the facts in
   `inbox/` and `daily/` into the durable memory files and commits and pushes memory by itself.
 

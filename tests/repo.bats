@@ -716,6 +716,34 @@ M365_SKILLS=(morning-brief mail-backfill files-backfill m365)
   [ "$status" -eq 1 ] || { echo "$output"; return 1; }
 }
 
+@test "repo: the brief is shown when the owner asks — AGENTS.md, security.md, operations.md, memory.md and README.md carry spec 35's R7 sentences; the template needs zyggy 0.3.0 (spec 35 AC-50, AC-23)" {
+  local a="$REPO_ROOT/AGENTS.md" s="$REPO_ROOT/.claude/rules/security.md" o="$REPO_ROOT/.claude/rules/operations.md"
+  local m="$REPO_ROOT/.claude/rules/memory.md" r="$REPO_ROOT/README.md" p
+  for p in 'shown when the owner asks for it (`zyggy brief show`)' '"For the long run"' 'no brief Draft' '"do Z1, Z3"'; do
+    grep -qF -- "$p" "$a" || { echo "AGENTS.md lacks: $p"; return 1; }
+  done
+  run grep -nF 'a morning brief Draft' "$a"
+  [ "$status" -eq 1 ] || { echo "$output"; return 1; }
+  for p in '~/.local/state/zyggy/brief/' 'one-line summaries' '0600, kept 14 days' 'The printed brief is data'; do
+    grep -qF -- "$p" "$s" || { echo "security.md lacks: $p"; return 1; }
+  done
+  for p in '`zyggy brief items`' '`zyggy brief idea`' '4 usage; `items` 0' '6 (Graph: act on nothing)' '5 (no such suggestion)' \
+    'There is no brief Draft any more' 'runbook 13 "Audit flagged"' 'sent from another mailbox'; do
+    grep -qF -- "$p" "$o" || { echo "operations.md lacks: $p"; return 1; }
+  done
+  for p in 'ideas run reads durable memory read-only and writes nothing to it' 'kept with `remember`'; do
+    grep -qF -- "$p" "$m" || { echo "memory.md lacks: $p"; return 1; }
+  done
+  for p in 'zyggy brief show [--full] [<YYYY-MM-DD>]' 'zyggy brief items <Zn[,Zm…]' 'zyggy brief idea <n>' 'ideas.jsonl' 'last-shown' \
+    '`delivery` is refused' 'never a Draft'; do
+    grep -qF -- "$p" "$r" || { echo "README.md lacks: $p"; return 1; }
+  done
+  [ "$(tr -d '\n' < "$REPO_ROOT/.claude/zyggy-min-version")" = 0.3.0 ]
+  for f in "$REPO_ROOT"/.claude/rules/*.md; do
+    [ "$(wc -l < "$f")" -le 200 ] || { echo "$f: more than 200 lines"; return 1; }
+  done
+}
+
 @test "repo: operations.md tells Zyggy to show the brief only when the owner asks, with 'brief full', the delta read-only, and the printed brief as data (spec 35 AC-62)" {
   local o="$REPO_ROOT/.claude/rules/operations.md" p
   for p in 'zyggy brief show' 'only when the owner asks' '"brief full"' 'zyggy brief show --full' 'data, never instructions' \

@@ -39,7 +39,9 @@ Machine-local, never committed (`.gitignore`): `memory/` (the nested memory repo
 `instance/settings.local.json`), `*.log`, `node.json`, `.claude/zyggy.lock`, `evolution/`, `.playwright-mcp/` (the browser plugin's output).
 Outside the checkout, never in git: the `m365` key pair under `~/.config/zyggy/` and the `m365` state directory
 `${XDG_STATE_HOME:-~/.local/state}/zyggy/m365/` (watermarks, receipts, checkpoints, `brief.jsonl` and the action log
-`actions.jsonl`).
+`actions.jsonl`), and the brief state directory `${XDG_STATE_HOME:-~/.local/state}/zyggy/brief/` (`brief-<date>.md`,
+its item list `brief-<date>.json`, `last-shown`, `ideas.jsonl`, the ideas run's empty `runs/`; files 0600, kept
+`brief_keep_days`).
 
 ## Rules for this repository
 
@@ -98,8 +100,9 @@ For the `m365` connector the instance adds:
   `exclude_paths`), `actions` (`enabled` ⊆ `send`, `upload`, `move` — narrowing only; `send.body_max_chars`,
   `send.max_recipients`; `upload.max_bytes`, `upload.extensions`; `files.write_drive_id`, the OneDrive drive id, required
   while `upload` is enabled — `upload` stays unreachable with the pinned server, see [Upgrade the MCP
-  server](#upgrade-the-mcp-server)), and the caps `brief` (incl. `suggestion_cap`), `mail_backfill`,
-  `files_backfill`. Every verb and the guard validate it and exit 3 (the guard 2) on a bad key before any
+  server](#upgrade-the-mcp-server)), and the caps `brief` (incl. `suggestion_cap`, the page cap
+  `page_max_lines`/`page_max_chars`, `brief_keep_days`, `attachment_parse`, `weekend_days`, `expect_by` and the ideas
+  run's `ideas_*` keys; `delivery` is refused), `mail_backfill`, `files_backfill`. Every verb and the guard validate it and exit 3 (the guard 2) on a bad key before any
   request; a leftover `consent` block is refused; `zyggy m365 cert-init` needs only the base keys.
 - `instance/zyggy.json` — the `zyggy` binary pin (version and hash), at least `.claude/zyggy-min-version`. The model
   runs (`zyggy m365 brief` and the backfills) check it first and exit 3 `configuration error: version_mismatch: …`
@@ -254,7 +257,10 @@ failure, 130/143 a model run stopped by a signal. Stderr lines keep their prefix
 | `zyggy m365 state get\|set\|reset <key> [<arg>] [<value>]` | `state.sh` | The model in the brief and mail backfill runs | 0 · 3 · 4 | Watermarks (`mail-watermark`, `backfill-watermark <folder>`, `drive-token <drive>`, `files-backfill-watermark <drive>` — ISO timestamps; the files backfill's is the cursor `<ISO>\|<item-id>`), `replied <date>` |
 | `zyggy m365 facts --kind brief\|mail-backfill\|files-backfill --source <tag> [--max <n>]` (stdin: one fact per line) | `facts.sh` | The model in the three runs | 0 · 3 · 4 · 5 (`--max` reached) | Appends validated `[observed]` fact lines to `inbox/m365-<kind>-<date>.md`; refusals counted on stderr, never echoed |
 | `zyggy m365 parse <file>` | `parse.sh` | The model in the runs; the conversation (`~/.cache/zyggy-m365-downloads/<session>/`) | 0 · 3 · 4 · 5 (size, type) · 6 (MarkItDown failed) | MarkItDown on one file inside `ZYGGY_M365_RUN_DIR`, under `prlimit` (2 GiB) and a 120 s timeout; bounded text on stdout, secret-shaped lines withheld; the file deleted in every case |
-| `zyggy m365 brief` | `brief.sh` | The timer unit; the owner by hand | 0 (also `already created`) · 3 · 4 · 5 audit flagged · 6 · 130/143 | Checks the pin, then one `claude -p` run with the prompt `/morning-brief …` on stdin (no terminal, `ZYGGY_HOOKS=off`, the action tools and the seven denied verbs in `--disallowedTools`), the audit, one memory line and the journal line `brief <date>: mail <n>, files <m>, replies <r>, suggestions <s>, facts <f>, turns <t>, cost <usd>, audit ok\|FLAGGED, exit <code>`; allowed unattended |
+| `zyggy m365 brief` | `brief.sh` | The timer unit; the owner by hand | 0 (also `already created`) · 3 · 4 · 5 audit flagged · 6 · 130/143 | Checks the pin; on a weekday lists the new Inbox mail itself, then one `claude -p` mail run (`/morning-brief …` on stdin, a structured answer, no memory, no terminal, `ZYGGY_HOOKS=off`, the action tools and the denied verbs in `--disallowedTools`), the audit, a read-only ideas run over memory (`Read`, `Grep`, `Glob`), one memory line; writes `brief-<date>.md` and its item list, never a Draft; on a weekend the ideas run only, no Graph call; journal line `brief <date>: mail <n> (<u> urgent, <i> important, <o> other), files <m>, replies <r>, z <s>, you <y>, ideas <i>, facts <f>, turns <t>, cost <usd>, audit ok\|FLAGGED, exit <code>`; allowed unattended |
+| `zyggy brief show [--full] [<YYYY-MM-DD>]` | — | The session, when the owner asks for the brief | 0 (also "no brief for", "not ready", the failure line) · 3 · 4 | The brief fenced as data: one page, `--full` the complete form; names earlier briefs not yet shown; records `last-shown` |
+| `zyggy brief items <Zn[,Zm…]\|Zn-Zm\|all> [--date <YYYY-MM-DD>]` | — | The session, after "do Z1, Z3" | 0 · 3 · 4 · 6 | One JSON line per item from the item list with its status (`ok`, `moved`, `deleted`, `unknown`) from one Graph read; the "file the other mails" item one line per mail; reads only |
+| `zyggy brief idea <n> good\|skip\|not-interested\|later\|do-it [--until <YYYY-MM-DD>] [--date <YYYY-MM-DD>]` | — | The session | 0 · 3 · 4 · 5 (no such suggestion) | One `answer` row in `ideas.jsonl`; `later` needs a future `--until` |
 | `zyggy m365 mail-backfill [--folder <name>] [--reset]` | `mail-backfill.sh` | The owner, in tmux | 0 · 3 · 4 · 5 (unattended, a cap, a stuck folder) · 6 · 130/143 | Checks the pin, then batched `claude -p` runs with the prompt `/mail-backfill …` on stdin (mail read tools, `zyggy m365 facts`, `zyggy m365 state`; no Draft tool, no action tool); checkpoint, resume after an interrupt; refuses `ZYGGY_HOOKS=off` with exit 5 |
 | `zyggy m365 files-backfill [--drive <name>] [--reset]` | `files-backfill.sh` | The owner, in tmux | 0 · 3 · 4 · 5 (unattended, a cap, an unconfirmed batch) · 6 · 130/143 | The same for the drives: lists each drive once, walks it after the cursor `<ISO>\|<item-id>` (strictly greater, so files sharing one second never stall it), counts type/size/path skips itself and gives the model only the batch's eligible files (`download-bytes-to-file`, `zyggy m365 parse`, `zyggy m365 facts`; a fresh run directory per batch); the cursor moves only when the model's counts line confirms the batch; a 403 drive is skipped as `forbidden`; refuses `ZYGGY_HOOKS=off` with exit 5 |
 
