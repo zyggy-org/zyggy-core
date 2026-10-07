@@ -80,7 +80,9 @@
     "allow": [
       "Bash(zyggy dream request)",
       "Bash(zyggy dream status:*)",
-      "Bash(zyggy brief show*)"
+      "Bash(zyggy brief show*)",
+      "Bash(zyggy brief items *)",
+      "Bash(zyggy brief idea *)"
     ],
     "ask": [
       "mcp__m365__move-shared-mailbox-message",
