@@ -717,7 +717,7 @@ M365_SKILLS=(morning-brief mail-backfill files-backfill m365)
   [ "$status" -eq 1 ] || { echo "$output"; return 1; }
 }
 
-@test "repo: the brief is shown when the owner asks — AGENTS.md, security.md, operations.md, memory.md and README.md carry spec 35's R7 sentences; the template needs zyggy 0.3.0 (spec 35 AC-50, AC-23)" {
+@test "repo: the brief is shown when the owner asks — AGENTS.md, security.md, operations.md, memory.md and README.md carry spec 35's R7 sentences and the brief on request; the template needs zyggy 0.3.3 (spec 35 AC-50, AC-23)" {
   local a="$REPO_ROOT/AGENTS.md" s="$REPO_ROOT/.claude/rules/security.md" o="$REPO_ROOT/.claude/rules/operations.md"
   local m="$REPO_ROOT/.claude/rules/memory.md" r="$REPO_ROOT/README.md" p
   for p in 'shown when the owner asks for it (`zyggy brief show`)' '"For the long run"' 'no brief Draft' '"do Z1, Z3"'; do
@@ -739,7 +739,13 @@ M365_SKILLS=(morning-brief mail-backfill files-backfill m365)
     '`delivery` is refused' 'never a Draft'; do
     grep -qF -- "$p" "$r" || { echo "README.md lacks: $p"; return 1; }
   done
-  [ "$(tr -d '\n' < "$REPO_ROOT/.claude/zyggy-min-version")" = 0.3.0 ]
+  # the brief on request: one `zyggy brief request` from the session, never `zyggy m365 brief` (zyggy 0.3.3)
+  for p in 'run `zyggy brief request` once' 'never `zyggy m365 brief`'; do
+    grep -qF -- "$p" "$o" || { echo "operations.md lacks: $p"; return 1; }
+  done
+  grep -qF -- 'zyggy brief request' "$r" || { echo "README.md lacks: zyggy brief request"; return 1; }
+  grep -qF -- '`$ARGUMENTS` empty: the owner typed `/morning-brief`' "$REPO_ROOT/.claude/skills/morning-brief/SKILL.md"
+  [ "$(tr -d '\n' < "$REPO_ROOT/.claude/zyggy-min-version")" = 0.3.3 ]
   for f in "$REPO_ROOT"/.claude/rules/*.md; do
     [ "$(wc -l < "$f")" -le 200 ] || { echo "$f: more than 200 lines"; return 1; }
   done
