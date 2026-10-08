@@ -20,8 +20,9 @@ load helpers
   # follow them and the ask rules of the D7 action tools are asserted by the m365 tests below (spec 23)
   jq -e '.permissions | keys == ["allow","ask","deny"]' "$s"
   # the dream skill may only ask for a run and read its status (spec 28); nothing else is pre-approved
-  # the brief is shown only when the owner asks: the session may run `zyggy brief show` (spec 35, AC-47)
-  jq -e '.permissions.allow == ["Bash(zyggy dream request)","Bash(zyggy dream status:*)","Bash(zyggy brief show*)","Bash(zyggy brief items *)","Bash(zyggy brief idea *)"]' "$s"
+  # the brief is shown only when the owner asks: the session may run `zyggy brief show` (spec 35, AC-47); it may ask
+  # the unit for a run (`zyggy brief request`, the dream's request shape) but never run `zyggy m365 brief` itself
+  jq -e '.permissions.allow == ["Bash(zyggy dream request)","Bash(zyggy dream status:*)","Bash(zyggy brief show*)","Bash(zyggy brief items *)","Bash(zyggy brief idea *)","Bash(zyggy brief request)"]' "$s"
   jq -e '.permissions.deny[0:2] == ["Read(~/.config/zyggy/**)","Edit(~/.cache/zyggy/repos/**)"]' "$s"
   jq -e '.hooks | keys == ["PostToolUse","PreToolUse","SessionStart","Stop"]' "$s"
   # no UserPromptSubmit hook and no brief launcher: the brief is shown on request (spec 35 OD-5, AC-62)

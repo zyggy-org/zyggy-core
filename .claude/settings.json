@@ -82,7 +82,8 @@
       "Bash(zyggy dream status:*)",
       "Bash(zyggy brief show*)",
       "Bash(zyggy brief items *)",
-      "Bash(zyggy brief idea *)"
+      "Bash(zyggy brief idea *)",
+      "Bash(zyggy brief request)"
     ],
     "ask": [
       "mcp__m365__move-shared-mailbox-message",
