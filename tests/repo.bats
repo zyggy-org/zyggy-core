@@ -724,7 +724,7 @@ M365_SKILLS=(morning-brief mail-backfill files-backfill m365)
   [ "$status" -eq 1 ] || { echo "$output"; return 1; }
 }
 
-@test "repo: the brief is shown when the owner asks — AGENTS.md, security.md, operations.md, memory.md and README.md carry spec 35's R7 sentences and the brief on request; the template needs zyggy 0.4.0 (spec 35 AC-50, AC-23; raised by spec 36)" {
+@test "repo: the brief is shown when the owner asks — AGENTS.md, security.md, operations.md, memory.md and README.md carry spec 35's R7 sentences and the brief on request; the template needs zyggy 0.4.1 (spec 35 AC-50, AC-23; raised by spec 36 and plan 36b)" {
   local a="$REPO_ROOT/AGENTS.md" s="$REPO_ROOT/.claude/rules/security.md" o="$REPO_ROOT/.claude/rules/operations.md"
   local m="$REPO_ROOT/.claude/rules/memory.md" r="$REPO_ROOT/README.md" p
   for p in 'shown when the owner asks for it (`zyggy brief show`)' '"For the long run"' 'no brief Draft' '"do Z1, Z3"'; do
@@ -752,7 +752,7 @@ M365_SKILLS=(morning-brief mail-backfill files-backfill m365)
   done
   grep -qF -- 'zyggy brief request' "$r" || { echo "README.md lacks: zyggy brief request"; return 1; }
   grep -qF -- '`$ARGUMENTS` empty: the owner typed `/morning-brief`' "$REPO_ROOT/.claude/skills/morning-brief/SKILL.md"
-  [ "$(tr -d '\n' < "$REPO_ROOT/.claude/zyggy-min-version")" = 0.4.0 ]
+  [ "$(tr -d '\n' < "$REPO_ROOT/.claude/zyggy-min-version")" = 0.4.1 ]
   for f in "$REPO_ROOT"/.claude/rules/*.md; do
     [ "$(wc -l < "$f")" -le 200 ] || { echo "$f: more than 200 lines"; return 1; }
   done
@@ -804,6 +804,19 @@ M365_SKILLS=(morning-brief mail-backfill files-backfill m365)
     'never call the tool again for that' 'publishing is switched off' 'never post unattended'; do
     grep -qF -- "$p" "$k" || { echo "linkedin skill lacks: $p"; return 1; }
   done
+}
+
+@test "repo: the linkedin skill and the rules carry the image flow — media folder only, shown with its hash, one go for text and image (plan 36b D2, D9)" {
+  local k="$REPO_ROOT/.claude/skills/linkedin/SKILL.md" s="$REPO_ROOT/.claude/rules/security.md" o="$REPO_ROOT/.claude/rules/operations.md" p
+  for p in '## Image (only when the owner wants one)' '~/.local/share/zyggy/linkedin/media/' 'Show the image to the owner, then run `sha256sum <file>`' \
+    'His go covers the text **and** the image together' '`image_path` (the absolute path)' '`image_sha256` (the full 64-character hash)' \
+    'No video, no document, no second image' '`rejected: image upload: …` — nothing was published'; do
+    grep -qF -- "$p" "$k" || { echo "linkedin skill lacks: $p"; return 1; }
+  done
+  for p in 'text posts with at most one image' 'is shown to the owner with its SHA-256 before'; do
+    grep -qF -- "$p" "$s" || { echo "security.md lacks: $p"; return 1; }
+  done
+  grep -qF -- 'With an image (zyggy 0.4.1)' "$o" || { echo "operations.md lacks the image line"; return 1; }
 }
 
 @test "repo: security.md carries O38 and the LinkedIn prohibitions; operations.md the auth verbs and the failure tokens; AGENTS.md lists LinkedIn posts with the prompt; README.md the verbs (spec 36 AC-25)" {

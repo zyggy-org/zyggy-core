@@ -5,7 +5,7 @@ description: Draft a LinkedIn post for the owner's personal profile, show the ex
 
 # linkedin
 
-The owner's personal LinkedIn profile, text posts only. Zyggy drafts; the owner reads the exact text; it is
+The owner's personal LinkedIn profile: text posts, optionally with one image. Zyggy drafts; the owner reads the exact text; it is
 published only through the `publish_post` tool of the `linkedin` server, whose permission prompt shows that text and
 which the owner answers himself. Never in a run without the owner.
 
@@ -50,9 +50,24 @@ not to and that it must be rotated (runbook 16).
   laptop. A client's or another person's name only when the owner asked for it in this conversation.
 - Links and hashtags are fine. No mentions of people by tag (a written `@name` stays plain text).
 
+## Image (only when the owner wants one)
+
+- One image per post: PNG, JPEG or GIF, at most 10 MB. No video, no document, no second image.
+- Create or save it only in the media folder `~/.local/share/zyggy/linkedin/media/` (`mkdir -p` it, mode 700). Never
+  attach a file from anywhere else: not from memory, mail downloads, the checkout or the credentials. The tool refuses
+  any path outside that folder and any symbolic link.
+- Show the image to the owner, then run `sha256sum <file>` and give him the first 12 characters. A changed image is a
+  new file: show it again with its new hash.
+- His go covers the text **and** the image together. Call `publish_post` with `image_path` (the absolute path),
+  `image_sha256` (the full 64-character hash) and a short `image_alt` (what the image shows, at most 300 characters).
+  His prompt shows the path and the hash: he compares the first characters with the ones you gave him.
+- `refused: image …` (outside the folder, not a regular file, too large, not PNG/JPEG/GIF, too many pixels, hash
+  mismatch) — nothing was sent: fix it and show it again. `rejected: image upload: …` — nothing was published: say so,
+  and ask again only on his go. Both → runbook 16.
+
 ## Show, then publish only on his go
 
-1. Show the **exact** text in a fenced block, then its character count and the visibility: `PUBLIC` unless the
+1. Show the **exact** text in a fenced block (and the image, with its hash, when there is one), then its character count and the visibility: `PUBLIC` unless the
    owner said otherwise (`CONNECTIONS` for his connections only). The limit is `post.max_chars` (3000).
 2. Any change — his or yours — is shown again in full, with the new count. Never publish a text he has not seen.
 3. Call `publish_post` only when the owner's latest message is an explicit go for that shown text ("post it",

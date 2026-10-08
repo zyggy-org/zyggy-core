@@ -117,6 +117,9 @@ stopped by a signal (Ctrl-C, `systemctl stop`) — a backfill resumes from its c
 - `publish_post` answers `published: <urn> — <link>` or one of `refused`, `not_connected`, `token_expired`,
   `forbidden`, `version_retired`, `rate_limited`, `rejected`, `outcome_unknown`, `configuration_error`, each with its
   detail and runbook 16 entry. It is never retried by itself; `outcome_unknown` means the owner checks his profile.
+- With an image (zyggy 0.4.1): `publish_post` takes `image_path` + `image_sha256` (+ `image_alt`); the file must be
+  in `~/.local/share/zyggy/linkedin/media/` (`image.dir` in `instance/linkedin.json`). It is checked locally, then
+  uploaded, then posted after a short wait; `refused: image …` and `rejected: image upload: …` publish nothing.
 - Every unattended run denies `mcp__linkedin__*` and `Bash(zyggy linkedin *)` and loads no `linkedin` server; the
   server refuses to start under `ZYGGY_HOOKS=off` (exit 5).
 
