@@ -17,7 +17,7 @@ Run `zyggy linkedin auth status` once before drafting and read its one line:
   the connection ends on that date and offer "connect LinkedIn" after the post.
 - `not connected …`, `expired …` or `connected without scope …` (exit 5) — say so and offer "connect LinkedIn". You may
   still draft; you cannot publish until he connects.
-- exit 3 — quote the stderr line (it names a file, never a value) and point to runbook 15 "Connect LinkedIn".
+- exit 3 — quote the stderr line (it names a file, never a value) and point to runbook 16 "Connect LinkedIn".
 
 ## Connect LinkedIn (only when the owner asks, in his words: "connect LinkedIn")
 
@@ -34,10 +34,10 @@ Run `zyggy linkedin auth status` once before drafting and read its one line:
 
 4. Quote its line: `connected: <name>, expires <date>` (exit 0); `refused: …` (exit 5: a stale or used link, a
    cancelled sign-in, another LinkedIn account — start again with step 1 only if he asks); exit 3 or 6: quote the
-   stderr line and point to runbook 15 ("Install the LinkedIn client secret" for a missing secret).
+   stderr line and point to runbook 16 ("Install the LinkedIn client secret" for a missing secret).
 
 Never ask for, accept or handle the client secret or a token in the conversation. If the owner pastes one, tell him
-not to and that it must be rotated (runbook 15).
+not to and that it must be rotated (runbook 16).
 
 ## Drafting
 
@@ -66,7 +66,7 @@ not to and that it must be rotated (runbook 15).
    - `outcome_unknown` — the post may exist: tell him to check his profile, and never call the tool again for that
      text on your own.
    - `forbidden`, `version_retired`, `rate_limited`, `rejected`, `configuration_error` — quote the line and point
-     to runbook 15 "Publish refused or failed".
+     to runbook 16 "Publish refused or failed".
 5. If he denies the prompt, nothing was published: say so and stop. Never retry another way.
 
 When `tools/list` has no `publish_post` (`actions.enabled` is `[]` in the instance), publishing is switched off: say

@@ -68,13 +68,22 @@
     ]
   },
   "enabledPlugins": {
-    "playwright@claude-plugins-official": true
+    "playwright@claude-plugins-official": true,
+    "document-skills@anthropic-agent-skills": true
   },
   "env": {
     "PLAYWRIGHT_MCP_HEADLESS": "true",
     "PLAYWRIGHT_MCP_BROWSER": "chromium",
     "PLAYWRIGHT_MCP_ISOLATED": "true",
     "CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR": "1"
+  },
+  "extraKnownMarketplaces": {
+    "anthropic-agent-skills": {
+      "source": {
+        "source": "github",
+        "repo": "anthropics/skills"
+      }
+    }
   },
   "permissions": {
     "allow": [
@@ -83,6 +92,7 @@
       "Bash(zyggy brief show*)",
       "Bash(zyggy brief items *)",
       "Bash(zyggy brief idea *)",
+      "Bash(zyggy brief request)",
       "Bash(zyggy linkedin auth *)"
     ],
     "ask": [
