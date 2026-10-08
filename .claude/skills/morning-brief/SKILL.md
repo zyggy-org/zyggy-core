@@ -7,6 +7,10 @@ argument-hint: <mailbox> <inbox-folder-id> attachments=<on|off> <drive-id>… <r
 
 # morning-brief
 
+**`$ARGUMENTS` empty: the owner typed `/morning-brief` in a conversation.** Do none of the steps below. Run
+`zyggy brief request` once (the brief unit runs the brief in its own sandbox, a few minutes), tell him so, and
+that "brief" shows it once it is there. Nothing else: no mailbox read, no Draft, no state write.
+
 `zyggy m365 brief` started this run; nobody is watching it. `$ARGUMENTS` = `<mailbox> <inbox-folder-id>
 attachments=<on|off> <drive-id>… <run-dir>`. `<date>` is the date in the run directory's name (`zyggy-m365-brief-<date>.…`).
 The binary renders the brief from your structured result and writes the files, the watermark and the item list itself:
