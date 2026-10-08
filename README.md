@@ -171,6 +171,9 @@ On the machine, in the instance checkout (the working directory):
 git clone <memory URL> memory
 install -m 600 instance/settings.local.json .claude/settings.local.json
 claude plugin install playwright@claude-plugins-official --scope project
+claude plugin marketplace add anthropics/skills            # anthropic-agent-skills (also declared in settings.json)
+claude plugin install document-skills@anthropic-agent-skills --scope project
+# the office skills call LibreOffice, pandoc, poppler-utils, qpdf, tesseract, Python and Node libraries on the machine
 claude                      # accept workspace trust once, then run /seed-memory
 ```
 

@@ -12,7 +12,7 @@ load helpers
 @test "repo: .claude/settings.json parses and holds exactly the contract wiring" {
   local s="$REPO_ROOT/.claude/settings.json"
   jq -e . "$s" > /dev/null
-  jq -e 'keys == ["enabledPlugins","env","hooks","permissions"]' "$s"
+  jq -e 'keys == ["enabledPlugins","env","extraKnownMarketplaces","hooks","permissions"]' "$s"
   # the browser plugin's server is headed by default; every instance runs it headless with an in-memory profile;
   # every Bash command starts in the project directory, so a cd into a clone never persists (spec 32)
   jq -e '.env == {"PLAYWRIGHT_MCP_HEADLESS":"true","PLAYWRIGHT_MCP_BROWSER":"chromium","PLAYWRIGHT_MCP_ISOLATED":"true","CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR":"1"}' "$s"
@@ -36,7 +36,11 @@ load helpers
   jq -e '.hooks.Stop | length == 1' "$s"
   jq -e '.hooks.Stop[0] | keys == ["hooks"]' "$s"
   jq -e '.hooks.Stop[0].hooks == [{"type":"command","command":"${CLAUDE_PROJECT_DIR}/.claude/hooks/stop.sh","timeout":10}]' "$s"
-  jq -e '.enabledPlugins == {"playwright@claude-plugins-official": true}' "$s"
+  # the office skills (pdf, docx, xlsx, pptx) are Anthropic's document-skills plugin, installed from its marketplace,
+  # never copied into the repository (its licence forbids redistribution)
+  jq -e '.enabledPlugins == {"playwright@claude-plugins-official": true, "document-skills@anthropic-agent-skills": true}' "$s"
+  jq -e '.extraKnownMarketplaces == {"anthropic-agent-skills": {"source": {"source": "github", "repo": "anthropics/skills"}}}' "$s"
+  [ ! -e "$REPO_ROOT/.claude/skills/pdf" ] && [ ! -e "$REPO_ROOT/.claude/skills/docx" ]
 }
 
 scripts() { # every shell script under .claude/, relative to the repo root
