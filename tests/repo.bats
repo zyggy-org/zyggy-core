@@ -886,3 +886,12 @@ M365_SKILLS=(morning-brief mail-backfill files-backfill m365)
     grep -qF -- "$p" "$s" || { echo "security.md lacks: $p"; return 1; }
   done
 }
+
+@test "repo: an IBAN is not a secret — no pattern matches the owner's account number, spaced or joined (owner decision 2026-10-10)" {
+  local sample
+  for sample in 'my IBAN is BE71 0961 2345 6769' 'BE71096123456769' 'IBAN NL91 ABNA 0417 1643 00 on the invoice'; do
+    run bash -c 'source "$1"; zy_secret_match "$2" && printf "%s" "$ZY_SECRET_NAME"' _ "$HOOKS/lib.sh" "$sample"
+    [ "$status" -ne 0 ] || { echo "'$sample' matched $output"; return 1; }
+  done
+  ! grep -q '^iban' "$REPO_ROOT/.claude/hooks/secret-patterns.txt"
+}

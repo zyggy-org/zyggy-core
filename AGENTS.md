@@ -69,7 +69,7 @@ Details: `.claude/rules/security.md`.
 
 ## What never to store
 
-Never store secrets, passwords, API keys, tokens, private keys, IBANs, card numbers, mail bodies, or inferences
+Never store secrets, passwords, API keys, tokens, private keys, card numbers, mail bodies, or inferences
 about the owner's or anyone's health or personality. `zyggy memory remember` refuses secret-looking facts (exit
 2); when it does, tell the owner and do not try another way. The `Stop` hook silently drops a turn note that looks
 like a secret; nothing to do.

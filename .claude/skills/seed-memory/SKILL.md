@@ -49,7 +49,7 @@ Ask one block, wait for the answers, write them, show what you wrote, then move 
   and, when useful, `aliases`. Write into an existing category only; new categories are the dream pass's.
 - Link related files with `[[slug]]`.
 - `preferences.md` records the language the owner wants answers in.
-- Never write a password, key, token, IBAN, card number or health/personality inference, even if the owner
+- Never write a password, key, token, card number or health/personality inference, even if the owner
   offers one: say it is not stored. Accounts and subscriptions are recorded by name only.
 
 ## Finish

@@ -20,7 +20,7 @@ conversation.
 Never write any of these into memory, into a file, or into a note, even when the owner asks:
 
 - passwords, API keys, tokens, private keys, deploy keys, session cookies, recovery codes;
-- IBANs, card numbers, account numbers with their credentials;
+- card numbers, account numbers with their credentials (an IBAN alone is not a secret: it is on every invoice);
 - mail bodies (a one-line summary with sender and date is fine);
 - inferences about anyone's health, mental state or personality.
 
