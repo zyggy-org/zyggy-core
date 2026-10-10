@@ -93,7 +93,9 @@
       "Bash(zyggy brief items *)",
       "Bash(zyggy brief idea *)",
       "Bash(zyggy brief request)",
-      "Bash(zyggy linkedin auth *)"
+      "Bash(zyggy linkedin auth *)",
+      "Bash(zyggy memory archive add *)",
+      "Bash(zyggy memory archive list *)"
     ],
     "ask": [
       "mcp__m365__move-shared-mailbox-message",

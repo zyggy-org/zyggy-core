@@ -15,7 +15,7 @@ fi
 case "${1:-} ${2:-}" in
   "m365 state" | "m365 facts" | "m365 parse" | "m365 check" | "m365 token-test" | "m365 cert-init" | "m365 guard" | \
     "m365 log" | "m365 verify" | "m365 brief" | "m365 mail-backfill" | "m365 files-backfill" | "m365 mcp-server" | \
-    "m365 auth-header" | "memory remember" | "memory digest" | "dream request" | "dream status" | "brief show" | "brief items" | "brief idea" | "brief request" | \
+    "m365 auth-header" | "memory remember" | "memory digest" | "memory archive" | "dream request" | "dream status" | "brief show" | "brief items" | "brief idea" | "brief request" | \
     "linkedin auth" | "linkedin mcp-server") ;;
   *)
     printf 'zyggy-stub: unknown command %s %s\n' "${1:-}" "${2:-}" >&2
