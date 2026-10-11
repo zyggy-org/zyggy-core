@@ -22,6 +22,11 @@ The owner's memory is a git repository cloned at `memory/` in the working direct
 
 An archived item is indexed by the dream from its inbox line into the project's memory file; to retrieve one, find
 the fact line in the digest, then Read the sidecar or the item. The digest never lists `archive/` itself.
+After an offload the item's bytes live only on OneDrive: its sidecar gains `offloaded`, `drive_item_id`, `drive_path`
+and `drive_url`, and `archive/<project>/<slug>.<ext>` no longer exists. To retrieve it, Read the sidecar and, when the
+owner asks for the content, fetch it with the `m365` download tool by `drive_item_id` and read it through
+`zyggy m365 parse` (an image: open it with Read and delete it afterwards, as `security.md` says); otherwise give the
+owner `drive_url`.
 
 The morning brief's ideas run reads durable memory read-only and writes nothing to it; the binary checks every
 suggestion against the file and line it names. A preference the owner states about the suggestions ("never suggest

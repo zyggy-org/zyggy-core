@@ -444,7 +444,8 @@
       "mcp__m365__verify-login",
       "Bash(zyggy linkedin mcp-server*)",
       "Read(~/.local/state/zyggy/linkedin/**)",
-      "Edit(~/.config/zyggy/**)"
+      "Edit(~/.config/zyggy/**)",
+      "Bash(zyggy memory archive offload*)"
     ]
   }
 }
