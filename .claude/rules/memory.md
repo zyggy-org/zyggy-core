@@ -17,11 +17,11 @@ The owner's memory is a git repository cloned at `memory/` in the working direct
 | `inbox/m365-<kind>-YYYY-MM-DD.md` | `[observed]` facts about the owner's work from the morning brief and the backfills (`<kind>` = `brief`, `mail-backfill`, `files-backfill`) | `zyggy m365 facts`, in those runs only |
 | `inbox/github-inventory-YYYY-MM-DD.md` | One `[observed]` line per GitHub repository the owner's account owns, replaced per day | the owner-invoked `github-inventory` skill |
 | `auto/` | Claude Code's own auto memory (`MEMORY.md` and topic files) | Claude Code |
-| `archive/<project>/<slug>.<ext>` | A file the owner handed over in a conversation and asked to keep for a project (text, PDF, PNG, JPEG, GIF) | `zyggy memory archive add` only (the `archive` skill); never the dream |
+| `archive/<project>/<slug>.<ext>` | A file the owner handed over in a conversation and asked to keep for a project (text, PDF, PNG, JPEG, GIF, Word, Excel, PowerPoint) | `zyggy memory archive add` only (the `archive` skill); never the dream |
 | `archive/<project>/<slug>.md` | Its sidecar: name, description, project, media type, size, SHA-256, archived date, source name | idem |
 
 An archived item is indexed by the dream from its inbox line into the project's memory file; to retrieve one, find
-the fact line in the digest, then Read the sidecar or the item. The digest never lists `archive/` itself.
+the fact line in the digest, then Read the sidecar or the item (a Word, Excel or PowerPoint item: a copy in the session download directory, read through `zyggy m365 parse` — the `archive` skill). The digest never lists `archive/` itself.
 After an offload the item's bytes live only on OneDrive: its sidecar gains `offloaded`, `drive_item_id`, `drive_path`
 and `drive_url`, and `archive/<project>/<slug>.<ext>` no longer exists. To retrieve it, Read the sidecar and, when the
 owner asks for the content, fetch it with the `m365` download tool by `drive_item_id` and read it through
