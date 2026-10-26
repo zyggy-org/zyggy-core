@@ -956,3 +956,20 @@ M365_SKILLS=(morning-brief mail-backfill files-backfill m365)
   done
   ! grep -q '^iban' "$REPO_ROOT/.claude/hooks/secret-patterns.txt"
 }
+
+@test "repo: runbooks/ holds the six §11 runbooks, LF, placeholders only, every command prefixed with its machine and user (deliverable 10)" {
+  local f s
+  for f in install-node restore-central revoke-machine add-tenant rotate-hmac bus-conflict; do
+    [ -f "$REPO_ROOT/runbooks/$f.md" ] || { echo "missing runbooks/$f.md"; return 1; }
+    ! grep -q $'\r' "$REPO_ROOT/runbooks/$f.md" || { echo "$f.md has CR"; return 1; }
+    grep -qE '\[(central|home-laptop)/' "$REPO_ROOT/runbooks/$f.md" || { echo "$f.md has no machine/user prefix"; return 1; }
+    ! grep -qE '/home/|/srv/|C:\\Users\\' "$REPO_ROOT/runbooks/$f.md" || { echo "$f.md names an absolute home"; return 1; }
+    ! grep -- '--dangerously-skip-permissions' "$REPO_ROOT/runbooks/$f.md" | grep -qv 'never' || { echo "$f.md allows skip-permissions"; return 1; }
+  done
+  grep -q 'LoadCredential=' "$REPO_ROOT/runbooks/install-node.md"
+  ! grep -q 'Register-ScheduledTask' "$REPO_ROOT/runbooks/install-node.md"
+  for s in 4711 GCM_INTERACTIVE BatchMode shell:startup 0x6; do
+    grep -qF -- "$s" "$REPO_ROOT/runbooks/install-node.md" || { echo "install-node.md lacks: $s"; return 1; }
+  done
+  grep -q '^## Executions' "$REPO_ROOT/runbooks/rotate-hmac.md"
+}

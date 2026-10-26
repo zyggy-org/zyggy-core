@@ -34,6 +34,7 @@ instance's Claude Code sessions** (remote control or `claude -p` are started the
 | `tests/fixtures/m365/` | The pinned tool lists (`tools-0.157.2.txt`, `enabled-tools.txt`, `excluded-tools.txt`, `tools-list-0.157.2.json`) the data files are checked against, and the hook input `hook-send-clean.json` fed to the two launchers |
 | `PROTOCOL.md` | Placeholder: the bus contract is founding-spec §4 until deliverable 15 |
 | `tests/` | `bats-core` tests, fixtures (tenant `acme`, user `alice`) and hand-derived expected outputs |
+| `runbooks/` | The §11 operational runbooks as placeholder-only procedures (deliverable 10: `install-node.md`, `restore-central.md`, `revoke-machine.md`, `add-tenant.md`, `rotate-hmac.md`, `bus-conflict.md`); an instance's filled-in evidence lives in its private repository |
 | `.github/workflows/ci.yml` | bats, shellcheck, `jq`, LF check on `ubuntu-latest` |
 
 Machine-local, never committed (`.gitignore`): `memory/` (the nested memory repository),
