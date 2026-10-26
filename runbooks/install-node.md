@@ -34,7 +34,7 @@ Choose the drop-in when the unit's copy should be root-owned and read-only — a
 Prerequisites: Git for Windows (Git Credential Manager is its default helper) and Claude Code logged in as this user. The owner is not an administrator on every laptop; nothing below needs it, and the script refuses rather than asks for elevation.
 
 1. `[home-laptop/user PowerShell]` Unpack the `win-x64` release folder (`zyggy.exe`, `zyggy-node.exe`, `SHA256SUMS`, `deploy\`).
-2. `[home-laptop/user PowerShell]` `git clone https://github.com/zyggy-org/zyggy-bus.git C:\agents\bus`; `git -C C:\agents\bus config core.autocrlf false`; `git -C C:\agents\bus push --dry-run` once so Git Credential Manager asks for the token and stores it (see "`GCM_INTERACTIVE` and `BatchMode`").
+2. `[home-laptop/user PowerShell]` `git clone https://github.com/zyggy-org/zyggy-bus.git C:/agents/bus`; `git -C C:/agents/bus config core.autocrlf false`; `git -C C:/agents/bus push --dry-run` once so Git Credential Manager asks for the token and stores it (see "`GCM_INTERACTIVE` and `BatchMode`").
 3. `[home-laptop/user PowerShell]` `zyggy secret set hmac/<n> --hex` (paste the tenant's key at the hidden prompt) and `zyggy secret set github-pat` — the store is the Credential Manager of this user; `zyggy secret list` must show the same fingerprint for `hmac/<n>` as Central.
 4. `[home-laptop/user PowerShell]` `.\deploy\windows\install.ps1 -Tenant acme -Machine home-laptop -SignWith acme/<n>` from the release folder.
 
@@ -42,7 +42,7 @@ Prerequisites: Git for Windows (Git Credential Manager is its default helper) an
 |-----------|---------|---------|
 | `-Tenant`, `-Machine` | required | `node.json` `tenant` and `machine` |
 | `-SignWith acme/<n>` | required when `node.json` is written | `node.json` `signWith` |
-| `-BusLocalPath` | `C:\agents\bus` | the checkout (forward slashes in the file) |
+| `-BusLocalPath` | `C:/agents/bus` | the checkout (forward slashes in the file) |
 | `-Source` | the script's folder | where `zyggy.exe`, `zyggy-node.exe`, `SHA256SUMS` are |
 | `-NodeJson` | `%LOCALAPPDATA%\zyggy\node.json` | written only when absent |
 | `-Uninstall` | — | stop and unregister the task; leaves everything else |
@@ -76,7 +76,7 @@ The task runs with the user's interactive token, so the node reads the same vaul
 
 ### `GCM_INTERACTIVE` and `BatchMode`
 
-The task's command sets `GCM_INTERACTIVE=never` for the node process only: a hidden credential prompt would otherwise wedge the poll loop. Run `git -C C:\agents\bus push --dry-run` once in your own shell so Git Credential Manager stores the token; after a token change, run it again. On Central the unit sets `GIT_SSH_COMMAND=ssh -o BatchMode=yes`: ssh never prompts, a missing deploy key fails fast and the node reports `push deferred`.
+The task's command sets `GCM_INTERACTIVE=never` for the node process only: a hidden credential prompt would otherwise wedge the poll loop. Run `git -C C:/agents/bus push --dry-run` once in your own shell so Git Credential Manager stores the token; after a token change, run it again. On Central the unit sets `GIT_SSH_COMMAND=ssh -o BatchMode=yes`: ssh never prompts, a missing deploy key fails fast and the node reports `push deferred`.
 
 ### Laptop power and logon
 
