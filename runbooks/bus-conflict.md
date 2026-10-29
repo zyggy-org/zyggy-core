@@ -3,7 +3,7 @@
 Placeholders only (`acme`, `central`, `home-laptop`, `<vm-admin>`). The rows are the product reference of the zyggy Core README ("Troubleshooting — Bus"), copied here with the one rule a repair needs: **stop the node, repair, start the node**.
 
 - `[central/<vm-admin>]` `sudo systemctl stop zyggy-node` … repair as `[central/zyggy]` in the checkout … `sudo systemctl start zyggy-node`; `journalctl -u zyggy-node -n 50`.
-- `[home-laptop/user PowerShell]` `Stop-ScheduledTask zyggy-node` (a kill; the claim resumes on the next start) … repair in `C:/agents/bus` … `Start-ScheduledTask zyggy-node`; the log under `%LOCALAPPDATA%\zyggy\logs\`.
+- `[home-laptop/user PowerShell]` `Stop-ScheduledTask zyggy-node; Get-Process zyggy-node -ErrorAction SilentlyContinue | Stop-Process -Force` (a kill — the task stop alone leaves `zyggy-node.exe` running; the claim resumes on the next start) … repair in `C:/agents/bus` … `Start-ScheduledTask zyggy-node`; the log under `%LOCALAPPDATA%\zyggy\logs\`.
 
 Nothing here needs a reset or a force push: the bus is append-only and every clone holds the full history.
 
