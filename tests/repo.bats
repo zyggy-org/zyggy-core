@@ -974,7 +974,7 @@ M365_SKILLS=(morning-brief mail-backfill files-backfill m365)
   done
   grep -q 'LoadCredential=' "$REPO_ROOT/runbooks/install-node.md"
   ! grep -q 'Register-ScheduledTask' "$REPO_ROOT/runbooks/install-node.md"
-  for s in 4711 GCM_INTERACTIVE BatchMode shell:startup 0x6; do
+  for s in 4711 GCM_INTERACTIVE BatchMode shell:startup 0x6 pickup.conf.example pickup.conf '"activeSeconds": 1'; do
     grep -qF -- "$s" "$REPO_ROOT/runbooks/install-node.md" || { echo "install-node.md lacks: $s"; return 1; }
   done
   grep -q '^## Executions' "$REPO_ROOT/runbooks/rotate-hmac.md"
