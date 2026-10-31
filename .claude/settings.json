@@ -95,7 +95,8 @@
       "Bash(zyggy brief request)",
       "Bash(zyggy linkedin auth *)",
       "Bash(zyggy memory archive add *)",
-      "Bash(zyggy memory archive list *)"
+      "Bash(zyggy memory archive list *)",
+      "mcp__hub__get_context"
     ],
     "ask": [
       "mcp__m365__move-shared-mailbox-message",
@@ -445,7 +446,8 @@
       "Bash(zyggy linkedin mcp-server*)",
       "Read(~/.local/state/zyggy/linkedin/**)",
       "Edit(~/.config/zyggy/**)",
-      "Bash(zyggy memory archive offload*)"
+      "Bash(zyggy memory archive offload*)",
+      "Bash(zyggy hub*)"
     ]
   }
 }

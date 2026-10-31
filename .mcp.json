@@ -12,6 +12,13 @@
         "linkedin",
         "mcp-server"
       ]
+    },
+    "hub": {
+      "type": "stdio",
+      "command": "zyggy",
+      "args": [
+        "hub"
+      ]
     }
   }
 }

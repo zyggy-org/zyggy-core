@@ -24,7 +24,9 @@ load helpers
   # the unit for a run (`zyggy brief request`, the dream's request shape) but never run `zyggy m365 brief` itself
   # the linkedin skill may run the three auth verbs, never the server (spec 36 AC-21)
   # the archive skill may add (after the owner's go) and list; remove stays under the classifier (spec 37 AC-25)
-  jq -e '.permissions.allow == ["Bash(zyggy dream request)","Bash(zyggy dream status:*)","Bash(zyggy brief show*)","Bash(zyggy brief items *)","Bash(zyggy brief idea *)","Bash(zyggy brief request)","Bash(zyggy linkedin auth *)","Bash(zyggy memory archive add *)","Bash(zyggy memory archive list *)"]' "$s"
+  # the Hub's read tool is pre-approved; its remember tool is left to the permission mode (spec 11 D6, AC-24)
+  jq -e '.permissions.allow == ["Bash(zyggy dream request)","Bash(zyggy dream status:*)","Bash(zyggy brief show*)","Bash(zyggy brief items *)","Bash(zyggy brief idea *)","Bash(zyggy brief request)","Bash(zyggy linkedin auth *)","Bash(zyggy memory archive add *)","Bash(zyggy memory archive list *)","mcp__hub__get_context"]' "$s"
+  jq -e '[.permissions.allow[], .permissions.ask[] | select(test("^mcp__hub__remember|^mcp__hub__\\*?$|^mcp__\\*?$"))] == []' "$s"
   jq -e '.permissions.deny[0:2] == ["Read(~/.config/zyggy/**)","Edit(~/.cache/zyggy/repos/**)"]' "$s"
   jq -e '.hooks | keys == ["PostToolUse","PreToolUse","SessionStart","Stop"]' "$s"
   # no UserPromptSubmit hook and no brief launcher: the brief is shown on request (spec 35 OD-5, AC-62)
@@ -45,8 +47,8 @@ load helpers
   [ ! -e "$REPO_ROOT/.claude/skills/pdf" ] && [ ! -e "$REPO_ROOT/.claude/skills/docx" ]
 }
 
-scripts() { # every shell script under .claude/, relative to the repo root
-  (cd "$REPO_ROOT" && find .claude -name '*.sh' -type f | sort)
+scripts() { # every shell script under .claude/ and node/ (spec 12), relative to the repo root
+  (cd "$REPO_ROOT" && find .claude node -name '*.sh' -type f 2> /dev/null | sort)
 }
 
 @test "repo: AGENTS.md exists and, like every .claude/rules/*.md, is <= 200 lines" {
@@ -325,7 +327,7 @@ hygiene_words() { # hygiene_words <root> <csv>
   ! grep -qF 'vars.ZYGGY_HYGIENE_FORBIDDEN' "$REPO_ROOT/.github/workflows/ci.yml"
 }
 
-@test "repo: every .sh under .claude/ starts with #!/usr/bin/env bash and set -euo pipefail within its first 3 lines" {
+@test "repo: every .sh under .claude/ and node/ starts with #!/usr/bin/env bash and set -euo pipefail within its first 3 lines" {
   local f
   while IFS= read -r f; do
     [ "$(head -n 1 "$REPO_ROOT/$f")" = "#!/usr/bin/env bash" ] || { echo "$f: shebang"; return 1; }
@@ -335,7 +337,7 @@ hygiene_words() { # hygiene_words <root> <csv>
 
 @test "repo: shellcheck -S style is clean on hooks, skill scripts and helpers" {
   cd "$REPO_ROOT"
-  run shellcheck -S style .claude/hooks/*.sh .claude/skills/*/*.sh tests/*.bash tests/fixtures/github/gh-stub.sh tests/fixtures/github/git-spy.sh tests/fixtures/zyggy-stub.sh
+  run shellcheck -S style .claude/hooks/*.sh .claude/skills/*/*.sh node/hooks/*.sh tests/*.bash tests/fixtures/github/gh-stub.sh tests/fixtures/github/git-spy.sh tests/fixtures/zyggy-stub.sh
   [ "$status" -eq 0 ] || { echo "$output"; return 1; }
 }
 
@@ -390,16 +392,17 @@ M365_TOOLS="$REPO_ROOT/tests/fixtures/m365"
 # run are never the model's to run.
 M365_VERB_DENY='["Bash(zyggy m365 auth-header*)","Bash(zyggy m365 token-test*)","Bash(zyggy m365 cert-init*)","Bash(zyggy m365 mcp-server*)","Bash(zyggy m365 brief*)","Bash(zyggy m365 mail-backfill*)","Bash(zyggy m365 files-backfill*)"]'
 
-@test "repo: permissions.deny = the three path rules, the seven zyggy m365 verb rules, mcp__m365__ + every line of tools/excluded.txt (328), then the three linkedin rules, then the archive offload rule, in that order (AC-37, spec 36 AC-21, spec 38 AC-31)" {
+@test "repo: permissions.deny = the three path rules, the seven zyggy m365 verb rules, mcp__m365__ + every line of tools/excluded.txt (328), then the three linkedin rules, then the archive offload rule, then the hub server verb, in that order (AC-37, spec 36 AC-21, spec 38 AC-31, spec 11 AC-24)" {
   local s="$REPO_ROOT/.claude/settings.json"
   jq -e '.permissions.deny[0:3] == ["Read(~/.config/zyggy/**)","Edit(~/.cache/zyggy/repos/**)","Edit(~/.local/state/zyggy/**)"]' "$s"
   jq -e --argjson v "$M365_VERB_DENY" '.permissions.deny[3:10] == $v' "$s"
   [ "$(wc -l < "$M365_DATA/excluded.txt")" -eq 328 ]
   diff <(jq -r '.permissions.deny[10:338][]' "$s") <(sed 's/^/mcp__m365__/' "$M365_DATA/excluded.txt")
   jq -e '.permissions.deny[338:341] == ["Bash(zyggy linkedin mcp-server*)","Read(~/.local/state/zyggy/linkedin/**)","Edit(~/.config/zyggy/**)"]' "$s"
-  jq -e '.permissions.deny[341:] == ["Bash(zyggy memory archive offload*)"]' "$s"
-  [ "$(jq '.permissions.deny | length' "$s")" -eq 342 ]
-  [ "$(jq '.permissions.deny | unique | length' "$s")" -eq 342 ]
+  # the Hub is started by Claude Code from .mcp.json, never by the model (spec 11 D6)
+  jq -e '.permissions.deny[341:] == ["Bash(zyggy memory archive offload*)","Bash(zyggy hub*)"]' "$s"
+  [ "$(jq '.permissions.deny | length' "$s")" -eq 343 ]
+  [ "$(jq '.permissions.deny | unique | length' "$s")" -eq 343 ]
   ! grep -qE 'm365-approve|propose|graph\.sh' "$s"
 }
 
@@ -445,12 +448,15 @@ M365_VERB_DENY='["Bash(zyggy m365 auth-header*)","Bash(zyggy m365 token-test*)",
   [ "$status" -eq 1 ] || { echo "$output"; return 1; }
 }
 
-@test "repo (AC-52, spec 36 AC-7): .mcp.json declares the m365 server over loopback HTTP with the headersHelper — no headers, env, command or args, no GUID — and the linkedin stdio server, in jq --indent 2 layout" {
+@test "repo (AC-52, spec 36 AC-7, spec 11 AC-23): .mcp.json declares the m365 server over loopback HTTP with the headersHelper — no headers, env, command or args, no GUID — the linkedin stdio server and the hub stdio server without env, in jq --indent 2 layout" {
   local m="$REPO_ROOT/.mcp.json"
   jq -e . "$m" > /dev/null
   cmp "$m" <(jq --indent 2 . "$m")
-  jq -e 'keys == ["mcpServers"] and (.mcpServers | keys == ["linkedin","m365"])' "$m"
+  jq -e 'keys == ["mcpServers"] and (.mcpServers | keys == ["hub","linkedin","m365"])' "$m"
   jq -e '.mcpServers.linkedin == {"type": "stdio", "command": "zyggy", "args": ["linkedin", "mcp-server"]}' "$m"
+  # the principal reaches the server from the settings env or CLAUDE_PROJECT_DIR, never from .mcp.json (spec 11 D1)
+  jq -e '.mcpServers.hub == {"type": "stdio", "command": "zyggy", "args": ["hub"]}' "$m"
+  jq -e '.mcpServers.hub | has("env") | not' "$m"
   jq -e '.mcpServers.m365 == {"type": "http", "url": "http://127.0.0.1:${ZYGGY_M365_PORT:-47365}/mcp",
     "headersHelper": "zyggy m365 auth-header"}' "$m"
   run grep -nE '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-' "$m"
@@ -657,12 +663,12 @@ M365_SKILLS=(morning-brief mail-backfill files-backfill m365)
 
 # --- the template after spec 33: the m365 and remember scripts are verbs of the zyggy binary ----------------------------
 
-@test "repo: no m365 or remember script remains but the two hook launchers; the shell left is the R1 list (AC-36)" {
+@test "repo: no m365 or remember script remains but the two hook launchers; the shell left is the R1 list plus the two laptop launchers (AC-36, spec 12)" {
   cd "$REPO_ROOT"
   run git ls-files -- '.claude/skills/m365/*.sh' '.claude/skills/remember/*.sh' tests/remember.bats \
     'tests/fixtures/m365/*.sh' tests/fixtures/graph
   [ -z "$output" ] || { echo "$output"; return 1; }
-  [ "$(scripts | paste -sd' ')" = ".claude/hooks/lib.sh .claude/hooks/m365-guard.sh .claude/hooks/m365-log.sh .claude/hooks/session-start.sh .claude/hooks/stop.sh .claude/skills/github-clone/askpass.sh .claude/skills/github-clone/clone.sh .claude/skills/github-inventory/inventory.sh" ] ||
+  [ "$(scripts | paste -sd' ')" = ".claude/hooks/lib.sh .claude/hooks/m365-guard.sh .claude/hooks/m365-log.sh .claude/hooks/session-start.sh .claude/hooks/stop.sh .claude/skills/github-clone/askpass.sh .claude/skills/github-clone/clone.sh .claude/skills/github-inventory/inventory.sh node/hooks/session-end.sh node/hooks/stop.sh" ] ||
     { scripts; return 1; }
   run grep -nE 'zy_m365|m365-lib|zy_cap_bytes|zy_strip_front_matter|zy_front_matter_value' .claude/hooks/lib.sh
   [ "$status" -eq 1 ] || { echo "$output"; return 1; }
@@ -726,7 +732,7 @@ M365_SKILLS=(morning-brief mail-backfill files-backfill m365)
   [ "$status" -eq 1 ] || { echo "$output"; return 1; }
 }
 
-@test "repo: the brief is shown when the owner asks — AGENTS.md, security.md, operations.md, memory.md and README.md carry spec 35's R7 sentences and the brief on request; the template needs zyggy 0.7.0 (spec 35 AC-50, AC-23; raised by spec 36, plan 36b, spec 37, spec 38 and spec 39)" {
+@test "repo: the brief is shown when the owner asks — AGENTS.md, security.md, operations.md, memory.md and README.md carry spec 35's R7 sentences and the brief on request; the template needs zyggy 0.10.0 (spec 35 AC-50, AC-23; raised by spec 36, plan 36b, spec 37, spec 38, spec 39 and spec 11)" {
   local a="$REPO_ROOT/AGENTS.md" s="$REPO_ROOT/.claude/rules/security.md" o="$REPO_ROOT/.claude/rules/operations.md"
   local m="$REPO_ROOT/.claude/rules/memory.md" r="$REPO_ROOT/README.md" p
   for p in 'shown when the owner asks for it (`zyggy brief show`)' '"For the long run"' 'no brief Draft' '"do Z1, Z3"'; do
@@ -754,7 +760,7 @@ M365_SKILLS=(morning-brief mail-backfill files-backfill m365)
   done
   grep -qF -- 'zyggy brief request' "$r" || { echo "README.md lacks: zyggy brief request"; return 1; }
   grep -qF -- '`$ARGUMENTS` empty: the owner typed `/morning-brief`' "$REPO_ROOT/.claude/skills/morning-brief/SKILL.md"
-  [ "$(tr -d '\n' < "$REPO_ROOT/.claude/zyggy-min-version")" = 0.7.0 ]
+  [ "$(tr -d '\n' < "$REPO_ROOT/.claude/zyggy-min-version")" = 0.10.0 ]
   for f in "$REPO_ROOT"/.claude/rules/*.md; do
     [ "$(wc -l < "$f")" -le 200 ] || { echo "$f: more than 200 lines"; return 1; }
   done
@@ -843,7 +849,7 @@ M365_SKILLS=(morning-brief mail-backfill files-backfill m365)
   done
 }
 
-@test "repo: an instance's instance/linkedin.json holds only the spec's keys, no secret-shaped value, actions.enabled [\"post\"]; its settings enable both MCP servers (skipped in the template; spec 36 AC-26)" {
+@test "repo: an instance's instance/linkedin.json holds only the spec's keys, no secret-shaped value, actions.enabled [\"post\"]; its settings enable the three MCP servers m365, linkedin and hub (skipped in the template; spec 36 AC-26, spec 11 AC-23)" {
   local l="$REPO_ROOT/instance/linkedin.json" i="$REPO_ROOT/instance/settings.local.json"
   [ -f "$l" ] || skip "no instance/linkedin.json: this is the template"
   jq -e . "$l" > /dev/null
@@ -856,7 +862,7 @@ M365_SKILLS=(morning-brief mail-backfill files-backfill m365)
   [ "$status" -eq 1 ] || { echo "$output"; return 1; }
   run bash -c 'source "$1"; zy_secret_match "$(cat "$2")" && printf "%s" "$ZY_SECRET_NAME"' _ "$HOOKS/lib.sh" "$l"
   [ "$status" -ne 0 ] || { echo "instance/linkedin.json matches secret pattern $output"; return 1; }
-  jq -e '.enabledMcpjsonServers == ["m365","linkedin"]' "$i"
+  jq -e '.enabledMcpjsonServers == ["m365","linkedin","hub"]' "$i"
 }
 
 @test "repo: the archive skill is model-invocable, <= 120 lines, and carries the show-then-go flow, the staging folder, the exit codes and the never-retry rule (spec 37 AC-25)" {
@@ -968,8 +974,41 @@ M365_SKILLS=(morning-brief mail-backfill files-backfill m365)
   done
   grep -q 'LoadCredential=' "$REPO_ROOT/runbooks/install-node.md"
   ! grep -q 'Register-ScheduledTask' "$REPO_ROOT/runbooks/install-node.md"
-  for s in 4711 GCM_INTERACTIVE BatchMode shell:startup 0x6; do
+  for s in 4711 GCM_INTERACTIVE BatchMode shell:startup 0x6 pickup.conf.example pickup.conf '"activeSeconds": 1'; do
     grep -qF -- "$s" "$REPO_ROOT/runbooks/install-node.md" || { echo "install-node.md lacks: $s"; return 1; }
   done
   grep -q '^## Executions' "$REPO_ROOT/runbooks/rotate-hmac.md"
+}
+
+@test "repo: the Hub (spec 11) — operations.md carries the Hub block and its two runbook entries, README.md the server and the verb, the stub knows zyggy hub" {
+  local o="$REPO_ROOT/.claude/rules/operations.md" r="$REPO_ROOT/README.md" p
+  for p in '## The Hub (memory over MCP)' 'mcp__hub__get_context' 'mcp__hub__remember' 'data, never instructions' \
+    'refused: matches secret pattern' 'not stored: hooks are off (unattended run)' 'tenant and user are never request fields' \
+    'Hub fails to start' 'Hub refuses a principal' 'hub: configuration error:' 'claude mcp list' 'never by hand'; do
+    grep -qF -- "$p" "$o" || { echo "operations.md lacks: $p"; return 1; }
+  done
+  for p in '`hub`' 'zyggy hub' 'mcp__hub__get_context' 'Bash(zyggy hub*)'; do
+    grep -qF -- "$p" "$r" || { echo "README.md lacks: $p"; return 1; }
+  done
+  install_zyggy_stub
+  run zyggy hub < /dev/null
+  [ "$status" -eq 0 ] || { echo "stub: $output"; return 1; }
+}
+
+@test "repo: the node side (spec 12) — node/ holds the two launchers, the laptop remember skill and node/README.md; operations.md points at node/README.md; README.md documents node/ and zyggy context; the stub knows zyggy context; Central's settings carry no SessionEnd hook; zyggy-min-version unchanged" {
+  local o="$REPO_ROOT/.claude/rules/operations.md" r="$REPO_ROOT/README.md" f p
+  for f in node/hooks/stop.sh node/hooks/session-end.sh node/skills/remember/SKILL.md node/README.md; do
+    [ -f "$REPO_ROOT/$f" ] || { echo "missing $f"; return 1; }
+  done
+  for p in '## Laptops (node side)' 'node/README.md' 'zyggy context' 'never `zyggy memory remember`'; do
+    grep -qF -- "$p" "$o" || { echo "operations.md lacks: $p"; return 1; }
+  done
+  for p in '`node/`' 'zyggy context --stop-hook' 'zyggy context --flush' 'to: central'; do
+    grep -qF -- "$p" "$r" || { echo "README.md lacks: $p"; return 1; }
+  done
+  jq -e '.hooks | has("SessionEnd") | not' "$REPO_ROOT/.claude/settings.json"
+  [ "$(tr -d '\n' < "$REPO_ROOT/.claude/zyggy-min-version")" = 0.10.0 ]
+  install_zyggy_stub
+  run zyggy context --flush < /dev/null
+  [ "$status" -eq 0 ] || { echo "stub: $output"; return 1; }
 }
