@@ -25,6 +25,7 @@ instance's Claude Code sessions** (remote control or `claude -p` are started the
 | `.claude/skills/github-inventory/` | The owner-invoked `github-inventory` skill and `inventory.sh`: one `[observed]` line per repository the read-only token can see, into `inbox/` |
 | `.claude/skills/github-clone/` | The `github-clone` skill, `clone.sh` and `askpass.sh`: a read-only, shallow clone of one repository of the owner's own account into the clone cache, read as data |
 | `.mcp.json` | Three project MCP servers. The first, `m365`: `type: http` on `http://127.0.0.1:${ZYGGY_M365_PORT:-47365}/mcp` with `headersHelper` = `zyggy m365 auth-header` (a fresh token per connection; no `headers`, `env` or id; a missing binary fails the connection, so it fails closed without a launcher); the server itself runs as the instance's `zyggy-m365-mcp.service` (`zyggy m365 mcp-server`); an instance enables it with `enabledMcpjsonServers`. The second server, `linkedin`: `type: stdio`, `command: zyggy`, `args: ["linkedin", "mcp-server"]`, no `env`; one tool, `publish_post`, asked before every call (`permissions.ask`); enabled by the instance's `enabledMcpjsonServers`. The third, `hub`: `type: stdio`, `command: zyggy`, `args: ["hub"]`, no `env` (the principal comes from the `ZYGGY_*` values of `.claude/settings.local.json`); the memory tools `get_context` (allowed as `mcp__hub__get_context`) and `remember` (left to the permission mode); the model never starts it (`Bash(zyggy hub*)` denied); enabled by the instance's `enabledMcpjsonServers` |
+| `node/` | The laptop side (deliverable 12): `node/hooks/stop.sh` and `node/hooks/session-end.sh` (launchers of `zyggy context --stop-hook` and `zyggy context --flush`, every exit 0), the laptop `remember` skill (`node/skills/remember/`, `zyggy context`) and `node/README.md` (the user-scope wiring the laptop install puts in place, the spool, the exit codes). Never loaded by Central's sessions; no `AGENTS.md` here |
 | `.claude/skills/m365/` | The `m365` connector (the owner's company Microsoft 365): the owner-invoked `m365` skill (`/m365 check` and the conversation rules) and the tool data files `tools/` (see [Tool data files](#tool-data-files)); every program it needs is a [`zyggy` verb](#zyggy-verbs) |
 | `.claude/skills/linkedin/` | The model-invocable `linkedin` skill: `zyggy linkedin auth status` first, "connect LinkedIn" (`auth start`, the landed address into `auth finish` on stdin), a draft in the owner's voice shown with its character count and visibility, and `publish_post` only after his explicit go; comments and profile texts are suggestions to paste |
 | `.claude/skills/morning-brief/`, `mail-backfill/`, `files-backfill/` | The prompts of the three `claude -p` runs started by `zyggy m365 brief`, `zyggy m365 mail-backfill`, `zyggy m365 files-backfill` (`disable-model-invocation: true`) |
@@ -310,6 +311,17 @@ brief unit. The binary reads no test-only switch.
 The settings allow `mcp__hub__get_context`, leave `mcp__hub__remember` to the permission mode and deny
 `Bash(zyggy hub*)`. Failures and what to do: the operations rule's Hub block and the runbook entries
 "Hub fails to start" and "Hub refuses a principal".
+
+### Laptops (deliverable 12)
+
+| Verb | Who runs it | Exit codes | Contract |
+|------|-------------|-----------|----------|
+| `zyggy context [--scope general\|project:<name>\|machine] -- "<fact>"` | The laptop `remember` skill (`node/skills/remember/`) | 0 · 2 · 3 · 5 (secret pattern) · 6 · 7 | One stated fact signed as a context envelope into the sender's own `nodes/<machine>/context/` folder, `to: central`; prints `context <id> to central (<path>)` and the stored line. Never on Central (exit 2) |
+| `zyggy context --stop-hook` (stdin: the Stop hook JSON) | `node/hooks/stop.sh` | 0 · 2 · 3 | One `[observed]` line per turn into `<nodeDir>/context/<tenant>/<session>.md`; no key, no checkout, no bus |
+| `zyggy context --flush` (stdin: the SessionEnd hook JSON) | `node/hooks/session-end.sh`; by hand for a spool left behind | 0 · 2 · 3 · 6 · 7 | The session's spool, and any spool older than an hour, as one signed envelope each; a spool is deleted once pushed or committed |
+
+Every line is checked against `secret-patterns.txt` (`ZYGGY_SECRET_PATTERNS`) before it is signed or spooled. The
+wiring, the spool and the runbook entries: `node/README.md`.
 
 ### Tool data files
 

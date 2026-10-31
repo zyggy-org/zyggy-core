@@ -35,6 +35,11 @@ proves the missing-binary path.
 - `launchers.bats` runs `.claude/hooks/m365-guard.sh` and `m365-log.sh`: stdin reaches the stub unchanged with the
   argv `m365 guard` / `m365 log`, an exit 0 passes through, any other exit becomes 2 with the binary's stderr line,
   and a missing `zyggy` gives exit 2 and the one line `m365-guard: zyggy not found` (or `m365-log: …`).
+- `node.bats` runs the laptop launchers `node/hooks/stop.sh` and `node/hooks/session-end.sh`: stdin reaches the stub
+  unchanged with the argv `context --stop-hook` / `context --flush`, every exit of the binary (a missing one
+  included) becomes 0 with its stderr line kept and nothing on stdout. Their inputs are `fixtures/stop-input.json`
+  and `fixtures/session-end-input.json` (the SessionEnd JSON). It also checks the laptop `remember` skill and
+  `node/README.md`. The stub accepts `context` with any second word.
 - **The hook fixture** `fixtures/m365/hook-send-clean.json` (matched by `hook-*.json`) is the launchers' input: the
   PreToolUse JSON Claude Code sends for a send, its `tool_input` shaped as the pinned server's schema. The launchers
   do not read it; they only pass it through. The guard matrix and the log cases (all the former `hook-*.json`) are

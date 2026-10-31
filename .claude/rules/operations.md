@@ -138,6 +138,14 @@ stopped by a signal (Ctrl-C, `systemctl stop`) — a backfill resumes from its c
 - `refused: tenant and user are never request fields` means a prompt or a skill tried to name a principal: nothing
   was read or written. Report it to the owner and point to the runbook entry "Hub refuses a principal".
 
+## Laptops (node side)
+
+- The laptop material lives under `node/` and is wired by the laptop install (`node/README.md`). On a laptop the
+  `remember` skill runs `zyggy context`, never `zyggy memory remember`; a `Stop` hook spools each turn and
+  `SessionEnd` ships the spool as one signed envelope to Central. Tell the owner about exit `5` (refused by a secret
+  pattern — never retry), `6` (not sent), `7` (committed locally, pushed with the next bus write) and `3`
+  (configuration — `node/README.md`, entry "Context: configuration error").
+
 ## Headless runs
 
 - The owner's checks use `claude -p --no-session-persistence --permission-mode auto …`. Without
