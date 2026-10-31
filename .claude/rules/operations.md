@@ -156,4 +156,6 @@ stopped by a signal (Ctrl-C, `systemctl stop`) — a backfill resumes from its c
 ## What comes later
 
 These will be added by later deliverables and do not exist yet: Telegram, personal mail, social accounts other
-than LinkedIn posts, and jobs on the owner's laptops. Until they exist, say so when asked. (The nightly dream pass exists: see `AGENTS.md`.)
+than LinkedIn posts, and jobs that Central schedules on the owner's laptops. Until they exist, say so when asked.
+(The nightly dream pass exists: see `AGENTS.md`. The laptop node, the laptop `remember` and the session hooks
+exist: see "Laptops (node side)".)

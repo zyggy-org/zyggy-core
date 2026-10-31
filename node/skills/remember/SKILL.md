@@ -35,4 +35,9 @@ Exit codes:
 - `zyggy: command not found` — the binary is missing on this laptop. Tell the owner nothing was sent and point to
   `runbooks/install-node.md`, section "Laptop".
 
-Never write memory files on a laptop: a laptop has none. Facts travel to Central through this command only.
+On a work machine (the employer's laptop, see "Work boundary" in the template's `.claude/rules/security.md`):
+never send national register numbers or other personal data of the people the employer serves, medical
+information, or staff details beyond name, role and organisation. Tell the owner the fact was not
+sent and why. Code, project names and technical notes, mail bodies are fine.
+
+You can write memory files on a laptop so that confidential info remain local or details that can serve only localy. Facts travel to Central through this command.
