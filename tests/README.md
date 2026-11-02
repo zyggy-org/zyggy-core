@@ -38,8 +38,9 @@ proves the missing-binary path.
 - `node.bats` runs the laptop launchers `node/hooks/stop.sh` and `node/hooks/session-end.sh`: stdin reaches the stub
   unchanged with the argv `context --stop-hook` / `context --flush`, every exit of the binary (a missing one
   included) becomes 0 with its stderr line kept and nothing on stdout. Their inputs are `fixtures/stop-input.json`
-  and `fixtures/session-end-input.json` (the SessionEnd JSON). It also checks the laptop `remember` skill and
-  `node/README.md`. The stub accepts `context` with any second word.
+  and `fixtures/session-end-input.json` (the SessionEnd JSON). It also checks the laptop `remember` and `archive`
+  skills, `node/README.md` and the archive wording of `security.md`. The stub accepts `context` and `archive` with
+  any second word.
 - **The hook fixture** `fixtures/m365/hook-send-clean.json` (matched by `hook-*.json`) is the launchers' input: the
   PreToolUse JSON Claude Code sends for a send, its `tool_input` shaped as the pinned server's schema. The launchers
   do not read it; they only pass it through. The guard matrix and the log cases (all the former `hook-*.json`) are
