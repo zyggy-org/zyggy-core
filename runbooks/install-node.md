@@ -28,27 +28,68 @@ Choose the drop-in when the unit's copy should be root-owned and read-only — a
 ### Upgrade
 
 - `[central/<vm-admin>]` `systemctl stop zyggy-node`; the new `/opt/zyggy/<version>/`; switch both symlinks; `systemctl start zyggy-node`; `curl -s http://localhost:4711/health` shows the new `version`. `zyggy status` on a machine whose `zyggy` is older prints `health: amber — node <v>, cli <v>` until the CLI is upgraded too. From deliverable 13 on, install `pickup.conf` (step 3b) before starting the new version; without it the new node exits 3.
-- `[home-laptop/user PowerShell]` Run `install.ps1` again from the new release folder: it stops the task, replaces the binaries, keeps `node.json`, re-registers the task and starts it.
+- `[home-laptop/user PowerShell]` The same one run as "Laptop" below, from the new release folder in a fresh PowerShell window: it stops the task, replaces the binaries, keeps `node.json`, re-registers the task and starts it; it also pulls `zyggy-core` and refreshes changed skills with a backup. A mixed old folder left on the PATH (an installer warning): move the non-zyggy files out of that folder and run `install.ps1` again.
 
 ## Laptop (no administrator needed)
 
-Prerequisites: Git for Windows (Git Credential Manager is its default helper) and Claude Code logged in as this user. The owner is not an administrator on every laptop; nothing below needs it, and the script refuses rather than asks for elevation.
+The owner is not an administrator on every laptop; nothing below needs it, and the script refuses rather than asks for elevation. A first install and an upgrade are the same one command (deliverable 42).
 
-1. `[home-laptop/user PowerShell]` Unpack the `win-x64` release folder (`zyggy.exe`, `zyggy-node.exe`, `SHA256SUMS`, `deploy\`).
-2. `[home-laptop/user PowerShell]` `git clone https://github.com/zyggy-org/zyggy-bus.git C:/agents/bus`; `git -C C:/agents/bus config core.autocrlf false`; `git -C C:/agents/bus push --dry-run` once so Git Credential Manager asks for the token and stores it (see "`GCM_INTERACTIVE` and `BatchMode`").
-3. `[home-laptop/user PowerShell]` `zyggy secret set hmac/<n> --hex` (paste the tenant's key at the hidden prompt) and `zyggy secret set github-pat` — the store is the Credential Manager of this user; `zyggy secret list` must show the same fingerprint for `hmac/<n>` as Central.
-4. `[home-laptop/user PowerShell]` `.\deploy\windows\install.ps1 -Tenant acme -Machine home-laptop -SignWith acme/<n>` from the release folder.
+Prerequisites, once per laptop:
+
+- Git for Windows (Git Credential Manager is its default helper) and Claude Code installed and logged in as this user.
+- `[home-laptop/user PowerShell]` The bus clone: `git clone https://github.com/zyggy-org/zyggy-bus.git C:/agents/bus`; `git -C C:/agents/bus config core.autocrlf false`; `git -C C:/agents/bus push --dry-run` once so Git Credential Manager asks for the token and stores it (see "`GCM_INTERACTIVE` and `BatchMode`").
+- `[home-laptop/user PowerShell]` Unpack the `win-x64` release folder (`zyggy.exe`, `zyggy-node.exe`, `SHA256SUMS`, `deploy\`).
+
+**The one command**, from the release folder in a fresh PowerShell window:
+
+1. `[home-laptop/user PowerShell]` `.\deploy\windows\install.ps1 -Tenant acme -Machine home-laptop -SignWith acme/<n>`
+
+   It checks the checksums, stops the task and any older node, copies the binaries, puts them on the user PATH and takes an older `zyggy` folder off it, writes `node.json` when absent, and runs `zyggy setup`: `node.json` completed (`claude.path`, `signWith`), `zyggy-core` cloned or fast-forwarded at `-CorePath`, `ZYGGY_SECRET_PATTERNS` and the three deny rules in the user-scope Claude Code settings, the `remember` and `archive` skills copied, both secrets checked by name and fingerprint. Then it registers and starts the logon task.
+2. `[home-laptop/user PowerShell]` **Secrets**: when a `setup:` line says `missing`, run the command it names, then run the script again. `setup: signing key acme/<n>: missing - run: zyggy secret set hmac/<n> --hex` (paste the tenant's key at the hidden prompt; `zyggy secret list` must show the same fingerprint for `hmac/<n>` as Central; where the key comes from: `rotate-hmac.md`) and `setup: github-pat: missing - run: zyggy secret set github-pat` (this laptop's token). The store is the Credential Manager of this user; no value is ever shown.
+3. **Manual hooks step**, once per laptop: add the `Stop`/`SessionEnd` `hooks` block to the user-scope `~/.claude/settings.json` by hand, as in `node/README.md` "Wiring", part "Manual: the hooks". `zyggy setup` never installs, changes or removes hook entries.
+4. Close and reopen every terminal, VS Code window (all of them) and Claude Code session opened before the install, as the last line says.
+
+A second run prints only `already done` lines for the `setup:` items.
+
+**Manual fallback**: when `zyggy setup` keeps failing on an item, wire that item by hand per `node/README.md` "Wiring" (the env value, the deny rules, the two skill folders) and the bus prerequisites above, then run the script again; it leaves an existing value as it is.
 
 | Parameter | Default | Meaning |
 |-----------|---------|---------|
-| `-Tenant`, `-Machine` | required | `node.json` `tenant` and `machine` |
-| `-SignWith acme/<n>` | required when `node.json` is written | `node.json` `signWith` |
+| `-Tenant`, `-Machine` | required | `node.json` `tenant` and `machine`; an existing `node.json` must name the same |
+| `-SignWith acme/<n>` | required when `node.json` is written or has no `signWith` | `node.json` `signWith` |
 | `-BusLocalPath` | `C:/agents/bus` | the checkout (forward slashes in the file) |
+| `-CorePath` | `C:/agents/zyggy-core` | where `zyggy setup` clones or fast-forwards `zyggy-core` |
 | `-Source` | the script's folder | where `zyggy.exe`, `zyggy-node.exe`, `SHA256SUMS` are |
 | `-NodeJson` | `%LOCALAPPDATA%\zyggy\node.json` | written only when absent |
 | `-Uninstall` | — | stop and unregister the task; leaves everything else |
 
-What the lines mean: `checksum ok` (SHA256SUMS verified before anything was copied); `copied … to %LOCALAPPDATA%\Programs\Zyggy` and the user PATH line; `node.json: written` or `exists, left untouched`; the pre-flight — `git:` the version, `checkout:` the clone holds `tenants\acme`, `secrets:` the signing key shows as `signs` (else the remedy `zyggy secret set hmac/<n> --hex`; the line `rotate-hmac.md step 0 retires the spike file store` means `secrets.store: file` is still selected), `claude:` the absolute `claude.path`; `task: registered zyggy-node` and `task: Running`; the first line of `zyggy status`.
+What the lines mean:
+
+- `install: checksum ok: <file>` — SHA256SUMS verified before anything was copied.
+- The older copies: `install: stopped the older zyggy-node in <dir> (it would hold port 4711)`; `install: removed <dir> from the user PATH (an older zyggy; its files are kept - …)`; a `install: warning: <dir> holds an older zyggy …` line means that folder stays on the PATH (see the refusals below).
+- `install: copied zyggy.exe and zyggy-node.exe to %LOCALAPPDATA%\Programs\Zyggy`, the user PATH line and `install: session PATH: <programs> first`.
+- `install: node.json: written (…)` or `install: node.json: exists, left untouched (…)`; `install: git:` the version; `install: checkout:` the clone holds `tenants\acme`.
+- The `setup:` lines, one per item, `setup: <item>: <outcome>[ - <detail>]` with the outcomes `done`, `already done`, `left as is`, `missing` and `failed`, in this order: `node.json`, `zyggy-core`, `settings` (twice: the env value, the deny rules), `skill remember`, `skill archive`, `signing key acme/<n>`, `github-pat`, and `spike file store` only when one is left on the laptop. A changed file names its backup (`.bak-<yyyyMMddTHHmmssZ>` beside it; a replaced skill under `<LocalAppData>/zyggy/backup/<stamp>/skills/`).
+- `install: claude:` the absolute `claude.path`; `install: task: registered zyggy-node …` and `install: task: Running`; `install: status:` the first line of `zyggy status`.
+- `install: reopen: terminals, VS Code windows and Claude Code sessions opened before this install still have the old PATH and environment - close and reopen them (VS Code: all windows)` — the last line, followed only by the `incomplete` line below when setup was incomplete.
+- `install: incomplete - see the setup lines above` — setup exit 6 (`zyggy-core`, the settings or a skill failed, or `github-pat` is missing): the task runs, the script exits 1; fix the `setup:` line, then run the script again. Setup exit 3 (`node.json` refused) or 4 (signing key missing) ends the run with `install: FAILED - …` before the task.
+
+### Laptop refusals
+
+One entry per refusal the script or `zyggy setup` can print; the remedies are `node/README.md` "Runbook entries" (and the zyggy Cli README "Troubleshooting — Setup"). After each fix, run the same command again.
+
+- **Old zyggy still on PATH** — `install: warning: <dir> holds an older zyggy …` or `could not remove <dir> from the user PATH`. If the installer warns that an older zyggy folder also holds other files (a mixed folder, left on the PATH), move the non-zyggy files out of that folder and run `install.ps1` again. Otherwise edit the user PATH by hand (`rundll32 sysdm.cpl,EditEnvironmentVariables`); a machine PATH entry needs whoever administers the laptop.
+- **Old node holds port 4711** — `install: FAILED - the older zyggy-node (pid <id>) in <dir> could not be stopped`: `Stop-Process -Id <id> -Force`.
+- **`node.json` refused by setup** — `setup: node.json: failed - …`: restore `node.json` from its `.bak-…` copy or fix the key named; another tenant or machine: rerun with the file's values; `signWith missing`: rerun with `-SignWith acme/<n>`.
+- **Signing key missing** — `setup: signing key acme/<n>: missing - …`: the secrets step above.
+- **GitHub token missing** — `setup: github-pat: missing - run: zyggy secret set github-pat`: the secrets step above; the task polls by safety fetch until then.
+- **Spike file store left on the laptop** — `setup: spike file store: left as is - …`: `rotate-hmac.md` step 0, then delete the folder by hand.
+- **Claude settings not valid JSON — left untouched** — `setup: settings: failed - …`: fix or restore `settings.json` (or the `ZYGGY_SECRET_PATTERNS` value it names).
+- **zyggy-core clone fails behind the proxy** — `setup: zyggy-core: failed - fatal: …`: `git config --global http.proxy http://<host>:<port>`.
+- **zyggy-core path taken** — `setup: zyggy-core: failed - <path> is not a git checkout` or `… has origin …`: rerun with `-CorePath <another folder>`, or move the folder.
+- **zyggy-core not updated** — `setup: zyggy-core: left as is - <reason>`: `git -C C:/agents/zyggy-core status`, bring it back to a clean `main`.
+- **No `claude.exe` found** — `install: FAILED - claude.path (…) does not exist`: install Claude Code for this user (`setup` looks on the PATH and in `<UserProfile>\.local\bin\claude.exe`), or set `claude.path` in `node.json`.
+- **PATH or settings not seen** — close and reopen; VS Code fully restarted.
 
 The logon task `zyggy-node`: starts at this user's logon after 30 s in the interactive session (the one with the Claude login, the browser and the Credential Manager), hidden window, one instance, no time limit, restart on failure three times a minute apart, allowed on battery. `Start-ScheduledTask zyggy-node` starts it by hand. A stop is a kill, and `Stop-ScheduledTask zyggy-node` alone ends only the task's `powershell.exe` wrapper — `zyggy-node.exe` can survive it, keep port 4711 and block an upgrade's copy (seen 2026-10-26). Stop the node with both lines: `Stop-ScheduledTask zyggy-node; Get-Process zyggy-node -ErrorAction SilentlyContinue | Stop-Process -Force` (the installer's own stop does the same and waits). The node's claim resume covers an interrupted run on the next start. Nothing runs while the user is logged off: expected, not a fault.
 

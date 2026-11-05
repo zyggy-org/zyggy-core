@@ -1,8 +1,9 @@
 # node/ — the laptop side
 
 What a laptop's Claude Code sessions use to feed Central's memory (deliverable 12). Nothing under `node/` is loaded
-by Central's sessions, and this folder holds no `AGENTS.md`: the laptop install (deliverable 15) wires these files
-into the user-scope settings explicitly.
+by Central's sessions, and this folder holds no `AGENTS.md`: `install.ps1` (`zyggy setup`, deliverable 42) wires the
+env variable, the deny rules and the skills into the user-scope settings explicitly; the hooks are wired by hand as
+below (the manual part).
 
 | Path | What it is |
 |------|------------|
@@ -17,9 +18,10 @@ with its stderr line kept and nothing on stdout. They need `bash` on `PATH` (Git
 The first release that ships `zyggy context` is **0.11.0**. A laptop pinned to an older binary reports
 `command not found` or an unknown command from the launchers; nothing is sent.
 
-## Wiring (installed by deliverable 15)
+## Wiring
 
-The user-scope `~/.claude/settings.json` on a laptop, with the checkout at `C:/agents/zyggy-core`:
+The user-scope `~/.claude/settings.json` on a laptop (or `$CLAUDE_CONFIG_DIR/settings.json` when that is set), with
+the checkout at `C:/agents/zyggy-core`, once both parts below are done:
 
 ```json
 {
@@ -40,13 +42,34 @@ The user-scope `~/.claude/settings.json` on a laptop, with the checkout at `C:/a
 }
 ```
 
+### Written by `install.ps1`
+
+`install.ps1` runs `zyggy setup` on every install and upgrade. In the file above it writes only:
+
+- `env.ZYGGY_SECRET_PATTERNS` — set to `<core>/.claude/hooks/secret-patterns.txt` when absent; an existing value is
+  never changed (a value that names a missing file is reported as `failed` and left as is). It names the same
+  pattern list Central's hooks use. Without it, `zyggy context` refuses to run (fail closed).
+- `permissions.deny` — the three rules are added to whatever the list already holds; `setup` never removes one. They
+  keep the model away from the secret store and from the two hook modes; the session may still run
+  `zyggy context -- "<fact>"` through the `remember` skill.
+- The two skills under `~/.claude/skills/`: `install.ps1` copies `node/skills/remember/` to
+  `~/.claude/skills/remember/` and `node/skills/archive/` to `~/.claude/skills/archive/`; a folder that differs from
+  the template is backed up first under `<LocalAppData>/zyggy/backup/<stamp>/skills/`. By hand: copy the two folders
+  to the same places.
+
+`settings.json` is backed up first (`settings.json.bak-<yyyyMMddTHHmmssZ>` beside it), and only when it changes; a
+file that is not valid JSON is left untouched. Managed (enterprise) Claude Code settings outrank these user settings
+and are never written.
+
+### Manual: the hooks
+
+`setup` never installs, changes or removes hook entries (owner decision 2026-11-04). Add the `hooks` block above by
+hand, once per laptop, with the two lines `bash C:/agents/zyggy-core/node/hooks/stop.sh` and
+`bash C:/agents/zyggy-core/node/hooks/session-end.sh` as shown (adjust the path when the checkout is elsewhere), then
+open a new Claude Code session.
+
 - `"timeout": 30` on `SessionEnd` raises Claude Code's 1.5 s default budget for that event, so the flush has time to
   pull, commit and push.
-- `ZYGGY_SECRET_PATTERNS` names the same pattern list Central's hooks use. Without it, `zyggy context` refuses to
-  run (fail closed).
-- The deny rules keep the model away from the secret store and from the two hook modes; the session may still run
-  `zyggy context -- "<fact>"` through the `remember` skill.
-- Copy `node/skills/remember/` to `~/.claude/skills/remember/` for a user-scope skill.
 
 ## The spool
 
@@ -71,8 +94,8 @@ ship it now, run `zyggy context --flush` by hand.
 ## The `archive` skill
 
 `node/skills/archive/SKILL.md` lets a laptop session keep a file the owner hands over (a long text, a document, an
-image) in Central's project archive. Copy `node/skills/archive/` to `~/.claude/skills/archive/` for a user-scope
-skill (installed by deliverable 15). The skill shows the owner project, name, description, type, size and the
+image) in Central's project archive. `install.ps1` copies `node/skills/archive/` to `~/.claude/skills/archive/` for a
+user-scope skill; by hand: copy the folder to the same place. The skill shows the owner project, name, description, type, size and the
 route, waits for his go and runs one `zyggy archive --project <slug> --name "<name>" --description "<text>" --file
 <absolute path>` call. Never from an unattended run (`ZYGGY_HOOKS=off` is refused).
 
@@ -125,7 +148,8 @@ The `archive` block of the laptop's `node.json` (both keys optional):
 
 - **Context: configuration error** — `zyggy: configuration error: …` (exit 3). Check `ZYGGY_SECRET_PATTERNS` in the
   user-scope `env`, `signWith` and `bus.localPath` in `node.json`, and that the bus checkout is on `main` with a
-  `tenants/<tenant>/` folder.
+  `tenants/<tenant>/` folder. Still exit 3 after a clean `zyggy setup`: check `/status` in Claude Code for managed
+  (enterprise) settings, which outrank the user settings; `setup` never writes managed files.
 - **Context or item not sent** — exit 6 or 7 of `zyggy context` or `zyggy archive` (not a OneDrive folder line).
   `zyggy probe reach`, then `git -C <bus.localPath> status`; for a push that keeps failing,
   `runbooks/bus-conflict.md`. An item whose file was already written to the OneDrive folder is sent by re-running
@@ -153,3 +177,50 @@ The `archive` block of the laptop's `node.json` (both keys optional):
 - **Archive from a laptop: configuration error** — `zyggy: configuration error: …` (exit 3) from `zyggy archive`.
   `archive.itemMaxBytes` must be an integer from 1 to 26,214,400 and `archive.oneDriveFolder` an absolute path;
   otherwise check the same items as "Context: configuration error".
+
+The entries below come from `install.ps1` (lines `install: …`) and `zyggy setup` (lines
+`setup: <item>: <outcome>[ - <detail>]`). Setup exit 3 or 4 stops the install before the task; exit 6 still starts
+the task and ends with `install: incomplete - see the setup lines above`. After each fix, run `install.ps1` again
+with the same parameters (`runbooks/install-node.md` "Laptop"); what is already in place prints `already done`.
+
+- **Old zyggy still on PATH** — `install: warning: <dir> holds an older zyggy next to other files and shadows the new
+  one; …`, `install: warning: could not remove <dir> from the user PATH: <reason>`, or
+  `install: warning: <dir> holds an older zyggy and is not on the user PATH (the machine PATH needs whoever administers this machine)`.
+  The run went on and left that PATH entry as it was. If the installer warns that an older zyggy folder also holds
+  other files (a mixed folder, left on the PATH), move the non-zyggy files out of that folder and run `install.ps1`
+  again: the folder then holds only `zyggy*` files and is taken off the user PATH. Or move the old zyggy files out,
+  or edit the user PATH by hand (`rundll32 sysdm.cpl,EditEnvironmentVariables`, no administrator needed). The
+  machine PATH needs whoever administers that machine. Nothing is deleted: an old folder taken off the PATH stays
+  until you delete it.
+- **Old node holds port 4711** — `install: FAILED - the older zyggy-node (pid <id>) in <dir> could not be stopped`.
+  Run the remedy line it prints (`Stop-Process -Id <id> -Force`), then run `install.ps1` again.
+- **`node.json` refused by setup** — `setup: node.json: failed - <reason>`, then
+  `install: FAILED - zyggy setup refused node.json (see the setup lines above)`; the file is untouched and no task
+  was registered. Not valid JSON, unreadable or refused by the reader: restore it from its
+  `node.json.bak-<yyyyMMddTHHmmssZ>` copy beside it, or fix the key named. `node.json names tenant <a> and machine
+  <b>; the installer was given <c> and <d>`: run again with the file's values, or fix the file deliberately.
+  `signWith missing; run install.ps1 again with -SignWith acme/<n>`: do exactly that.
+- **GitHub token missing** — `setup: github-pat: missing - run: zyggy secret set github-pat` (setup exit 6). The task
+  still starts and polls by safety fetch every 15 minutes. Run `zyggy secret set github-pat` (hidden prompt; this
+  laptop's token), then run `install.ps1` again.
+- **Spike file store left on the laptop** — `setup: spike file store: left as is - a spike file store exists at
+  <path>; its keys are retired (rotate-hmac.md step 0) and not imported`. Information only: follow
+  `runbooks/rotate-hmac.md` step 0, then delete the folder by hand.
+- **Claude settings not valid JSON — left untouched** — `setup: settings: failed - not valid JSON; left untouched`
+  (or `… could not be read: …` / `… could not be written: …; left untouched`), or `setup: settings: failed -
+  ZYGGY_SECRET_PATTERNS is <value>, which does not exist; left as is` (setup exit 6; the task still starts). Fix the
+  user-scope `settings.json` or restore it from a `settings.json.bak-<yyyyMMddTHHmmssZ>` copy beside it; correct or
+  remove a `ZYGGY_SECRET_PATTERNS` value that names a missing file; then run `install.ps1` again.
+- **zyggy-core clone fails behind the proxy** — `setup: zyggy-core: failed - fatal: …` (git's first error line), and
+  the two skill lines `failed - zyggy-core not available` (setup exit 6; the task still starts). The clone is
+  anonymous and uses git's own settings: `git config --global http.proxy http://<host>:<port>` on a proxied network,
+  then run `install.ps1` again; offline, run it again once online.
+- **zyggy-core path taken** — `setup: zyggy-core: failed - <path> is not a git checkout`, `… has origin <url>,
+  expected <url>` or `… has no origin, expected <url>` (setup exit 6). The folder is untouched: run `install.ps1`
+  again with `-CorePath <another folder>`, or move the folder away.
+- **zyggy-core not updated** — `setup: zyggy-core: left as is - dirty working copy`, `detached HEAD`,
+  `on branch <name>` or `diverged from origin/main`. Not a failure: its files are used as they are.
+  `git -C C:/agents/zyggy-core status`, bring it back to a clean `main`, then run `install.ps1` again.
+- **PATH or settings not seen** — a terminal, VS Code window or Claude Code session opened before the install still
+  finds the old `zyggy` or says `ZYGGY_SECRET_PATTERNS is not set`. The install's last line says so
+  (`install: reopen: …`): close and reopen them; VS Code must be fully restarted (all windows).
