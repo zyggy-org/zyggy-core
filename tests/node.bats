@@ -92,11 +92,33 @@ setup() {
   local r="$NODE/README.md" p
   for p in 'node/hooks/stop.sh' '"timeout": 10' 'node/hooks/session-end.sh' '"timeout": 30' 'ZYGGY_SECRET_PATTERNS' \
     'Bash(zyggy secret*)' 'Bash(zyggy context --stop-hook*)' 'Bash(zyggy context --flush*)' 'context/<tenant>' '0.11.0' \
-    'zyggy context --flush' 'Context: configuration error' 'bash'; do
+    'zyggy context --flush' 'Context: configuration error' 'bash' \
+    'install.ps1' 'deliverable 42' 'zyggy setup' 'manual'; do
     grep -qF -- "$p" "$r" || { echo "node/README.md lacks: $p"; return 1; }
   done
+  ! grep -qF 'installed by deliverable 15' "$r" || { echo "node/README.md still says installed by deliverable 15"; return 1; }
   # placeholders only: repo.bats' hygiene sweeps cover node/ as template-owned (no absolute home, no principal)
   grep -qF 'C:/agents/zyggy-core' "$r"
+}
+
+# --- the laptop setup (spec 42 AC-24, plan 42 Step 9) -----------------------------------------------------------------
+
+@test "node README: lists the setup runbook entries (one per zyggy setup and install.ps1 refusal) and the managed-settings check" {
+  local r="$NODE/README.md" p
+  for p in '**Old zyggy still on PATH**' '**Old node holds port 4711**' '**`node.json` refused by setup**' \
+    '**GitHub token missing**' '**Spike file store left on the laptop**' '**Claude settings not valid JSON — left untouched**' \
+    '**zyggy-core clone fails behind the proxy**' '**zyggy-core path taken**' '**zyggy-core not updated**' \
+    '**PATH or settings not seen**' 'move the non-zyggy files out' '`/status`' '`setup` never writes managed files' \
+    '`setup` never installs, changes or removes hook entries'; do
+    grep -qF -- "$p" "$r" || { echo "node/README.md lacks: $p"; return 1; }
+  done
+}
+
+@test "node: zyggy setup is known to the stub; zyggy setp is not" {
+  run zyggy setup --config node.json --tenant acme --machine home-laptop < /dev/null
+  [ "$status" -eq 0 ]
+  run zyggy setp --tenant acme < /dev/null
+  [ "$status" -eq 4 ]
 }
 
 @test "node: no AGENTS.md and no CLAUDE.md variant under node/" {
