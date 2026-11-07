@@ -24,6 +24,7 @@ instance's Claude Code sessions** (remote control or `claude -p` are started the
 | `.claude/skills/seed-memory/` | The owner-invoked seeding interview for a fresh memory repository |
 | `.claude/skills/github-inventory/` | The owner-invoked `github-inventory` skill and `inventory.sh`: one `[observed]` line per repository the read-only token can see, into `inbox/` |
 | `.claude/skills/github-clone/` | The `github-clone` skill, `clone.sh` and `askpass.sh`: a read-only, shallow clone of one repository of the owner's own account into the clone cache, read as data |
+| `.claude/skills/zyggy-help/` | The model-invocable `zyggy-help` skill: answers questions about Zyggy itself from the checkout's documents and the installed release's `docs/`, names them and the installed `zyggy --version`; runs only that command, writes nothing (deliverable 40) |
 | `.mcp.json` | Three project MCP servers. The first, `m365`: `type: http` on `http://127.0.0.1:${ZYGGY_M365_PORT:-47365}/mcp` with `headersHelper` = `zyggy m365 auth-header` (a fresh token per connection; no `headers`, `env` or id; a missing binary fails the connection, so it fails closed without a launcher); the server itself runs as the instance's `zyggy-m365-mcp.service` (`zyggy m365 mcp-server`); an instance enables it with `enabledMcpjsonServers`. The second server, `linkedin`: `type: stdio`, `command: zyggy`, `args: ["linkedin", "mcp-server"]`, no `env`; one tool, `publish_post`, asked before every call (`permissions.ask`); enabled by the instance's `enabledMcpjsonServers`. The third, `hub`: `type: stdio`, `command: zyggy`, `args: ["hub"]`, no `env` (the principal comes from the `ZYGGY_*` values of `.claude/settings.local.json`); the memory tools `get_context` (allowed as `mcp__hub__get_context`) and `remember` (left to the permission mode); the model never starts it (`Bash(zyggy hub*)` denied); enabled by the instance's `enabledMcpjsonServers` |
 | `node/` | The laptop side (deliverable 12): `node/hooks/stop.sh` and `node/hooks/session-end.sh` (launchers of `zyggy context --stop-hook` and `zyggy context --flush`, every exit 0), the laptop `remember` skill (`node/skills/remember/`, `zyggy context`) and `node/README.md` (the user-scope wiring the laptop install puts in place, the spool, the exit codes). Never loaded by Central's sessions; no `AGENTS.md` here |
 | `.claude/skills/m365/` | The `m365` connector (the owner's company Microsoft 365): the owner-invoked `m365` skill (`/m365 check` and the conversation rules) and the tool data files `tools/` (see [Tool data files](#tool-data-files)); every program it needs is a [`zyggy` verb](#zyggy-verbs) |
@@ -323,6 +324,40 @@ The settings allow `mcp__hub__get_context`, leave `mcp__hub__remember` to the pe
 Every line is checked against `secret-patterns.txt` (`ZYGGY_SECRET_PATTERNS`) before it is signed or spooled. The
 wiring, the spool and the runbook entries: `node/README.md`.
 
+### Zyggy help (deliverable 40)
+
+The `zyggy-help` skill (`.claude/skills/zyggy-help/`) answers the owner's questions about Zyggy itself — installing or
+upgrading a node, configuring and tuning it, what it can do, how it is built — from two sets of documents, read as
+data: the checkout's own (`AGENTS.md`, the rules, `node/README.md`, the runbooks, this file, `PROTOCOL.md`) and the
+installed release's `docs/Zyggy.<Project>.md` (the product READMEs of that release, shipped since deliverable 40 and
+installed beside the binaries by `runbooks/install-node.md` step 2). Every answer ends with a `Sources:` line naming the
+documents read and the installed `zyggy --version`; `.claude/settings.json` pre-approves exactly `Bash(zyggy --version)`,
+the one command the skill runs. It writes nothing: the write tools, the web tools, the browser and the Hub's
+`remember` tool are removed for the turn.
+
+The instance names the release documents (the template never carries an absolute path):
+
+- `.claude/rules/instance.md` gains a section `## Zyggy help` with one line `Release documents: <release-dir>/docs/`,
+  where `<release-dir>` is the instance's install folder with the literal `<version>` token in it (the skill replaces
+  it with the version the binary prints).
+- `instance/settings.local.json` `permissions.additionalDirectories` gains the install root, so `Read` and `Grep` reach
+  the release documents without a prompt (the clone-cache mechanism of deliverable 32); then the existing
+  `install -m 600 instance/settings.local.json .claude/settings.local.json` line.
+
+Runbook entries (the instance's private runbook may mirror them):
+
+- **Help answer contradicts the installed version** — compare `zyggy --version` with `instance/zyggy.json`. Pin newer
+  than the binary: install the pinned release (`runbooks/install-node.md` "Upgrade"). Binary newer than the pin: merge
+  the instance pin on the workstation, `git pull --ff-only` on Central. Then `/clear` and ask again. A stale checkout:
+  `git pull --ff-only`. A document that is wrong for the version it ships with is a documentation bug: fix it in the
+  template, or in the `zyggy` README of the next release.
+- **Help: release documents missing** — the `Sources:` line ends `release documents not available`. Install `docs/`
+  from the release folder (`runbooks/install-node.md` step 2); add the `## Zyggy help` line and the
+  `additionalDirectories` entry to the instance. A prompt or refusal on `Read` means that entry is missing or wrong:
+  fix `instance/settings.local.json` and re-run the `install -m 600` line.
+- **Binary missing or wrong version** — the existing entry: the answer's note says `zyggy` is missing or older than
+  `.claude/zyggy-min-version`; the answer still comes from the checkout.
+
 ### Tool data files
 
 Plain data, read by the binary at run time and checked by `tests/repo.bats`; changing them is a template commit,
@@ -406,8 +441,7 @@ contracts and never pasted from script output; see `tests/README.md`. The `githu
 use the same stub, a git spy (`tests/fixtures/github/git-spy.sh`) that records argv, environment and askpass
 answers, and real git against local bare repositories built by `make_bare_repo`.
 
-The template proves its wiring, not the binary's behaviour: the binary's repository is private, so template CI
-never runs the real `zyggy`. `tests/launchers.bats` runs the two `m365` launchers against a `zyggy` stub first on
+The template proves its wiring, not the binary's behaviour: template CI never runs the real `zyggy`. `tests/launchers.bats` runs the two `m365` launchers against a `zyggy` stub first on
 `PATH` (`tests/fixtures/zyggy-stub.sh`, which records argv and stdin): stdin and exit 0 pass through, any other
 exit becomes 2, a missing binary gives exit 2 and one line; the inputs are the hook JSON files
 `tests/fixtures/m365/hook-*.json`. `tests/repo.bats` checks the template wiring: no `m365` or `remember` script

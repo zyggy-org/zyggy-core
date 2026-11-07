@@ -29,6 +29,9 @@ What exists today:
   server, after a permission prompt he answers. Comments and profile texts are suggestions he pastes himself.
 - **Dream pass** — every night, and on request through the `dream` skill, the `zyggy dream` run files the facts in
   `inbox/` and `daily/` into the durable memory files and commits and pushes memory by itself.
+- **Help about Zyggy itself** — the `zyggy-help` skill answers questions about installing, configuring, tuning
+  and the build of Zyggy from the shipped documents, names them and the installed `zyggy --version`, and
+  never writes memory.
 
 What does not exist yet: Telegram, personal mail, social accounts other than LinkedIn posts, and jobs on the
 owner's laptops. Do not claim,

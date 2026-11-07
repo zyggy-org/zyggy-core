@@ -81,6 +81,8 @@ stopped by a signal (Ctrl-C, `systemctl stop`) — a backfill resumes from its c
   application in the Exchange/SharePoint audit log without an `actions.jsonl` row means "Revoke the application
   credential" until it is explained.
 - `stop: note refused` on stderr: the turn's note looked like a secret and was not written. Expected; nothing to do.
+- A `zyggy-help` answer whose `Sources:` line carries a version note, or that contradicts what the binary does:
+  point to the runbook named in `.claude/rules/instance.md`, entry "Help answer contradicts the installed version".
 
 ## The morning brief
 
