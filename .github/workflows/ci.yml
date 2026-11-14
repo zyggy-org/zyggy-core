@@ -18,8 +18,10 @@ jobs:
         run: bats tests/
         env:
           ZYGGY_HYGIENE_FORBIDDEN: ${{ secrets.ZYGGY_HYGIENE_FORBIDDEN }}
+      - name: protocol check (PROTOCOL.md and templates/job-prompt.md against the zyggy repository at their Source tag)
+        run: tests/protocol-check.sh
       - name: shellcheck
-        run: shellcheck -S style .claude/hooks/*.sh .claude/skills/*/*.sh tests/*.bash tests/fixtures/github/gh-stub.sh tests/fixtures/github/git-spy.sh tests/fixtures/zyggy-stub.sh
+        run: shellcheck -S style .claude/hooks/*.sh .claude/skills/*/*.sh tests/*.bash tests/protocol-check.sh tests/fixtures/github/gh-stub.sh tests/fixtures/github/git-spy.sh tests/fixtures/zyggy-stub.sh
       - name: settings.json and .mcp.json parse
         run: jq . .claude/settings.json > /dev/null && jq . .mcp.json > /dev/null
       - name: LF endings only

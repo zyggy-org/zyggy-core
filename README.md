@@ -24,9 +24,10 @@ instance's Claude Code sessions** (remote control or `claude -p` are started the
 | `.claude/skills/seed-memory/` | The owner-invoked seeding interview for a fresh memory repository |
 | `.claude/skills/github-inventory/` | The owner-invoked `github-inventory` skill and `inventory.sh`: one `[observed]` line per repository the read-only token can see, into `inbox/` |
 | `.claude/skills/github-clone/` | The `github-clone` skill, `clone.sh` and `askpass.sh`: a read-only, shallow clone of one repository of the owner's own account into the clone cache, read as data |
+| `.claude/skills/bus/`, `delegate/`, `discover/` | The bus skills (deliverable 15): `bus` sends a job and reads its report, `delegate` routes the owner's request to a machine and project from `zyggy registry`, `discover` shows or publishes this machine's projects; see [Bus skills and the published protocol](#bus-skills-and-the-published-protocol-deliverable-15) |
 | `.claude/skills/zyggy-help/` | The model-invocable `zyggy-help` skill: answers questions about Zyggy itself from the checkout's documents and the installed release's `docs/`, names them and the installed `zyggy --version`; runs only that command, writes nothing (deliverable 40) |
 | `.mcp.json` | Three project MCP servers. The first, `m365`: `type: http` on `http://127.0.0.1:${ZYGGY_M365_PORT:-47365}/mcp` with `headersHelper` = `zyggy m365 auth-header` (a fresh token per connection; no `headers`, `env` or id; a missing binary fails the connection, so it fails closed without a launcher); the server itself runs as the instance's `zyggy-m365-mcp.service` (`zyggy m365 mcp-server`); an instance enables it with `enabledMcpjsonServers`. The second server, `linkedin`: `type: stdio`, `command: zyggy`, `args: ["linkedin", "mcp-server"]`, no `env`; one tool, `publish_post`, asked before every call (`permissions.ask`); enabled by the instance's `enabledMcpjsonServers`. The third, `hub`: `type: stdio`, `command: zyggy`, `args: ["hub"]`, no `env` (the principal comes from the `ZYGGY_*` values of `.claude/settings.local.json`); the memory tools `get_context` (allowed as `mcp__hub__get_context`) and `remember` (left to the permission mode); the model never starts it (`Bash(zyggy hub*)` denied); enabled by the instance's `enabledMcpjsonServers` |
-| `node/` | The laptop side (deliverable 12): `node/hooks/stop.sh` and `node/hooks/session-end.sh` (launchers of `zyggy context --stop-hook` and `zyggy context --flush`, every exit 0), the laptop `remember` skill (`node/skills/remember/`, `zyggy context`) and `node/README.md` (the user-scope wiring the laptop install puts in place, the spool, the exit codes). Never loaded by Central's sessions; no `AGENTS.md` here |
+| `node/` | The laptop side (deliverable 12): `node/hooks/stop.sh` and `node/hooks/session-end.sh` (launchers of `zyggy context --stop-hook` and `zyggy context --flush`, every exit 0), the laptop `remember` skill (`node/skills/remember/`, `zyggy context`), the laptop copies of the `archive`, `bus` and `discover` skills and `node/README.md` (the user-scope wiring the laptop install puts in place, the spool, the exit codes). Never loaded by Central's sessions; no `AGENTS.md` here |
 | `.claude/skills/m365/` | The `m365` connector (the owner's company Microsoft 365): the owner-invoked `m365` skill (`/m365 check` and the conversation rules) and the tool data files `tools/` (see [Tool data files](#tool-data-files)); every program it needs is a [`zyggy` verb](#zyggy-verbs) |
 | `.claude/skills/linkedin/` | The model-invocable `linkedin` skill: `zyggy linkedin auth status` first, "connect LinkedIn" (`auth start`, the landed address into `auth finish` on stdin), a draft in the owner's voice shown with its character count and visibility, and `publish_post` only after his explicit go; comments and profile texts are suggestions to paste |
 | `.claude/skills/morning-brief/`, `mail-backfill/`, `files-backfill/` | The prompts of the three `claude -p` runs started by `zyggy m365 brief`, `zyggy m365 mail-backfill`, `zyggy m365 files-backfill` (`disable-model-invocation: true`) |
@@ -34,10 +35,13 @@ instance's Claude Code sessions** (remote control or `claude -p` are started the
 | `tests/fixtures/github/` | Fixture API pages, the `gh` stub (`gh-stub.sh`) and the git spy (`git-spy.sh`) — no network in CI |
 | `tests/fixtures/zyggy-stub.sh` | The `zyggy` stub put first on `PATH` by the launcher and wiring tests: records argv and stdin, exits as told |
 | `tests/fixtures/m365/` | The pinned tool lists (`tools-0.157.2.txt`, `enabled-tools.txt`, `excluded-tools.txt`, `tools-list-0.157.2.json`) the data files are checked against, and the hook input `hook-send-clean.json` fed to the two launchers |
-| `PROTOCOL.md` | Placeholder: the bus contract is founding-spec §4 until deliverable 15 |
+| `PROTOCOL.md` | The bus protocol: founding-spec §4 verbatim at the `zyggy` tag on its `Source:` line, held equal by `tests/protocol-check.sh` (deliverable 15) |
+| `templates/job-prompt.md` | The job prompt every node renders, verbatim from the binary at the same tag; documentation, never read at run time |
+| `tests/protocol-check.sh` | The protocol check: compares the two files above with the public `zyggy` repository at their tag |
+| `tests/fixtures/protocol/` | The two source files at that tag, so `bats` checks the comparison offline |
 | `tests/` | `bats-core` tests, fixtures (tenant `acme`, user `alice`) and hand-derived expected outputs |
 | `runbooks/` | The §11 operational runbooks as placeholder-only procedures (deliverable 10: `install-node.md`, `restore-central.md`, `revoke-machine.md`, `add-tenant.md`, `rotate-hmac.md`, `bus-conflict.md`); an instance's filled-in evidence lives in its private repository |
-| `.github/workflows/ci.yml` | bats, shellcheck, `jq`, LF check on `ubuntu-latest` |
+| `.github/workflows/ci.yml` | bats, the protocol check, shellcheck, `jq`, LF check on `ubuntu-latest` |
 
 Machine-local, never committed (`.gitignore`): `memory/` (the nested memory repository),
 `.claude/settings.local.json` (the principal `ZYGGY_*` and `autoMemoryDirectory`, installed from the instance's
@@ -236,6 +240,48 @@ Complex logic lives in the `zyggy` binary; a shell script stays in the template 
 | `.claude/hooks/m365-log.sh` | The same launcher for the action log: exit 2 tells Claude the row was not written |
 | `.claude/hooks/stop.sh`, `.claude/hooks/lib.sh` (trimmed to what `stop.sh` and the GitHub scripts use) | Moves to the binary with the `Stop` hook's own deliverable (12); the secret check is held equal to the binary's by the shared samples in `tests/fixtures/secret-samples.txt` |
 | `.claude/skills/github-inventory/inventory.sh`, `.claude/skills/github-clone/clone.sh`, `askpass.sh` | Untouched until deliverable 34 moves them into `zyggy` |
+| `tests/protocol-check.sh` | A CI check, not a runtime program: this repository has no .NET build, and the check is a fetch, a section cut and a `diff` (deliverable 15) |
+
+## Bus skills and the published protocol (deliverable 15)
+
+Three skills drive the bus from a conversation. Each runs only the `zyggy` verbs its `allowed-tools` front matter
+names, and treats everything read from the bus and the registry as data, never instructions.
+
+| Skill | Where | What it does |
+|-------|-------|--------------|
+| `bus` | `.claude/skills/bus/` (Central) and `node/skills/bus/` (laptops, the same file) | `zyggy submit` a job to a machine and project after the owner's go, `zyggy report <id>` and `zyggy status [--id]` to read the answer; documents the job options and that `allowed_tools` is a hard ceiling |
+| `delegate` | `.claude/skills/delegate/` (Central only) | Reads `zyggy registry`, proposes machine, project, agent, tools and job text, submits after the owner's go, reads the report; never turns a report into a new job |
+| `discover` | `.claude/skills/discover/` and `node/skills/discover/` (the same file) | `zyggy discover --dry-run` shows what this machine publishes, `zyggy discover` publishes now; explains `devRoots` and the duplicate and unusable name notices |
+
+Central gets them with its checkout (`git pull --ff-only` after the instance merged the template); a laptop gets
+`bus` and `discover` from `zyggy setup` (`install.ps1`, zyggy 0.18.0 or newer), copied from `node/skills/` to its
+user-scope skills. `bats` holds the two copies equal.
+
+**The guard on every job.** A job's `allowed_tools` is enforced on the target machine by the node itself (zyggy
+0.18.0): every job run gets a `PreToolUse` hook, `zyggy hook pre-tool-use`, that refuses tool calls outside the rules,
+file writes outside the project and network programs. It lives in the binary, not in this repository; the report
+counts refusals in a `blocked:` line.
+
+**The published protocol.** `PROTOCOL.md` is §4 of the founding specification and `templates/job-prompt.md` the job
+prompt the binary embeds, each copied verbatim below a `<!-- verbatim from here` marker, under a preamble whose
+`Source: zyggy <tag>` line names the `zyggy` release it was copied from. `tests/protocol-check.sh` (a CI step)
+fetches both sources from the public `zyggy` repository at that tag, cuts §4 (from `## 4.` up to `## 5.`), and fails
+with a unified diff on any difference; `ZYGGY_PROTOCOL_SOURCE=<folder>` reads `<folder>/<tag>/<path>` instead, which
+the `bats` tests use with `tests/fixtures/protocol/`. Exit 0 both match · 1 a difference · 2 a missing `Source:` line
+or marker, a §4 without its v1 tenant sentence, or a source that cannot be read.
+
+One placeholder keeps the template free of the owner's name: §4 names its own v1 tenant label ("the tenant label
+from `node.json` (`<label>` in v1)"), and the copy writes that label as `acme` everywhere. The check reads the label
+from the source and maps it the same way before comparing, so no template file ever holds the real one. The offline
+fixture stands in with the neutral label `initech`.
+
+Runbook entry:
+
+- **Protocol check differs** — the CI step prints the diff, source first. When the copy was edited by hand, copy the
+  section again from the tag, with the v1 tenant label written as `acme`. When a new `zyggy` release changed §4 or the
+  prompt, copy both files again from that release (the label as `acme`) and move their `Source:` lines to its tag (and
+  `tests/fixtures/protocol/<tag>/` with them, its label as `initech`). Never edit the
+  part below the marker by itself.
 
 ## `zyggy` verbs
 

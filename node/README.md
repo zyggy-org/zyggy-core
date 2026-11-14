@@ -11,6 +11,8 @@ below (the manual part).
 | `node/hooks/session-end.sh` | `SessionEnd` hook: runs `zyggy context --flush`, which ships the session's spool as one signed context envelope. |
 | `node/skills/remember/SKILL.md` | The laptop `remember` skill: a fact the owner states becomes one signed context envelope through `zyggy context`. |
 | `node/skills/archive/SKILL.md` | The laptop `archive` skill: a file the owner hands over and asks to keep goes to Central's project archive through `zyggy archive` (deliverable 41). |
+| `node/skills/bus/SKILL.md` | The `bus` skill: sends a job to one of the owner's machines with `zyggy submit` after the owner's go, and reads its answer with `zyggy report` and `zyggy status` (deliverable 15). The same file as Central's `.claude/skills/bus/`. |
+| `node/skills/discover/SKILL.md` | The `discover` skill: shows (`zyggy discover --dry-run`) or publishes now (`zyggy discover`) the projects this laptop offers for jobs (deliverable 15). The same file as Central's `.claude/skills/discover/`. |
 
 Both launchers hold no logic and never block: every outcome of the binary, a missing binary included, is exit 0
 with its stderr line kept and nothing on stdout. They need `bash` on `PATH` (Git for Windows ships it).
@@ -52,10 +54,11 @@ the checkout at `C:/agents/zyggy-core`, once both parts below are done:
 - `permissions.deny` — the three rules are added to whatever the list already holds; `setup` never removes one. They
   keep the model away from the secret store and from the two hook modes; the session may still run
   `zyggy context -- "<fact>"` through the `remember` skill.
-- The two skills under `~/.claude/skills/`: `install.ps1` copies `node/skills/remember/` to
-  `~/.claude/skills/remember/` and `node/skills/archive/` to `~/.claude/skills/archive/`; a folder that differs from
-  the template is backed up first under `<LocalAppData>/zyggy/backup/<stamp>/skills/`. By hand: copy the two folders
-  to the same places.
+- The skills under `~/.claude/skills/`: `install.ps1` copies `node/skills/remember/` to
+  `~/.claude/skills/remember/` and `node/skills/archive/` to `~/.claude/skills/archive/`, and from zyggy 0.18.0 also
+  `node/skills/bus/` and `node/skills/discover/` (a checkout without them gives `left as is - not in this zyggy-core
+  checkout`, no failure); a folder that differs from the template is backed up first under
+  `<LocalAppData>/zyggy/backup/<stamp>/skills/`. By hand: copy the folders to the same places.
 
 `settings.json` is backed up first (`settings.json.bak-<yyyyMMddTHHmmssZ>` beside it), and only when it changes; a
 file that is not valid JSON is left untouched. Managed (enterprise) Claude Code settings outrank these user settings
