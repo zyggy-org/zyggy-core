@@ -10,7 +10,7 @@ The bus is a private GitHub repository `agent-bus`. One file per message, state 
 
 **Repository layout**
 
-Everything lives under `tenants/<org>/`, where `<org>` is the tenant label from `node.json` (`geoffrey` in v1). The prefix is already built into `BusPaths` and costs nothing; it is kept so that a later product (§14) does not have to move files.
+Everything lives under `tenants/<org>/`, where `<org>` is the tenant label from `node.json` (`initech` in v1). The prefix is already built into `BusPaths` and costs nothing; it is kept so that a later product (§14) does not have to move files.
 
 ```markdown
 agent-bus/
@@ -47,7 +47,7 @@ YAML front matter + Markdown body. The body is data (the job prompt or report te
 ---
 schema: 1                     # envelope schema major version (§9)
 id: 01J8Y3N7Q2X9Z4A5B6C7D8E9F0
-tenant: geoffrey              # must equal the receiver's own tenant (and therefore the <org> of the path it sits in)
+tenant: initech              # must equal the receiver's own tenant (and therefore the <org> of the path it sits in)
 type: job                     # job | report | context | item
 from: central
 to: home-laptop
@@ -62,7 +62,7 @@ worktree: true
 allowed_tools: [Read, Grep, Glob, "Bash(dotnet *)", "Bash(kubectl get *)"]
 report_back: [summary, diff, files_changed]
 timeout_minutes: 30
-key_id: geoffrey/1            # <tenant>/<n>; keys are per tenant
+key_id: initech/1            # <tenant>/<n>; keys are per tenant
 sig: hmac-sha256:9f2c…            # hmac-sha256:<64 lowercase hex chars> over the canonical form
 ---
 Investigate why staging returns HTTP 502 on /api/bookings since Friday.

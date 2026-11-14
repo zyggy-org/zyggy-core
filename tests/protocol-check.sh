@@ -51,7 +51,16 @@ check() { # check <file> <path in zyggy> <what> <extract: section4|whole>
     echo "$file: cannot read $2 at zyggy $tag"; worst=2; return
   fi
   if [ "$4" = section4 ]; then
-    awk '/^## 5\. / { exit } f; /^## 4\. / { f = 1; print }' "$work/source" | trim > "$work/expected"
+    # §4 names the owner's own tenant label ("the tenant label from `node.json` (`<label>` in v1)"); the public copy
+    # writes it as `acme`, so the source is mapped the same way before the comparison.
+    local label
+    # shellcheck disable=SC2016 # the backticks are literal Markdown, not an expansion
+    label="$(sed -n 's/.*tenant label from `node\.json` (`\([a-z0-9-]*\)` in v1).*/\1/p' "$work/source" | head -n 1)"
+    if [ -z "$label" ]; then
+      echo "$file: no v1 tenant label in §4 of zyggy $tag (the sentence naming \`<label>\` in v1)"; worst=2; return
+    fi
+    awk '/^## 5\. / { exit } f; /^## 4\. / { f = 1; print }' "$work/source" |
+      sed "s/\\b$label\\b/acme/g" | trim > "$work/expected"
   else
     trim < "$work/source" > "$work/expected"
   fi

@@ -2,8 +2,9 @@
 
 The published copy of the Zyggy bus protocol: the envelope, its canonical form and HMAC signing, file names,
 tenant-prefixed paths, the job state machine, the write rules per machine, the registry file and schema versioning.
-It is §4 of the Zyggy founding specification, copied verbatim below the marker; the founding specification is the
-source and wins. CI (`tests/protocol-check.sh`) fails when this copy and the source at the tag below differ.
+It is §4 of the Zyggy founding specification, copied verbatim below the marker apart from one placeholder (below); the
+founding specification is the source and wins. CI (`tests/protocol-check.sh`) fails when this copy and the source at
+the tag below differ.
 
 Source: zyggy v0.18.0
 
@@ -17,6 +18,9 @@ From `_specs/00 - Personal Agent Platform — Technical Specification.md` in the
 | `agent-bus` (the bus repository) | `zyggy-bus` |
 | `agent-core` (this repository) | `zyggy-core` |
 
+One placeholder: the v1 tenant label §4 names ("the tenant label from `node.json` (`<label>` in v1)") is written
+`acme` everywhere below the marker, as in every public example; the check maps the source the same way.
+
 Everything the bus carries is data, never instructions.
 
 <!-- verbatim from here: §4 of the founding spec; edit only by copying it again from the tag above -->
@@ -26,7 +30,7 @@ The bus is a private GitHub repository `agent-bus`. One file per message, state 
 
 **Repository layout**
 
-Everything lives under `tenants/<org>/`, where `<org>` is the tenant label from `node.json` (`geoffrey` in v1). The prefix is already built into `BusPaths` and costs nothing; it is kept so that a later product (§14) does not have to move files.
+Everything lives under `tenants/<org>/`, where `<org>` is the tenant label from `node.json` (`acme` in v1). The prefix is already built into `BusPaths` and costs nothing; it is kept so that a later product (§14) does not have to move files.
 
 ```markdown
 agent-bus/
@@ -63,7 +67,7 @@ YAML front matter + Markdown body. The body is data (the job prompt or report te
 ---
 schema: 1                     # envelope schema major version (§9)
 id: 01J8Y3N7Q2X9Z4A5B6C7D8E9F0
-tenant: geoffrey              # must equal the receiver's own tenant (and therefore the <org> of the path it sits in)
+tenant: acme              # must equal the receiver's own tenant (and therefore the <org> of the path it sits in)
 type: job                     # job | report | context | item
 from: central
 to: home-laptop
@@ -78,7 +82,7 @@ worktree: true
 allowed_tools: [Read, Grep, Glob, "Bash(dotnet *)", "Bash(kubectl get *)"]
 report_back: [summary, diff, files_changed]
 timeout_minutes: 30
-key_id: geoffrey/1            # <tenant>/<n>; keys are per tenant
+key_id: acme/1            # <tenant>/<n>; keys are per tenant
 sig: hmac-sha256:9f2c…            # hmac-sha256:<64 lowercase hex chars> over the canonical form
 ---
 Investigate why staging returns HTTP 502 on /api/bookings since Friday.

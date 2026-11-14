@@ -101,6 +101,28 @@ skill_body() { # the lines after the closing --- of the front matter
   [ "$status" -eq 2 ] && [[ "$output" == *"cannot read"*"v0.0.1"* ]] || { echo "status $status: $output"; return 1; }
 }
 
+# The source names the owner's own tenant label in §4 ("the tenant label from `node.json` (`<label>` in v1)"); the
+# public copy writes it as `acme`. The fixture stands in with the neutral label `initech`.
+
+@test "protocol: the copy writes the v1 tenant label of §4 as acme, and the check maps the source the same way" {
+  local t
+  grep -qF '(`initech` in v1)' "$PROTOCOL_SOURCE/v0.18.0/_specs/"*.md || { echo "fixture lacks its stand-in label"; return 1; }
+  grep -qF '(`acme` in v1)' "$REPO_ROOT/PROTOCOL.md" || { echo "PROTOCOL.md does not write the label as acme"; return 1; }
+  grep -qF 'v1 tenant label' "$REPO_ROOT/PROTOCOL.md" || { echo "the preamble does not name the label mapping"; return 1; }
+  t="$(copy_published)"
+  sed -i 's/\bacme\b/initech/g' "$t/PROTOCOL.md"
+  ZYGGY_PROTOCOL_SOURCE="$PROTOCOL_SOURCE" run "$CHECK" "$t"
+  [ "$status" -eq 1 ] || { echo "a copy keeping the source's label must differ; status $status: $output"; return 1; }
+}
+
+@test "protocol: a source without the v1 tenant sentence exits 2 (nothing to map)" {
+  local src="$BATS_TEST_TMPDIR/source"
+  cp -R "$PROTOCOL_SOURCE" "$src"
+  sed -i 's/ (`initech` in v1)//' "$src/v0.18.0/_specs/"*.md
+  ZYGGY_PROTOCOL_SOURCE="$src" run "$CHECK" "$REPO_ROOT"
+  [ "$status" -eq 2 ] && [[ "$output" == *"PROTOCOL.md: no v1 tenant label in §4"* ]] || { echo "status $status: $output"; return 1; }
+}
+
 @test "protocol: the check script keeps the template's script rules (shebang, set -euo pipefail, LF, 100755, no git) and is run by CI" {
   local f=tests/protocol-check.sh ci="$REPO_ROOT/.github/workflows/ci.yml"
   cd "$REPO_ROOT"

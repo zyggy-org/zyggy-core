@@ -214,7 +214,7 @@ INSTANCE_OWNED_ERE='^(instance/|\.claude/rules/instance\.md$|\.claude/rules/inst
 # Tracked (index) files of <root> that belong to the template: instance-owned paths and this file excluded.
 template_owned_files() { # template_owned_files <root>
   local f
-  git -C "$1" ls-files | grep -vE "$INSTANCE_OWNED_ERE" | grep -vx 'tests/repo.bats' |
+  git -C "$1" -c core.quotePath=false ls-files | grep -vE "$INSTANCE_OWNED_ERE" | grep -vx 'tests/repo.bats' |
     while IFS= read -r f; do
       if [ -f "$1/$f" ]; then printf '%s\n' "$f"; fi
     done
@@ -302,6 +302,18 @@ hygiene_words() { # hygiene_words <root> <csv>
   [ "$output" = ".claude/rules/memory.md:1" ] || { echo "principal: $output"; return 1; }
   run hygiene_words "$t" " , zebulon ,"
   [ "$output" = "AGENTS.md:2" ] || { echo "words: $output"; return 1; }
+}
+
+@test "repo: the hygiene sweeps reach a tracked file whose path holds a space and a non-ASCII character (git quotes such paths)" {
+  local t="$BATS_TEST_TMPDIR/t" f="tests/fixtures/a b — c.md"
+  git init -q "$t"
+  mkdir -p "$t/tests/fixtures"
+  printf '%s\n' 'intro' 'Zebulon at /srv/x' > "$t/$f"
+  git -C "$t" add -A
+  run hygiene_words "$t" "zebulon"
+  [ "$output" = "$f:2" ] || { echo "words: '$output'"; return 1; }
+  run hygiene_paths "$t"
+  [ "$output" = "$f:2" ] || { echo "paths: '$output'"; return 1; }
 }
 
 @test "repo: README.md documents the instance-owned paths, creating and updating an instance, and ZYGGY_HYGIENE_FORBIDDEN" {

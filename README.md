@@ -45,7 +45,7 @@ instance's Claude Code sessions** (remote control or `claude -p` are started the
 
 Machine-local, never committed (`.gitignore`): `memory/` (the nested memory repository),
 `.claude/settings.local.json` (the principal `ZYGGY_*` and `autoMemoryDirectory`, installed from the instance's
-`instance/settings.local.json`), `*.log`, `node.json`, `.claude/zyggy.lock`, `evolution/`, `.playwright-mcp/` (the browser plugin's output).
+`instance/settings.local.json`), `*.log`, `node.json`, `.claude/zyggy.lock`, `.playwright-mcp/` (the browser plugin's output).
 Outside the checkout, never in git: the `m365` key pair under `~/.config/zyggy/` and the `m365` state directory
 `${XDG_STATE_HOME:-~/.local/state}/zyggy/m365/` (watermarks, receipts, checkpoints, `brief.jsonl` and the action log
 `actions.jsonl`), and the brief state directory `${XDG_STATE_HOME:-~/.local/state}/zyggy/brief/` (`brief-<date>.md`,
@@ -268,13 +268,19 @@ prompt the binary embeds, each copied verbatim below a `<!-- verbatim from here`
 fetches both sources from the public `zyggy` repository at that tag, cuts §4 (from `## 4.` up to `## 5.`), and fails
 with a unified diff on any difference; `ZYGGY_PROTOCOL_SOURCE=<folder>` reads `<folder>/<tag>/<path>` instead, which
 the `bats` tests use with `tests/fixtures/protocol/`. Exit 0 both match · 1 a difference · 2 a missing `Source:` line
-or marker, or a source that cannot be read.
+or marker, a §4 without its v1 tenant sentence, or a source that cannot be read.
+
+One placeholder keeps the template free of the owner's name: §4 names its own v1 tenant label ("the tenant label
+from `node.json` (`<label>` in v1)"), and the copy writes that label as `acme` everywhere. The check reads the label
+from the source and maps it the same way before comparing, so no template file ever holds the real one. The offline
+fixture stands in with the neutral label `initech`.
 
 Runbook entry:
 
 - **Protocol check differs** — the CI step prints the diff, source first. When the copy was edited by hand, copy the
-  section again from the tag. When a new `zyggy` release changed §4 or the prompt, copy both files again from that
-  release and move their `Source:` lines to its tag (and `tests/fixtures/protocol/<tag>/` with them). Never edit the
+  section again from the tag, with the v1 tenant label written as `acme`. When a new `zyggy` release changed §4 or the
+  prompt, copy both files again from that release (the label as `acme`) and move their `Source:` lines to its tag (and
+  `tests/fixtures/protocol/<tag>/` with them, its label as `initech`). Never edit the
   part below the marker by itself.
 
 ## `zyggy` verbs
