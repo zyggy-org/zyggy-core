@@ -1,4 +1,4 @@
-# Founding specification (test fixture: the §4 slice at v0.18.0)
+# Founding specification (test fixture: the §4 slice at v0.19.0)
 
 ## 3. Components
 
@@ -36,6 +36,7 @@ All paths in the rest of this section are relative to `tenants/<org>/`. In code 
 - A sender writes only into `nodes/<target>/jobs/`, and only inside its own tenant's prefix. A `context` envelope is addressed to Central (`to: central`) but written into the sender's own `nodes/<sender>/context/` folder, so that every `reports/` and `context/` file is written by the machine whose folder holds it (amended 28 October 2026, deliverable 12). An `item` envelope is likewise addressed to Central and written into the sender's own `nodes/<sender>/items/` folder.
 - A machine writes its own `reports/`, `context/`, `items/`, `registry/<machine>.yaml`, and moves files between its own `jobs/`, `jobs/claimed/`, `jobs/rejected/`.
 - Only Central writes `archive/`, and the only writes there are `git mv` moves of `reports/` and `context/` files from any machine's folder of its own tenant (amended 29 October 2026, deliverable 13). Central also removes (`git rm`) an `items/` file of another machine of its tenant once it has filed or refused it, in the same commit as its report; an `items/` file is never moved to `archive/`.
+- Central's sweep is the only writer besides the target node that moves files in a machine's `jobs/` folders: it writes a stale claim back into that machine's `jobs/` with `attempt` raised and re-signed, removes a stale claim it answers with its own report, and moves a stale claim that does not verify into that machine's `jobs/rejected/` (deliverable 17).
 - No machine reads or writes outside the `tenants/<org>/` prefix of the tenant recorded in its `node.json`; a file found under another tenant's prefix is ignored, never processed.
 - File name = ULID + `.md`. Two writers never touch the same file, so `git pull --rebase` never conflicts on content.
 
@@ -102,9 +103,11 @@ Timestamps are RFC 3339 date-times written as `YYYY-MM-DDTHH:MM:SSZ` (UTC, whole
 | (none) | `jobs/<id>.md` | sender | add + commit + push |
 | `jobs/` | `jobs/claimed/` | target node | `git mv` + commit + push; push rejected → the §5 retry rule (pull --rebase, up to 3 attempts with jitter); still rejected → the claim stays a local, unpushed commit on the node and is pushed with the node's next write (§5) |
 | `jobs/claimed/` | `reports/<ulid>.md` + job deleted | target node | add report (fresh ULID file name, `in_reply_to` = job id), `git rm` job, commit, push |
-| `jobs/claimed/` older than `timeout_minutes` + 15 min | `jobs/` | Central (hourly sweep) | `git mv` back, `attempt: n+1`; after 3 attempts → report `status: failed` |
+| `jobs/claimed/`, claimed more than `timeout_minutes` + 15 min ago (the claim commit's time; Central's `claude.defaultTimeoutMinutes` when the field is absent), verifies, `attempt` < 3 | `jobs/` | Central (sweep) | rewrite with `attempt: n+1`, re-sign with Central's `signWith`, `git mv`; one commit per job |
+| the same, `attempt` = 3 | removed; `reports/<ulid>.md` in Central's folder, to the job's `from`, `in_reply_to` = job id, `status: failed`, `reason: attempts_exhausted` | Central (sweep) | add report + `git rm`; one commit per job |
+| the same age, does not verify | `jobs/rejected/` of the same machine; when `from` is readable, a `status: rejected` report in Central's folder with the rejection reason | Central (sweep) | `git mv` (+ add report); one commit per file |
 | `reports/`, `context/` of another machine addressed to Central, after their body is in Central's inbox | `archive/YYYY-MM/` (same tenant prefix, month of `created`) | Central (pickup) | `git mv`, one commit per pass |
-| `reports/`, `context/` older than 14 days | `archive/YYYY-MM/` (same tenant prefix, month of `created`) | Central (sweep) | `git mv` |
+| `reports/`, `context/` whose `created` is more than 14 days ago (unreadable `created`: added more than 14 days ago), except files the pickup still takes | `archive/YYYY-MM/` (same tenant prefix, month of `created`, or of the adding commit) | Central (sweep) | `git mv`, one commit per pass |
 | (none) | `items/<id>.md` | sender (not Central) | add + commit + push |
 | `items/` of another machine addressed to Central, after Central filed it into the memory archive or refused it | removed; `reports/<ulid>.md` in Central's folder, to the sender, `in_reply_to` = item id, `status: done`, or `failed` with reason `archive_refused` | Central (pickup) | `git rm` + add report, in the pass's one commit |
 
