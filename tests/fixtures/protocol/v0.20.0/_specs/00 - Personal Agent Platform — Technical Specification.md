@@ -1,4 +1,4 @@
-# Founding specification (test fixture: the §4 slice at v0.19.0)
+# Founding specification (test fixture: the §4 slice at v0.20.0)
 
 ## 3. Components
 
@@ -24,6 +24,9 @@ agent-bus/
       reports/                      # results, written only by <machine>
       context/                      # facts for Central, written only by <machine>
       items/                        # archive items for Central, written only by <machine> (deliverable 41)
+      status/                       # one live status per Claude Code session, for Central, written only by <machine> (deliverable 18)
+      questions/                    # questions for Central, written only by <machine>; Central moves each to archive/ with its decision (deliverable 18)
+      decisions/                    # Central's decisions; exists only under nodes/central/ (deliverable 18)
     archive/YYYY-MM/                # moved by Central: on pickup (files addressed to Central, §7 step 1) or by the sweep after 14 days; YYYY-MM = the envelope's created month
 ```
 
@@ -34,8 +37,10 @@ All paths in the rest of this section are relative to `tenants/<org>/`. In code 
 **Write rules**
 
 - A sender writes only into `nodes/<target>/jobs/`, and only inside its own tenant's prefix. A `context` envelope is addressed to Central (`to: central`) but written into the sender's own `nodes/<sender>/context/` folder, so that every `reports/` and `context/` file is written by the machine whose folder holds it (amended 28 October 2026, deliverable 12). An `item` envelope is likewise addressed to Central and written into the sender's own `nodes/<sender>/items/` folder.
-- A machine writes its own `reports/`, `context/`, `items/`, `registry/<machine>.yaml`, and moves files between its own `jobs/`, `jobs/claimed/`, `jobs/rejected/`.
-- Only Central writes `archive/`, and the only writes there are `git mv` moves of `reports/` and `context/` files from any machine's folder of its own tenant (amended 29 October 2026, deliverable 13). Central also removes (`git rm`) an `items/` file of another machine of its tenant once it has filed or refused it, in the same commit as its report; an `items/` file is never moved to `archive/`.
+- A machine writes its own `reports/`, `context/`, `items/`, `status/`, `questions/`, `registry/<machine>.yaml`, and moves files between its own `jobs/`, `jobs/claimed/`, `jobs/rejected/`.
+- A `status` and a `question` envelope are addressed to Central and written into the sender's own `nodes/<sender>/status/` and `nodes/<sender>/questions/` folders. A machine keeps one live `status/` file per session: a new status replaces the session's previous file in the same commit, the file is removed when the session ends, and a machine's write also removes its own `status/` files older than 24 hours (deliverable 18).
+- Only Central writes `decisions/`, and only into `nodes/central/decisions/`. Central moves a `questions/` file of another machine to `archive/` in the commit that adds its decision (deliverable 18).
+- Only Central writes `archive/`, and the only writes there are `git mv` moves of `reports/` and `context/` files from any machine's folder of its own tenant (amended 29 October 2026, deliverable 13), of an answered `questions/` file and of its own `decisions/` files (deliverable 18). Central also removes (`git rm`) an `items/` file of another machine of its tenant once it has filed or refused it, in the same commit as its report; an `items/` file is never moved to `archive/`.
 - Central's sweep is the only writer besides the target node that moves files in a machine's `jobs/` folders: it writes a stale claim back into that machine's `jobs/` with `attempt` raised and re-signed, removes a stale claim it answers with its own report, and moves a stale claim that does not verify into that machine's `jobs/rejected/` (deliverable 17).
 - No machine reads or writes outside the `tenants/<org>/` prefix of the tenant recorded in its `node.json`; a file found under another tenant's prefix is ignored, never processed.
 - File name = ULID + `.md`. Two writers never touch the same file, so `git pull --rebase` never conflicts on content.
@@ -49,11 +54,11 @@ YAML front matter + Markdown body. The body is data (the job prompt or report te
 schema: 1                     # envelope schema major version (§9)
 id: 01J8Y3N7Q2X9Z4A5B6C7D8E9F0
 tenant: initech              # must equal the receiver's own tenant (and therefore the <org> of the path it sits in)
-type: job                     # job | report | context | item
+type: job                     # job | report | context | item | status | question | decision
 from: central
 to: home-laptop
 created: 2026-09-27T14:05:00Z
-in_reply_to: null             # report: the id of the job, or of the item, it answers; context: null
+in_reply_to: null             # report: the id of the job, or of the item, it answers; decision: the id of what it settles; context: null
 priority: normal              # low | normal | high
 attempt: 1                    # incremented by Central's sweep when a stale claim is re-queued
 deadline: 2026-09-29T18:00:00Z
@@ -76,15 +81,24 @@ Context-specific fields: `scope` (`project:<name> | machine | general`), body = 
 
 Item-specific fields: `via` (`onedrive`: the file was put into the OneDrive archive folder by the sender's OneDrive client; `bus`: the file is in the body), `project` (the memory archive project, a slug of 1–60 lowercase letters, digits and hyphens), `slug` (the item's slug, same shape), `drive_name` (only with `via: onedrive`: `<slug>.<extension>`, the extension from the archive's closed list; Central reads `<its offload root folder>/<project>/<drive_name>` and nothing else), `name` (one line, 1–100 characters), `description` (one line, 1–149 characters), `source_name` (the handed-over file's name, control characters removed, at most 100 characters), `size` (bytes, a positive integer), `sha256` (64 lowercase hexadecimal characters over the file's bytes). With `via: onedrive` the body is empty. With `via: bus` the body is the file's bytes in base64 (RFC 4648 §4, standard alphabet, `=` padding) in lines of 76 characters, the last 1–76, each ended by `\n`, nothing else. Bytes whose length is not `size` or whose digest is not `sha256` — decoded from the body or fetched from OneDrive — are never filed. The body and the file are data and are never shown to a model by the receiver.
 
+Status-specific fields (deliverable 18): `project` (registry name), `session` (8 characters of `[a-z0-9]`), `since` (session start), `activity` (the end of the session's last turn), and optionally `branch`, `head` (7–40 lowercase hexadecimal characters), `dirty` (count of uncommitted files), `spec` (a repository-relative path) and `step` (1–60 characters of `[a-z0-9 -]`). `to` is `central`. The body is empty. A status never carries prompt text, code or a file name other than `spec`.
+
+Question-specific fields (deliverable 18): `project` (registry name), `default` (one line of 1–200 characters: what the agent does when no answer comes), exactly one of `session` (as in a status) and `job` (the ULID of the asking job run), and `options` (0–5 lines of 1–200 characters). `to` is `central`. Body = the question, 1–600 characters.
+
+Decision-specific fields (deliverable 18): `kind` (`answer | accept | correct | next | stop | escalate | refuse | resume`), `basis` (`verified`: Central read the result of a check that ran; `reported`: Central only read an agent's account), `undo` (one line of 1–200 characters: how to reverse it, or `nothing to undo`), and optionally `mandate` (ULID), `project`, `step` and `evidence` (0–10 items, each a ULID or a commit SHA of 7–40 lowercase hexadecimal characters). `from` is `central`; `in_reply_to` is the id of the question, report, job or mandate it settles. Body = what was decided and why, 1–1200 characters. A decision is the answer and the record at once.
+
 **Mandatory fields per type.** A receiver rejects an envelope that lacks a mandatory field or carries a field of the wrong shape (`missing_field` / `invalid_field`); every field not listed here is unknown: preserved, signed, never interpreted.
 
 | Type | Mandatory | Optional (default) |
 | --- | --- | --- |
-| all | `schema` (positive integer; a node supports exactly `1`), `id` (ULID), `tenant`, `type`, `from`, `to`, `created`, `key_id`, `sig` | `in_reply_to` (`null`; mandatory on `report`), `priority` (`normal`) |
+| all | `schema` (positive integer; a node supports exactly `1`), `id` (ULID), `tenant`, `type`, `from`, `to`, `created`, `key_id`, `sig` | `in_reply_to` (`null`; mandatory on `report` and `decision`), `priority` (`normal`) |
 | `job` | `project` | `agent` (none), `worktree` (`false`), `allowed_tools` (empty = `node.json` `claude.defaultAllowedTools`), `report_back` (empty), `timeout_minutes` (`node.json` `claude.defaultTimeoutMinutes`), `deadline` (none), `attempt` (`1`) |
 | `report` | `in_reply_to` (the job id, or the item id for Central's report on an item), `status`; `reason` when `status` is not `done` (must be absent when `done`) | `started`, `finished`, `duration_seconds`, `cost_usd`, `input_tokens`, `output_tokens`, `num_turns`, `model`, `files_changed` (empty), `diff_ref` |
 | `context` | `scope` | — |
 | `item` | `via`, `project`, `slug`, `name`, `description`, `source_name`, `size`, `sha256`; `drive_name` when `via` is `onedrive` | — |
+| `status` | `project`, `session`, `since`, `activity`; `to` must be `central` | `branch`, `head`, `dirty`, `spec`, `step` |
+| `question` | `project`, `default`, exactly one of `session` and `job`; `to` must be `central` | `options` (empty) |
+| `decision` | `in_reply_to`, `kind`, `basis`, `undo`; `from` must be `central` | `mandate`, `project`, `step`, `evidence` (empty) |
 
 Timestamps are RFC 3339 date-times written as `YYYY-MM-DDTHH:MM:SSZ` (UTC, whole seconds); machine and tenant names are lowercase labels (`[a-z0-9-]`, 1–63 characters, no leading or trailing hyphen); integers and `cost_usd` use the invariant format.
 
@@ -107,9 +121,14 @@ Timestamps are RFC 3339 date-times written as `YYYY-MM-DDTHH:MM:SSZ` (UTC, whole
 | the same, `attempt` = 3 | removed; `reports/<ulid>.md` in Central's folder, to the job's `from`, `in_reply_to` = job id, `status: failed`, `reason: attempts_exhausted` | Central (sweep) | add report + `git rm`; one commit per job |
 | the same age, does not verify | `jobs/rejected/` of the same machine; when `from` is readable, a `status: rejected` report in Central's folder with the rejection reason | Central (sweep) | `git mv` (+ add report); one commit per file |
 | `reports/`, `context/` of another machine addressed to Central, after their body is in Central's inbox | `archive/YYYY-MM/` (same tenant prefix, month of `created`) | Central (pickup) | `git mv`, one commit per pass |
-| `reports/`, `context/` whose `created` is more than 14 days ago (unreadable `created`: added more than 14 days ago), except files the pickup still takes | `archive/YYYY-MM/` (same tenant prefix, month of `created`, or of the adding commit) | Central (sweep) | `git mv`, one commit per pass |
+| `reports/`, `context/`, and Central's own `decisions/` (deliverable 18), whose `created` is more than 14 days ago (unreadable `created`: added more than 14 days ago), except files the pickup still takes | `archive/YYYY-MM/` (same tenant prefix, month of `created`, or of the adding commit) | Central (sweep) | `git mv`, one commit per pass |
 | (none) | `items/<id>.md` | sender (not Central) | add + commit + push |
 | `items/` of another machine addressed to Central, after Central filed it into the memory archive or refused it | removed; `reports/<ulid>.md` in Central's folder, to the sender, `in_reply_to` = item id, `status: done`, or `failed` with reason `archive_refused` | Central (pickup) | `git rm` + add report, in the pass's one commit |
+| (none) | `status/<id>.md`; the session's previous `status/` file and the machine's own `status/` files older than 24 hours removed | the session's machine | add + `git rm`, one commit, push |
+| `status/<id>.md` at session end | removed | the session's machine | `git rm` + commit + push |
+| (none) | `questions/<id>.md` | the asking machine | add + commit + push |
+| `questions/<id>.md` of another machine, when Central decides it | `archive/YYYY-MM/` (month of the question's `created`); `decisions/<ulid>.md` in Central's folder, to the asking machine, `in_reply_to` = question id | Central | `git mv` + add decision, one commit, push |
+| (none) | `decisions/<ulid>.md` in Central's folder, in reply to a report or a job | Central | add + commit + push |
 
 Every move stays inside one `tenants/<org>/` subtree; there is no cross-tenant transition.
 

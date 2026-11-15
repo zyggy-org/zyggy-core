@@ -6,7 +6,7 @@ it is never read at run time, because the binary embeds the template (`src/Zyggy
 in the `zyggy` repository).
 CI (`tests/protocol-check.sh`) fails when this copy and the embedded template at the tag below differ.
 
-Source: zyggy v0.19.0
+Source: zyggy v0.20.0
 
 <!-- verbatim from here: the embedded job prompt; edit only by copying it again from the tag above -->
 You are executing job {{id}} from {{from}} for tenant {{tenant}}.
