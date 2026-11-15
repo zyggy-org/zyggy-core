@@ -4,7 +4,7 @@ set -euo pipefail
 # Appends its argv (one line, arguments separated by a TAB) to $ZYGGY_STUB_LOG and stdin to $ZYGGY_STUB_STDIN, prints
 # $ZYGGY_STUB_STDOUT and $ZYGGY_STUB_STDERR when set, and exits $ZYGGY_STUB_EXIT (default 0). Only the commands the
 # template documents are known (`hub` takes no second word, `context`, `archive`, `setup` and the bus verbs
-# (`submit`, `status`, `report`, `registry`, `discover`, spec 15) any, `--version` as the
+# (`submit`, `status`, `report`, `registry`, `discover`, spec 15; `work`, `ask`, `decide`, `decisions`, zyggy spec 18) any, `--version` as the
 # `zyggy-help` skill runs it): anything else is exit 4 with one stderr line, as the binary does for an unknown verb.
 log="${ZYGGY_STUB_LOG:-/dev/null}"
 (
@@ -19,7 +19,8 @@ case "${1:-} ${2:-}" in
     "m365 log" | "m365 verify" | "m365 brief" | "m365 mail-backfill" | "m365 files-backfill" | "m365 mcp-server" | \
     "m365 auth-header" | "memory remember" | "memory digest" | "memory archive" | "dream request" | "dream status" | "brief show" | "brief items" | "brief idea" | "brief request" | \
     "linkedin auth" | "linkedin mcp-server" | "hub " | "context "* | "archive "* | "setup "* | "--version " | \
-    "submit "* | "status "* | "report "* | "registry "* | "discover "*) ;;
+    "submit "* | "status "* | "report "* | "registry "* | "discover "* | \
+    "work "* | "ask "* | "decide "* | "decisions "*) ;;
   *)
     printf 'zyggy-stub: unknown command %s %s\n' "${1:-}" "${2:-}" >&2
     exit 4

@@ -142,7 +142,7 @@ skill_body() { # the lines after the closing --- of the front matter
 @test "skills: bus, delegate and discover exist with the contracted front matter, <= 120 lines" {
   local name k desc
   declare -A tools=(
-    [bus]='Bash(zyggy submit *) Bash(zyggy status) Bash(zyggy status *) Bash(zyggy report *)'
+    [bus]='Bash(zyggy submit *) Bash(zyggy status) Bash(zyggy status *) Bash(zyggy report *) Bash(zyggy work) Bash(zyggy ask *) Bash(zyggy decide *) Bash(zyggy decisions) Bash(zyggy decisions *)'
     [delegate]='Bash(zyggy registry) Bash(zyggy registry *) Bash(zyggy submit *) Bash(zyggy report *)'
     [discover]='Bash(zyggy discover) Bash(zyggy discover *)'
   )
