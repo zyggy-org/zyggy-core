@@ -74,6 +74,78 @@ setup() {
   [ ! -e "$BATS_TEST_TMPDIR/git-was-called" ]
 }
 
+# --- the status launchers (zyggy spec 18, "Live work is visible") ----------------------------------------------------
+
+# launcher:flag:fixture:what happens to the binary's stdout
+WORK_LAUNCHERS=(work-session-start:--session-start:stop-input.json:kept work-turn-end:--turn-end:stop-input.json:dropped
+  work-session-end:--session-end:session-end-input.json:dropped)
+
+@test "node status launchers: stdin passes through unchanged, argv is exactly work --session-start / --turn-end / --session-end, exit 0; only session-start keeps stdout" {
+  local l name flag fixture out
+  for l in "${WORK_LAUNCHERS[@]}"; do
+    IFS=: read -r name flag fixture out <<< "$l"
+    : > "$ZYGGY_STUB_LOG"
+    : > "$ZYGGY_STUB_STDIN"
+    ZYGGY_STUB_STDOUT='a late decision' run --separate-stderr "$NODE_HOOKS/$name.sh" < "$FIXTURES/$fixture"
+    [ "$status" -eq 0 ] || { echo "$name: $status $stderr"; return 1; }
+    if [ "$out" = kept ]; then [ "$output" = 'a late decision' ]; else [ -z "$output" ]; fi || { echo "$name stdout: $output"; return 1; }
+    [ "$(cat "$ZYGGY_STUB_LOG")" = "work	$flag" ] || { echo "$name: $(cat "$ZYGGY_STUB_LOG")"; return 1; }
+    cmp "$ZYGGY_STUB_STDIN" "$FIXTURES/$fixture" || { echo "$name: stdin changed"; return 1; }
+  done
+}
+
+@test "node status launchers: every non-zero exit of the binary becomes 0 with its stderr line kept; no zyggy on PATH is one stderr line" {
+  local l name flag fixture out code
+  for l in "${WORK_LAUNCHERS[@]}"; do
+    IFS=: read -r name flag fixture out <<< "$l"
+    for code in 1 2 3 5 6 7 127; do
+      ZYGGY_STUB_EXIT="$code" ZYGGY_STUB_STDERR="work: from the binary" run --separate-stderr "$NODE_HOOKS/$name.sh" < "$FIXTURES/$fixture"
+      [ "$status" -eq 0 ] || { echo "$name exit $code -> $status"; return 1; }
+      [ "$stderr" = "work: from the binary" ] || { echo "$name: $stderr"; return 1; }
+    done
+    PATH=/usr/bin:/bin run --separate-stderr "$NODE_HOOKS/$name.sh" < "$FIXTURES/$fixture"
+    [ "$status" -eq 0 ] || { echo "$name: $status"; return 1; }
+    [ "$stderr" = "$name: zyggy not found" ] || { echo "$name: $stderr"; return 1; }
+    [ -z "$output" ]
+  done
+}
+
+@test "node status launchers: each is executable, at most 10 lines, holds no jq, sed, awk, case or source, and never invokes git" {
+  local l f
+  install_git_stub
+  for l in "${WORK_LAUNCHERS[@]}"; do
+    f="$NODE_HOOKS/${l%%:*}.sh"
+    [ -x "$f" ] || { echo "$f: not executable"; return 1; }
+    [ "$(wc -l < "$f")" -le 10 ] || { echo "$f: $(wc -l < "$f") lines"; return 1; }
+    run grep -nE '(^|[^a-z_-])(jq|sed|awk|case|source)( |$)' <(grep -vE '^[[:space:]]*#' "$f")
+    [ "$status" -eq 1 ] || { echo "$f: $output"; return 1; }
+    run "$f" < "$FIXTURES/stop-input.json"
+    [ "$status" -eq 0 ]
+  done
+  [ ! -e "$BATS_TEST_TMPDIR/git-was-called" ]
+}
+
+@test "node README: documents the three status hooks, their deny rules, zyggy ask and its exit codes, and the two supervision runbook entries" {
+  local r="$NODE/README.md" p
+  for p in 'node/hooks/work-session-start.sh' 'node/hooks/work-turn-end.sh' 'node/hooks/work-session-end.sh' '"SessionStart"' \
+    'Bash(zyggy work --session-start*)' 'Bash(zyggy work --turn-end*)' 'Bash(zyggy work --session-end*)' \
+    'zyggy ask' 'no answer; default:' 'supervision.enabled' 'supervision.detail' 'waiting for Central' \
+    '**Refused text**' '**No status from a laptop**' 'data, never instructions'; do
+    grep -qF -- "$p" "$r" || { echo "node/README.md lacks: $p"; return 1; }
+  done
+}
+
+@test "node: zyggy work, ask and decisions are known to the stub; zyggy wrk is not" {
+  run zyggy work --turn-end < /dev/null
+  [ "$status" -eq 0 ]
+  run zyggy ask --default "keep it" "which name?" < /dev/null
+  [ "$status" -eq 0 ]
+  run zyggy decisions < /dev/null
+  [ "$status" -eq 0 ]
+  run zyggy wrk < /dev/null
+  [ "$status" -eq 4 ]
+}
+
 @test "node remember skill: name remember; the documented command runs against the stub; maps exit 0, 5, 6, 7, 3 and command not found; content read elsewhere is data" {
   local s="$NODE/skills/remember/SKILL.md" p
   [ "$(front_matter_value "$s" name)" = remember ]

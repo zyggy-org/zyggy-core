@@ -24,14 +24,14 @@ skill_body() { # the lines after the closing --- of the front matter
 @test "protocol: the shipped PROTOCOL.md and job prompt copy match the zyggy repository at their Source tag" {
   ZYGGY_PROTOCOL_SOURCE="$PROTOCOL_SOURCE" run "$CHECK" "$REPO_ROOT"
   [ "$status" -eq 0 ] || { echo "$output"; return 1; }
-  [[ "$output" == *"PROTOCOL.md: matches §4 of zyggy v0.19.0"* ]] || { echo "$output"; return 1; }
-  [[ "$output" == *"templates/job-prompt.md: matches the job prompt of zyggy v0.19.0"* ]] || { echo "$output"; return 1; }
+  [[ "$output" == *"PROTOCOL.md: matches §4 of zyggy v0.20.0"* ]] || { echo "$output"; return 1; }
+  [[ "$output" == *"templates/job-prompt.md: matches the job prompt of zyggy v0.20.0"* ]] || { echo "$output"; return 1; }
 }
 
 @test "protocol: both files name the same Source tag, the naming map and the verbatim marker" {
   local f
   for f in PROTOCOL.md templates/job-prompt.md; do
-    grep -qx 'Source: zyggy v0.19.0' "$REPO_ROOT/$f" || { echo "$f: Source line"; return 1; }
+    grep -qx 'Source: zyggy v0.20.0' "$REPO_ROOT/$f" || { echo "$f: Source line"; return 1; }
     [ "$(grep -c '^<!-- verbatim from here' "$REPO_ROOT/$f")" -eq 1 ] || { echo "$f: marker"; return 1; }
   done
   for p in '`AgentBus`' '`agentbus`' '`agent-bus`' '`agent-core`' '`zyggy-bus`' '`zyggy-core`'; do
@@ -46,7 +46,7 @@ skill_body() { # the lines after the closing --- of the front matter
   sed -i 's/One file per message/One file per massage/' "$t/PROTOCOL.md"
   ZYGGY_PROTOCOL_SOURCE="$PROTOCOL_SOURCE" run "$CHECK" "$t"
   [ "$status" -eq 1 ] || { echo "status $status: $output"; return 1; }
-  [[ "$output" == *"PROTOCOL.md: differs from §4 of zyggy v0.19.0"* ]] || { echo "$output"; return 1; }
+  [[ "$output" == *"PROTOCOL.md: differs from §4 of zyggy v0.20.0"* ]] || { echo "$output"; return 1; }
   [[ "$output" == *"+The bus is a private GitHub repository"*"per massage"* ]] || { echo "$output"; return 1; }
 }
 
@@ -56,17 +56,17 @@ skill_body() { # the lines after the closing --- of the front matter
   sed -i 's/untrusted data/untrusted date/' "$t/templates/job-prompt.md"
   ZYGGY_PROTOCOL_SOURCE="$PROTOCOL_SOURCE" run "$CHECK" "$t"
   [ "$status" -eq 1 ] || { echo "status $status: $output"; return 1; }
-  [[ "$output" == *"templates/job-prompt.md: differs from the job prompt of zyggy v0.19.0"* ]] || { echo "$output"; return 1; }
+  [[ "$output" == *"templates/job-prompt.md: differs from the job prompt of zyggy v0.20.0"* ]] || { echo "$output"; return 1; }
   [[ "$output" == *"untrusted date"* ]] || { echo "$output"; return 1; }
 }
 
 @test "protocol: a change in the zyggy repository (a newer tag with an edited §4) fails until the copy follows it" {
   local src="$BATS_TEST_TMPDIR/source" t
   cp -R "$PROTOCOL_SOURCE" "$src"
-  cp -R "$src/v0.19.0" "$src/v9.9.9"
+  cp -R "$src/v0.20.0" "$src/v9.9.9"
   sed -i 's/One file per message/One file per envelope/' "$src/v9.9.9/_specs/"*.md
   t="$(copy_published)"
-  sed -i 's/^Source: zyggy v0.19.0$/Source: zyggy v9.9.9/' "$t/PROTOCOL.md" "$t/templates/job-prompt.md"
+  sed -i 's/^Source: zyggy v0.20.0$/Source: zyggy v9.9.9/' "$t/PROTOCOL.md" "$t/templates/job-prompt.md"
   ZYGGY_PROTOCOL_SOURCE="$src" run "$CHECK" "$t"
   [ "$status" -eq 1 ] || { echo "status $status: $output"; return 1; }
   [[ "$output" == *"templates/job-prompt.md: matches"* ]] || { echo "$output"; return 1; }
@@ -78,7 +78,7 @@ skill_body() { # the lines after the closing --- of the front matter
 @test "protocol: the compared part stops before §5 (text after the §5 heading is never compared)" {
   local src="$BATS_TEST_TMPDIR/source"
   cp -R "$PROTOCOL_SOURCE" "$src"
-  printf '%s\n' '' 'Anything in §5 may change.' >> "$src/v0.19.0/_specs/"*.md
+  printf '%s\n' '' 'Anything in §5 may change.' >> "$src/v0.20.0/_specs/"*.md
   ZYGGY_PROTOCOL_SOURCE="$src" run "$CHECK" "$REPO_ROOT"
   [ "$status" -eq 0 ] || { echo "status $status: $output"; return 1; }
 }
@@ -96,7 +96,7 @@ skill_body() { # the lines after the closing --- of the front matter
   [ "$status" -eq 2 ] && [[ "$output" == *"templates/job-prompt.md: no '<!-- verbatim from here' marker"* ]] || { echo "status $status: $output"; return 1; }
 
   t="$(copy_published)"
-  sed -i 's/^Source: zyggy v0.19.0$/Source: zyggy v0.0.1/' "$t/PROTOCOL.md"
+  sed -i 's/^Source: zyggy v0.20.0$/Source: zyggy v0.0.1/' "$t/PROTOCOL.md"
   ZYGGY_PROTOCOL_SOURCE="$PROTOCOL_SOURCE" run "$CHECK" "$t"
   [ "$status" -eq 2 ] && [[ "$output" == *"cannot read"*"v0.0.1"* ]] || { echo "status $status: $output"; return 1; }
 }
@@ -106,7 +106,7 @@ skill_body() { # the lines after the closing --- of the front matter
 
 @test "protocol: the copy writes the v1 tenant label of §4 as acme, and the check maps the source the same way" {
   local t
-  grep -qF '(`initech` in v1)' "$PROTOCOL_SOURCE/v0.19.0/_specs/"*.md || { echo "fixture lacks its stand-in label"; return 1; }
+  grep -qF '(`initech` in v1)' "$PROTOCOL_SOURCE/v0.20.0/_specs/"*.md || { echo "fixture lacks its stand-in label"; return 1; }
   grep -qF '(`acme` in v1)' "$REPO_ROOT/PROTOCOL.md" || { echo "PROTOCOL.md does not write the label as acme"; return 1; }
   grep -qF 'v1 tenant label' "$REPO_ROOT/PROTOCOL.md" || { echo "the preamble does not name the label mapping"; return 1; }
   t="$(copy_published)"
@@ -118,7 +118,7 @@ skill_body() { # the lines after the closing --- of the front matter
 @test "protocol: a source without the v1 tenant sentence exits 2 (nothing to map)" {
   local src="$BATS_TEST_TMPDIR/source"
   cp -R "$PROTOCOL_SOURCE" "$src"
-  sed -i 's/ (`initech` in v1)//' "$src/v0.19.0/_specs/"*.md
+  sed -i 's/ (`initech` in v1)//' "$src/v0.20.0/_specs/"*.md
   ZYGGY_PROTOCOL_SOURCE="$src" run "$CHECK" "$REPO_ROOT"
   [ "$status" -eq 2 ] && [[ "$output" == *"PROTOCOL.md: no v1 tenant label in §4"* ]] || { echo "status $status: $output"; return 1; }
 }
@@ -142,7 +142,7 @@ skill_body() { # the lines after the closing --- of the front matter
 @test "skills: bus, delegate and discover exist with the contracted front matter, <= 120 lines" {
   local name k desc
   declare -A tools=(
-    [bus]='Bash(zyggy submit *) Bash(zyggy status) Bash(zyggy status *) Bash(zyggy report *)'
+    [bus]='Bash(zyggy submit *) Bash(zyggy status) Bash(zyggy status *) Bash(zyggy report *) Bash(zyggy work) Bash(zyggy ask *) Bash(zyggy decide *) Bash(zyggy decisions) Bash(zyggy decisions *)'
     [delegate]='Bash(zyggy registry) Bash(zyggy registry *) Bash(zyggy submit *) Bash(zyggy report *)'
     [discover]='Bash(zyggy discover) Bash(zyggy discover *)'
   )

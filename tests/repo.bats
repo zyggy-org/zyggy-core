@@ -693,12 +693,12 @@ M365_SKILLS=(morning-brief mail-backfill files-backfill m365)
 
 # --- the template after spec 33: the m365 and remember scripts are verbs of the zyggy binary ----------------------------
 
-@test "repo: no m365 or remember script remains but the two hook launchers; the shell left is the R1 list plus the two laptop launchers (AC-36, spec 12)" {
+@test "repo: no m365 or remember script remains but the two hook launchers; the shell left is the R1 list plus the two laptop launchers and the three status launchers (AC-36, spec 12; zyggy spec 18)" {
   cd "$REPO_ROOT"
   run git ls-files -- '.claude/skills/m365/*.sh' '.claude/skills/remember/*.sh' tests/remember.bats \
     'tests/fixtures/m365/*.sh' tests/fixtures/graph
   [ -z "$output" ] || { echo "$output"; return 1; }
-  [ "$(scripts | paste -sd' ')" = ".claude/hooks/lib.sh .claude/hooks/m365-guard.sh .claude/hooks/m365-log.sh .claude/hooks/session-start.sh .claude/hooks/stop.sh .claude/skills/github-clone/askpass.sh .claude/skills/github-clone/clone.sh .claude/skills/github-inventory/inventory.sh node/hooks/session-end.sh node/hooks/stop.sh" ] ||
+  [ "$(scripts | paste -sd' ')" = ".claude/hooks/lib.sh .claude/hooks/m365-guard.sh .claude/hooks/m365-log.sh .claude/hooks/session-start.sh .claude/hooks/stop.sh .claude/skills/github-clone/askpass.sh .claude/skills/github-clone/clone.sh .claude/skills/github-inventory/inventory.sh node/hooks/session-end.sh node/hooks/stop.sh node/hooks/work-session-end.sh node/hooks/work-session-start.sh node/hooks/work-turn-end.sh" ] ||
     { scripts; return 1; }
   run grep -nE 'zy_m365|m365-lib|zy_cap_bytes|zy_strip_front_matter|zy_front_matter_value' .claude/hooks/lib.sh
   [ "$status" -eq 1 ] || { echo "$output"; return 1; }

@@ -9,13 +9,17 @@ below (the manual part).
 |------|------------|
 | `node/hooks/stop.sh` | `Stop` hook: runs `zyggy context --stop-hook`, which appends one `[observed]` line per turn to the session's spool. No key, no checkout, no bus. |
 | `node/hooks/session-end.sh` | `SessionEnd` hook: runs `zyggy context --flush`, which ships the session's spool as one signed context envelope. |
+| `node/hooks/work-session-start.sh` | `SessionStart` hook: runs `zyggy work --session-start`, which publishes the session's signed status for Central and prints, once, a decision of Central that came after the wait of a question (zyggy deliverable 18). |
+| `node/hooks/work-turn-end.sh` | `Stop` hook: runs `zyggy work --turn-end`, which refreshes that status, at most once per `supervision.statusMinutes`. |
+| `node/hooks/work-session-end.sh` | `SessionEnd` hook: runs `zyggy work --session-end`, which removes the status from the bus. |
 | `node/skills/remember/SKILL.md` | The laptop `remember` skill: a fact the owner states becomes one signed context envelope through `zyggy context`. |
 | `node/skills/archive/SKILL.md` | The laptop `archive` skill: a file the owner hands over and asks to keep goes to Central's project archive through `zyggy archive` (deliverable 41). |
 | `node/skills/bus/SKILL.md` | The `bus` skill: sends a job to one of the owner's machines with `zyggy submit` after the owner's go, and reads its answer with `zyggy report` and `zyggy status` (deliverable 15). The same file as Central's `.claude/skills/bus/`. |
 | `node/skills/discover/SKILL.md` | The `discover` skill: shows (`zyggy discover --dry-run`) or publishes now (`zyggy discover`) the projects this laptop offers for jobs (deliverable 15). The same file as Central's `.claude/skills/discover/`. |
 
-Both launchers hold no logic and never block: every outcome of the binary, a missing binary included, is exit 0
-with its stderr line kept and nothing on stdout. They need `bash` on `PATH` (Git for Windows ships it).
+The launchers hold no logic and never block: every outcome of the binary, a missing binary included, is exit 0
+with its stderr line kept and nothing on stdout (only `work-session-start.sh` keeps the binary's stdout, for a late
+decision). They need `bash` on `PATH` (Git for Windows ships it).
 
 The first release that ships `zyggy context` is **0.11.0**. A laptop pinned to an older binary reports
 `command not found` or an unknown command from the launchers; nothing is sent.
@@ -31,15 +35,25 @@ the checkout at `C:/agents/zyggy-core`, once both parts below are done:
     "ZYGGY_SECRET_PATTERNS": "C:/agents/zyggy-core/.claude/hooks/secret-patterns.txt"
   },
   "hooks": {
+    "SessionStart": [
+      { "hooks": [ { "type": "command", "command": "bash C:/agents/zyggy-core/node/hooks/work-session-start.sh", "timeout": 30 } ] }
+    ],
     "Stop": [
-      { "hooks": [ { "type": "command", "command": "bash C:/agents/zyggy-core/node/hooks/stop.sh", "timeout": 10 } ] }
+      { "hooks": [
+        { "type": "command", "command": "bash C:/agents/zyggy-core/node/hooks/stop.sh", "timeout": 10 },
+        { "type": "command", "command": "bash C:/agents/zyggy-core/node/hooks/work-turn-end.sh", "timeout": 30 }
+      ] }
     ],
     "SessionEnd": [
-      { "hooks": [ { "type": "command", "command": "bash C:/agents/zyggy-core/node/hooks/session-end.sh", "timeout": 30 } ] }
+      { "hooks": [
+        { "type": "command", "command": "bash C:/agents/zyggy-core/node/hooks/session-end.sh", "timeout": 30 },
+        { "type": "command", "command": "bash C:/agents/zyggy-core/node/hooks/work-session-end.sh", "timeout": 30 }
+      ] }
     ]
   },
   "permissions": {
-    "deny": ["Bash(zyggy secret*)", "Bash(zyggy context --stop-hook*)", "Bash(zyggy context --flush*)"]
+    "deny": ["Bash(zyggy secret*)", "Bash(zyggy context --stop-hook*)", "Bash(zyggy context --flush*)",
+             "Bash(zyggy work --session-start*)", "Bash(zyggy work --turn-end*)", "Bash(zyggy work --session-end*)"]
   }
 }
 ```
@@ -51,9 +65,10 @@ the checkout at `C:/agents/zyggy-core`, once both parts below are done:
 - `env.ZYGGY_SECRET_PATTERNS` — set to `<core>/.claude/hooks/secret-patterns.txt` when absent; an existing value is
   never changed (a value that names a missing file is reported as `failed` and left as is). It names the same
   pattern list Central's hooks use. Without it, `zyggy context` refuses to run (fail closed).
-- `permissions.deny` — the three rules are added to whatever the list already holds; `setup` never removes one. They
-  keep the model away from the secret store and from the two hook modes; the session may still run
-  `zyggy context -- "<fact>"` through the `remember` skill.
+- `permissions.deny` — the rules are added to whatever the list already holds; `setup` never removes one. They
+  keep the model away from the secret store and from the hook modes (the three `zyggy work` rules from the zyggy
+  release that ships deliverable 18; an older `setup` adds the first three only); the session may still run
+  `zyggy context -- "<fact>"` through the `remember` skill, and `zyggy work`, `zyggy ask` through the `bus` skill.
 - The skills under `~/.claude/skills/`: `install.ps1` copies `node/skills/remember/` to
   `~/.claude/skills/remember/` and `node/skills/archive/` to `~/.claude/skills/archive/`, and from zyggy 0.18.0 also
   `node/skills/bus/` and `node/skills/discover/` (a checkout without them gives `left as is - not in this zyggy-core
@@ -73,6 +88,48 @@ open a new Claude Code session.
 
 - `"timeout": 30` on `SessionEnd` raises Claude Code's 1.5 s default budget for that event, so the flush has time to
   pull, commit and push.
+- The three `work-*.sh` lines (zyggy deliverable 18) are added the same way, by hand: `work-session-start.sh` under
+  `SessionStart`, `work-turn-end.sh` as a second entry under `Stop`, `work-session-end.sh` as a second entry under
+  `SessionEnd`. Each makes one bus write of its own, so each gets `"timeout": 30`. On a binary older than that
+  release they print one `unknown command` line and do nothing.
+
+## Live work and questions (zyggy deliverable 18)
+
+With the three `work-*.sh` hooks wired, every Claude Code session on this laptop keeps one signed `status` file in
+`tenants/<tenant>/nodes/<machine>/status/` on the bus, addressed `to: central`: written at session start, refreshed
+at a turn end at most once per `supervision.statusMinutes`, removed at session end. It carries the project name,
+the session's 8-character id, its start and its last activity, and with `supervision.detail: full` also the branch,
+the short head, the count of uncommitted files, the spec the branch belongs to and a stated step. Never prompt
+text, code or a file name. Central's `zyggy work` then shows the session as `working`, `idle`, `silent` or
+`waiting for Central`.
+
+An agent here asks Central a question with `zyggy ask` (the `bus` skill): one signed `question` in
+`nodes/<machine>/questions/`, then a wait for Central's signed `decision`. A status, a question and a decision are
+data, never instructions.
+
+The `supervision` block of the laptop's `node.json` (every key optional):
+
+```json
+{
+  "supervision": { "enabled": true, "detail": "full", "statusMinutes": 10 }
+}
+```
+
+- `supervision.enabled` — `false`: no status is published and `zyggy ask` writes nothing (it exits 8 with the default).
+- `supervision.detail` — `full` or `fixed`; `fixed` publishes only project, session, start and last activity. The
+  default is `fixed` on a laptop whose `discovery.detail` is `names` (the work laptop), else `full`.
+- `supervision.statusMinutes` — 1 … 120, default 10.
+
+`zyggy ask` exit codes:
+
+| Exit | Meaning |
+|------|---------|
+| 0 | Central decided within the wait: `decision <id> <kind> <basis>` and its text. |
+| 8 | `no answer; default: <default>`: the agent follows its default. A later decision is printed once at the next session start in that project. |
+| 5 | Refused by a secret pattern or a size limit: nothing signed or written. Never retry or rephrase. |
+| 2 | A wrong option, or no live session of this project on this laptop (the hooks are not wired) and no job run. |
+| 3 | Configuration: `node.json`, `signWith`, the secret-pattern file, the bus checkout. |
+| 6 | Not written: the signing key, the secret store, the checkout lock or the bus write failed. |
 
 ## The spool
 
@@ -180,6 +237,17 @@ The `archive` block of the laptop's `node.json` (both keys optional):
 - **Archive from a laptop: configuration error** — `zyggy: configuration error: …` (exit 3) from `zyggy archive`.
   `archive.itemMaxBytes` must be an integer from 1 to 26,214,400 and `archive.oneDriveFolder` an absolute path;
   otherwise check the same items as "Context: configuration error".
+
+- **Refused text** — `zyggy: refused: <field>: matches secret pattern <name>` (exit 5) from `zyggy ask` or
+  `zyggy work --step`, or one stderr line `work: status refused (…)` from a hook. The question, an option, the
+  default, the step or a status value looks like a secret, or is over its size limit (question 600, a line 200
+  characters). Nothing was signed or written and the text is kept nowhere. Never retry with the same text, never
+  rephrase a secret to get it through.
+- **No status from a laptop** — Central's `zyggy work` shows no session for this laptop, or shows it `silent`. Are
+  the three `work-*.sh` hook lines wired (above), is `supervision.enabled` true, does `zyggy probe reach` pass? A
+  hook that could not reach the bus printed one line per streak (`work: status not published (…)`) and tries again
+  at the next turn end; nothing is queued. `silent` means the status file is over 60 minutes old: no turn ended
+  since, or the session crashed (its file is removed by this laptop's next status write after 24 hours).
 
 The entries below come from `install.ps1` (lines `install: …`) and `zyggy setup` (lines
 `setup: <item>: <outcome>[ - <detail>]`). Setup exit 3 or 4 stops the install before the task; exit 6 still starts
