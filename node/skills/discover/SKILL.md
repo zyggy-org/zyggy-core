@@ -12,10 +12,13 @@ names. The node scans by itself at start and every hour, so the owner rarely nee
 
 ## What gets published
 
-- The node scans the direct children of every folder in `devRoots` (in this machine's `node.json`) and keeps each
-  folder that holds a `.claude/` folder: a Claude Code project.
+- The node searches every folder in `devRoots` (in this machine's `node.json`) to `discovery.depth` levels (default
+  2: the root's children and their children) and keeps each folder that holds a `.claude/` folder: a Claude Code
+  project. It never looks inside a project, hidden folders, `node_modules` and build output, folders named in
+  `discovery.exclude`, or links. A `devRoots` entry inside another one is searched too.
 - A project's name is its folder name in lowercase, every run of other characters turned into one hyphen
-  (`My Shop` → `my-shop`). That name is what a job's `--project` uses.
+  (`My Shop` → `my-shop`). That name is what a job's `--project` uses. With `discovery.naming: path` the name is
+  the folders below the root joined with a hyphen (`Common/devops` → `common-devops`).
 - For each project: the name, the path, the default branch, its agents and skills with their `description`, and
   the first line of its `CLAUDE.md` as a summary, nothing that looks like a secret.
 
@@ -24,9 +27,13 @@ names. The node scans by itself at start and every hour, so the owner rarely nee
 Run it when the owner asks what this machine offers. It prints the registry document this machine would publish and
 writes nothing. Show the owner the project names (and the agents when asked). Notices come on stderr, one line each:
 
-- a **duplicate** name — two folders derive the same name; both are left out until one is renamed;
+- a **duplicate** name — two folders derive the same name; the shallower one is published and the deeper one left
+  out, and at the same depth both are left out, until one is renamed or `discovery.naming` is set to `path`;
 - an **unusable** name — the folder name gives no valid project name (for example only symbols); it is left out;
 - a missing root — a `devRoots` entry that does not exist; fix `node.json`;
+- a nested root — a `devRoots` entry inside another one; both are searched, nothing to fix;
+- an unreadable folder, or the folder cap (20,000 folders) reached — what was found is still published; lower
+  `discovery.depth` or add the large folders to `discovery.exclude` in `node.json`;
 - a redaction — a description or summary that matched a secret pattern was left out.
 
 No projects at all usually means `devRoots` is missing or empty in `node.json`: tell the owner which file to edit
