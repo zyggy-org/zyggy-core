@@ -1138,3 +1138,24 @@ zyggy_help_body() { # the skill body: the lines after the closing --- of the fro
   done
   [ "$(grep -c 'repository is private' "$r")" -eq 0 ] || { echo "README.md still calls the binary's repository private"; return 1; }
 }
+
+@test "repo: mandate consent wiring — zyggy mandate grant and resume asked, matched by no allow rule (template, instance), not denied (spec 18 AC-15)" {
+  local s="$REPO_ROOT/.claude/settings.json" i="$REPO_ROOT/instance/settings.local.json" f rule pattern cmd
+  for rule in 'Bash(zyggy mandate grant*)' 'Bash(zyggy mandate resume*)'; do
+    jq -e --arg r "$rule" '.permissions.ask | index($r) != null' "$s" > /dev/null || { echo "not asked: $rule"; return 1; }
+    jq -e --arg r "$rule" '.permissions.deny | index($r) == null' "$s" > /dev/null || { echo "denied: $rule"; return 1; }
+  done
+  for f in "$s" "$i"; do
+    [ -f "$f" ] || continue
+    # an allow rule whose pattern matches either command would skip the prompt; the legacy prefix form 'x:*' matches like 'x*'
+    while IFS= read -r rule; do
+      case "$rule" in Bash\(*\)) ;; *) continue ;; esac
+      pattern="${rule#Bash(}"; pattern="${pattern%)}"
+      case "$pattern" in *:\*) pattern="${pattern%:\*}*" ;; esac
+      for cmd in 'zyggy mandate grant --to home-laptop' 'zyggy mandate resume 01M7F1M0FFFFFFFFFFFFFFFFFF'; do
+        # shellcheck disable=SC2254
+        case "$cmd" in $pattern) echo "allow rule $rule in $f matches: $cmd"; return 1 ;; esac
+      done
+    done < <(jq -r '.permissions.allow // [] | .[]' "$f")
+  done
+}
