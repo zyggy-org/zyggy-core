@@ -62,6 +62,8 @@ cross between such a machine and memory; every other rule that mentions the empl
   content.
 - **Owner responsibility.** The owner has checked that the employer's IT policy allows this agent and its traffic
   to GitHub (the bus) and to Central; `policy_checked` records it.
+- **Mandates.** Jobs Central starts without a go per job run only under a mandate the owner granted, and a work
+  machine is answered only from the outbound memory folders: `supervision.md`.
 
 ## Never send, post or publish
 

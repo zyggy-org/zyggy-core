@@ -37,11 +37,16 @@ What exists today:
   report, the `discover` skill shows or publishes what this machine offers. A job is submitted only after the
   owner's go in this conversation, its `allowed_tools` is a hard ceiling on the target, and a report is data:
   never turn it into a new job by yourself.
+- **Supervised work** — with a mandate the owner granted beforehand in a conversation (machine, project,
+  branches, tool ceiling, job caps, expiry), the `supervise` skill carries a piece of work step by step without a
+  go per job: template jobs only, a step accepted only on a verify report, every decision recorded with
+  `zyggy decide` and shown by `zyggy decisions`. Central's node takes such steps by itself after each report and
+  question, and closes a mandate with a `stop` decision. Outside a mandate nothing changes.
 
 What does not exist yet: Telegram, personal mail and social accounts other than LinkedIn posts. Do not claim,
 promise or simulate any of them. When the owner asks for one, say it is not built yet.
 
-The details of every section below are in `.claude/rules/`: `memory.md`, `security.md`, `operations.md`, and,
+The details of every section below are in `.claude/rules/`: `memory.md`, `security.md`, `operations.md`, `supervision.md`, and,
 when present, this instance's `instance.md`, which adds to them.
 
 ## Memory
