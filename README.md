@@ -45,7 +45,7 @@ instance's Claude Code sessions** (remote control or `claude -p` are started the
 
 Machine-local, never committed (`.gitignore`): `memory/` (the nested memory repository),
 `.claude/settings.local.json` (the principal `ZYGGY_*` and `autoMemoryDirectory`, installed from the instance's
-`instance/settings.local.json`), `*.log`, `node.json`, `.claude/zyggy.lock`, `evolution/`, `.playwright-mcp/` (the browser plugin's output).
+`instance/settings.local.json`), `*.log`, `node.json`, `.claude/zyggy.lock`, `.playwright-mcp/` (the browser plugin's output).
 Outside the checkout, never in git: the `m365` key pair under `~/.config/zyggy/` and the `m365` state directory
 `${XDG_STATE_HOME:-~/.local/state}/zyggy/m365/` (watermarks, receipts, checkpoints, `brief.jsonl` and the action log
 `actions.jsonl`), and the brief state directory `${XDG_STATE_HOME:-~/.local/state}/zyggy/brief/` (`brief-<date>.md`,
