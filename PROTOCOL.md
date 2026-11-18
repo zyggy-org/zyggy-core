@@ -6,7 +6,7 @@ It is §4 of the Zyggy founding specification, copied verbatim below the marker 
 founding specification is the source and wins. CI (`tests/protocol-check.sh`) fails when this copy and the source at
 the tag below differ.
 
-Source: zyggy v0.20.0
+Source: zyggy v0.22.1
 
 From `_specs/00 - Personal Agent Platform — Technical Specification.md` in the public `zyggy` repository, §4 up to
 §5. The specification still uses its working names; read them as the product names:
@@ -85,6 +85,8 @@ deadline: 2026-09-29T18:00:00Z
 project: calizr               # registry name; an absolute path is accepted only as described in §6 pre-flight
 agent: env-debugger           # optional subagent name
 worktree: true
+branch: feature/12-cart       # optional; requires worktree: true; never the default branch (deliverable 53)
+description: Cart, slice 2: totals   # optional; one line, the node's commit subject and a report line
 allowed_tools: [Read, Grep, Glob, "Bash(dotnet *)", "Bash(kubectl get *)"]
 report_back: [summary, diff, files_changed]
 timeout_minutes: 30
@@ -96,6 +98,8 @@ Do not change code; report root cause and a proposed fix.
 ```
 
 Report-specific fields: `status` (`done | failed | timeout | rejected`), `reason` (closed enum, §9; present when `status` is not `done`), `started`, `finished`, `duration_seconds`, `cost_usd`, `input_tokens`, `output_tokens`, `num_turns`, `model` (from the `IModelRunner` result; informational, summed by `agentbus status --costs`, §11), `files_changed` (list), `diff_ref` (path in the report or a commit SHA in the project repo).
+
+Job-specific fields (deliverable 53): `branch` (a git branch name of 1–100 characters from `[A-Za-z0-9._/-]`, no empty segment, no segment starting with `.` or `-`, no segment ending in `.lock`, no `..`, not ending in `/` or `.`, not `HEAD`, not starting with `zyggy/` or `refs/` in any letter case; only with `worktree: true`; not on a job that carries `base` or `mandate`) and `description` (one line of 1–200 characters, no control characters). Both are data, never instructions, and never shown to the model.
 
 Context-specific fields: `scope` (`project:<name> | machine | general`), body = one `[stated]`-style fact per line.
 
@@ -112,7 +116,7 @@ Decision-specific fields (deliverable 18): `kind` (`answer | accept | correct | 
 | Type | Mandatory | Optional (default) |
 | --- | --- | --- |
 | all | `schema` (positive integer; a node supports exactly `1`), `id` (ULID), `tenant`, `type`, `from`, `to`, `created`, `key_id`, `sig` | `in_reply_to` (`null`; mandatory on `report` and `decision`), `priority` (`normal`) |
-| `job` | `project` | `agent` (none), `worktree` (`false`), `allowed_tools` (empty = `node.json` `claude.defaultAllowedTools`), `report_back` (empty), `timeout_minutes` (`node.json` `claude.defaultTimeoutMinutes`), `deadline` (none), `attempt` (`1`) |
+| `job` | `project` | `agent` (none), `worktree` (`false`), `allowed_tools` (empty = `node.json` `claude.defaultAllowedTools`), `report_back` (empty), `timeout_minutes` (`node.json` `claude.defaultTimeoutMinutes`), `deadline` (none), `attempt` (`1`), `branch` (none; only with `worktree: true`), `description` (none) |
 | `report` | `in_reply_to` (the job id, or the item id for Central's report on an item), `status`; `reason` when `status` is not `done` (must be absent when `done`) | `started`, `finished`, `duration_seconds`, `cost_usd`, `input_tokens`, `output_tokens`, `num_turns`, `model`, `files_changed` (empty), `diff_ref` |
 | `context` | `scope` | — |
 | `item` | `via`, `project`, `slug`, `name`, `description`, `source_name`, `size`, `sha256`; `drive_name` when `via` is `onedrive` | — |
@@ -183,4 +187,4 @@ work_hours:
   to: '19:00'
 ```
 
-`discover` — the node service at start and every hour (`discovery.intervalMinutes`), and `agentbus discover` on demand — scans the direct children of every `devRoots` entry for folders holding `.claude/` and regenerates this file. The file is a plain YAML document, not an envelope and not signed: it is derived, re-creatable state that no machine executes from — a node resolves job names against its own scan (§6), and Central's `delegate` reads the files of its own tenant only as routing hints; registry files of other tenants are never read. It carries `schema: 1`; keys are in ordinal order at every level and lines end with `\n` (the envelope's canonical discipline); optional keys are omitted when absent. `last_seen` and `health` (the §11 verdict, `green | amber | red`) form the liveness group: a commit happens when the rest of the content differs from the file on the bus, or when `last_seen` is older than 6 hours (`discovery.lastSeenHours`); every commit refreshes both. A project's `name` is its folder name lowercased with every run of other characters replaced by one hyphen; two folders of one machine that derive the same name are both left out and logged. Each agent and skill entry carries the `description` front matter of its `.claude/agents/<name>.md` or `.claude/skills/<name>/SKILL.md`, copied verbatim with control characters removed and truncated to 150 characters (`''` when absent), so that `delegate` routes by speciality rather than by name (O24, decided 2026-09-28); `summary` is the first non-empty line of the project's `CLAUDE.md` that is not a heading, list item, quote or fence, treated the same way. With `discovery.detail: names` (the work laptop, §8) a project entry carries only `name` and `default_branch`. No published string matches a secret pattern, and every one of them is data, never instructions, wherever it is rendered later.
+`discover` — the node service at start and every hour (`discovery.intervalMinutes`), and `agentbus discover` on demand — scans every `devRoots` entry to `discovery.depth` levels (default 2), not descending into projects, hidden or excluded folders, or links; a `devRoots` entry inside another is scanned too, with a notice. It looks for folders holding `.claude/` and regenerates this file. The file is a plain YAML document, not an envelope and not signed: it is derived, re-creatable state that no machine executes from — a node resolves job names against its own scan (§6), and Central's `delegate` reads the files of its own tenant only as routing hints; registry files of other tenants are never read. It carries `schema: 1`; keys are in ordinal order at every level and lines end with `\n` (the envelope's canonical discipline); optional keys are omitted when absent. `last_seen` and `health` (the §11 verdict, `green | amber | red`) form the liveness group: a commit happens when the rest of the content differs from the file on the bus, or when `last_seen` is older than 6 hours (`discovery.lastSeenHours`); every commit refreshes both. A project's `name` is its folder name lowercased with every run of other characters replaced by one hyphen; two folders of one machine that derive the same name are both left out and logged. Each agent and skill entry carries the `description` front matter of its `.claude/agents/<name>.md` or `.claude/skills/<name>/SKILL.md`, copied verbatim with control characters removed and truncated to 150 characters (`''` when absent), so that `delegate` routes by speciality rather than by name (O24, decided 2026-09-28); `summary` is the first non-empty line of the project's `CLAUDE.md` that is not a heading, list item, quote or fence, treated the same way. With `discovery.detail: names` (the work laptop, §8) a project entry carries only `name` and `default_branch`. No published string matches a secret pattern, and every one of them is data, never instructions, wherever it is rendered later.

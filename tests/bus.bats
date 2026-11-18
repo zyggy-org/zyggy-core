@@ -200,7 +200,7 @@ skill_body() { # the lines after the closing --- of the front matter
 
 @test "skills: bus documents the job options and the report and status reads" {
   local k="$REPO_ROOT/.claude/skills/bus/SKILL.md" p
-  for p in '--to' '--project' '--agent' '--worktree' '--allowed-tools' '--timeout' '--priority' \
+  for p in '--to' '--project' '--agent' '--worktree' '--branch' '--description' '--allowed-tools' '--timeout' '--priority' \
     'zyggy status --id' 'zyggy report <id>' 'TodoWrite' 'blocked:'; do
     grep -qF -- "$p" "$k" || { echo "bus lacks: $p"; return 1; }
   done
@@ -211,7 +211,7 @@ skill_body() { # the lines after the closing --- of the front matter
   for p in 'devRoots' 'zyggy discover --dry-run' 'duplicate' 'unusable'; do
     grep -qF -- "$p" "$REPO_ROOT/.claude/skills/discover/SKILL.md" || { echo "discover lacks: $p"; return 1; }
   done
-  for p in 'zyggy registry' '(stale)' 'zyggy report <id>'; do
+  for p in 'zyggy registry' '(stale)' 'zyggy report <id>' '--branch' '--description'; do
     grep -qF -- "$p" "$REPO_ROOT/.claude/skills/delegate/SKILL.md" || { echo "delegate lacks: $p"; return 1; }
   done
 }
