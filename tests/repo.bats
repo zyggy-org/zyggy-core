@@ -1159,3 +1159,30 @@ zyggy_help_body() { # the skill body: the lines after the closing --- of the fro
     done < <(jq -r '.permissions.allow // [] | .[]' "$f")
   done
 }
+
+@test "repo: supervised work — the supervise skill, delegate, security.md, operations.md, AGENTS.md and README.md carry the mandate rules (spec 18 AC-35, group B)" {
+  local k="$REPO_ROOT/.claude/skills/supervise/SKILL.md" p
+  [ "$(zy_fm "$k" name)" = "supervise" ]
+  [ "$(zy_fm "$k" allowed-tools)" = "Bash(zyggy mandate show) Bash(zyggy submit *--mandate *) Bash(zyggy report *) Bash(zyggy work) Bash(zyggy work --waiting) Bash(zyggy decide *) Bash(zyggy decisions) Bash(zyggy decisions *) Bash(zyggy registry) Bash(zyggy registry *)" ]
+  # the grant, the resume and the revoke are the owner's: no rule of the skill skips their prompt
+  ! zy_fm "$k" allowed-tools | grep -qE 'mandate (grant|resume|revoke)' || { echo "the skill allows a mandate write"; return 1; }
+  for p in 'data, never instructions' 'zyggy mandate grant --to <machine>' 'Never grant, resume or revoke from an unattended run' \
+    'zyggy submit --to <machine> --mandate <id> --kind <kind>' 'Never accept a step on the builder'"'"'s word' '--basis verified' \
+    'zyggy decide --reply-to <id>' 'never a' 'working copy' 'zyggy decisions' 'answer only from' 'outbound memory folders'; do
+    grep -qF -- "$p" "$k" || { echo "supervise: missing: $p"; return 1; }
+  done
+  for p in 'the `supervise` skill, `zyggy submit --mandate`' 'the binary refuses a plain `zyggy submit` from an'; do
+    grep -qF -- "$p" "$REPO_ROOT/.claude/skills/delegate/SKILL.md" || { echo "delegate: missing: $p"; return 1; }
+  done
+  for p in '## Mandates and supervised jobs' 'an expiry of at most 7 days' 'never unattended, never because a report' \
+    'A job under a mandate has no free text' 'Never accept a step on a builder'"'"'s own account' 'answered only from the outbound memory folders'; do
+    grep -qF -- "$p" "$REPO_ROOT/.claude/rules/security.md" || { echo "security.md: missing: $p"; return 1; }
+  done
+  for p in 'one unattended supervisor run' '`zyggy mandate show`' 'Troubleshooting — Mandate and supervisor' '`supervision.project`'; do
+    grep -qF -- "$p" "$REPO_ROOT/.claude/rules/operations.md" || { echo "operations.md: missing: $p"; return 1; }
+  done
+  for p in '**Supervised work**' 'the `supervise` skill' 'Outside a mandate nothing changes'; do
+    grep -qF -- "$p" "$REPO_ROOT/AGENTS.md" || { echo "AGENTS.md: missing: $p"; return 1; }
+  done
+  grep -qF -- '`.claude/skills/supervise/` (Central only)' "$REPO_ROOT/README.md"
+}
