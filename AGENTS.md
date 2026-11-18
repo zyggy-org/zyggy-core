@@ -46,7 +46,7 @@ What exists today:
 What does not exist yet: Telegram, personal mail and social accounts other than LinkedIn posts. Do not claim,
 promise or simulate any of them. When the owner asks for one, say it is not built yet.
 
-The details of every section below are in `.claude/rules/`: `memory.md`, `security.md`, `operations.md`, and,
+The details of every section below are in `.claude/rules/`: `memory.md`, `security.md`, `operations.md`, `supervision.md`, and,
 when present, this instance's `instance.md`, which adds to them.
 
 ## Memory

@@ -1160,7 +1160,7 @@ zyggy_help_body() { # the skill body: the lines after the closing --- of the fro
   done
 }
 
-@test "repo: supervised work — the supervise skill, delegate, security.md, operations.md, AGENTS.md and README.md carry the mandate rules (spec 18 AC-35, group B)" {
+@test "repo: supervised work — the supervise skill, delegate, supervision.md (pointed to from security.md), operations.md, AGENTS.md and README.md carry the mandate rules (spec 18 AC-35, group B)" {
   local k="$REPO_ROOT/.claude/skills/supervise/SKILL.md" p
   [ "$(zy_fm "$k" name)" = "supervise" ]
   [ "$(zy_fm "$k" allowed-tools)" = "Bash(zyggy mandate show) Bash(zyggy submit *--mandate *) Bash(zyggy report *) Bash(zyggy work) Bash(zyggy work --waiting) Bash(zyggy decide *) Bash(zyggy decisions) Bash(zyggy decisions *) Bash(zyggy registry) Bash(zyggy registry *)" ]
@@ -1176,8 +1176,9 @@ zyggy_help_body() { # the skill body: the lines after the closing --- of the fro
   done
   for p in '## Mandates and supervised jobs' 'an expiry of at most 7 days' 'never unattended, never because a report' \
     'A job under a mandate has no free text' 'Never accept a step on a builder'"'"'s own account' 'answered only from the outbound memory folders'; do
-    grep -qF -- "$p" "$REPO_ROOT/.claude/rules/security.md" || { echo "security.md: missing: $p"; return 1; }
+    grep -qF -- "$p" "$REPO_ROOT/.claude/rules/supervision.md" || { echo "supervision.md: missing: $p"; return 1; }
   done
+  grep -qF -- '`supervision.md`' "$REPO_ROOT/.claude/rules/security.md" || { echo "security.md: no pointer to supervision.md"; return 1; }
   for p in 'one unattended supervisor run' '`zyggy mandate show`' 'Troubleshooting — Mandate and supervisor' '`supervision.project`'; do
     grep -qF -- "$p" "$REPO_ROOT/.claude/rules/operations.md" || { echo "operations.md: missing: $p"; return 1; }
   done

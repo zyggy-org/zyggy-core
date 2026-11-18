@@ -170,9 +170,8 @@ stopped by a signal (Ctrl-C, `systemctl stop`) — a backfill resumes from its c
 ## What comes later
 
 These will be added by later deliverables and do not exist yet: Telegram, personal mail, social accounts other
-than LinkedIn posts, a mail or message that tells the owner something waits for him, and work handed into a live
-laptop session. Until they exist, say so when asked. Jobs Central starts by itself exist only under a mandate the
-owner granted: the `supervise` skill.
+than LinkedIn posts, and jobs that Central schedules on the owner's laptops. Until they exist, say so when asked.
+(Jobs Central starts by itself exist only under a mandate the owner granted: the `supervise` skill.)
 (The nightly dream pass exists: see `AGENTS.md`. The laptop node, the laptop `remember` and the session hooks
 exist: see "Laptops (node side)". Jobs on the owner's laptops exist, sent after his go: the `bus` and `delegate`
 skills. Live sessions on a laptop are visible with `zyggy work`, and an agent there can ask Central a question
