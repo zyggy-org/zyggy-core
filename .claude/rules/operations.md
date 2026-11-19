@@ -159,6 +159,13 @@ stopped by a signal (Ctrl-C, `systemctl stop`) — a backfill resumes from its c
   a decision reads `supervisor could not decide`, or nothing is decided at all, the remedies are in the Zyggy CLI
   document, "Troubleshooting — Mandate and supervisor"; `supervision.project`, `supervision.runsPerHour` and
   `supervision.outboundPaths` in Central's `node.json` are the settings.
+- Five settings of Central's `node.json` — `devRoots`, `discovery.exclude`, `supervision.project`,
+  `supervision.workMachines` and `supervision.outboundPaths` — are changed with `zyggy settings`
+  (the `settings` skill), only in an attended session and only on the owner's words; the running node applies
+  them within a minute. `zyggy settings show` prints them. Exit `2` a value refused (ask for the exact path or name) · `3` not
+  Central or a file the reader refuses · `5` refused in an unattended run; entries "Settings: …" of the Zyggy CLI
+  document. Every other key, and every laptop's `node.json`, stays the owner's to edit; for a laptop you give him
+  the exact line.
 
 ## Headless runs
 

@@ -51,4 +51,4 @@ Exit codes of both forms:
   the owner, try once more later, never in a loop.
 - `3` — configuration (`node.json`, the bus checkout). Tell the owner.
 
-Never edit the registry file or `node.json` yourself; the owner changes `devRoots`.
+Never edit the registry file or `node.json` by hand; on Central the `settings` skill changes `devRoots`.
