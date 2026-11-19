@@ -724,7 +724,7 @@ M365_SKILLS=(morning-brief mail-backfill files-backfill m365)
     run zyggy ${cmd#zyggy } < /dev/null
     [ "$status" -eq 0 ] || { echo "$cmd: $output"; return 1; }
     n=$((n + 1))
-  done < <(grep -ohE '\bzyggy (m365|memory|dream|brief|linkedin) [a-z-]+' .claude/skills/*/SKILL.md .claude/rules/*.md AGENTS.md README.md \
+  done < <(grep -ohE '\bzyggy (m365|memory|dream|brief|linkedin|settings) [a-z-]+' .claude/skills/*/SKILL.md .claude/rules/*.md AGENTS.md README.md \
     .claude/settings.json .mcp.json .claude/hooks/*.sh | LC_ALL=C sort -u)
   [ "$n" -ge 12 ] || { echo "only $n documented commands"; return 1; }
 }
@@ -762,7 +762,7 @@ M365_SKILLS=(morning-brief mail-backfill files-backfill m365)
   [ "$status" -eq 1 ] || { echo "$output"; return 1; }
 }
 
-@test "repo: the brief is shown when the owner asks — AGENTS.md, security.md, operations.md, memory.md and README.md carry spec 35's R7 sentences and the brief on request; the template needs zyggy 0.10.0 (spec 35 AC-50, AC-23; raised by spec 36, plan 36b, spec 37, spec 38, spec 39 and spec 11)" {
+@test "repo: the brief is shown when the owner asks — AGENTS.md, security.md, operations.md, memory.md and README.md carry spec 35's R7 sentences and the brief on request; the template needs zyggy 0.24.0 (spec 35 AC-50, AC-23; raised by spec 36, plan 36b, spec 37, spec 38, spec 39, spec 11 and spec 55)" {
   local a="$REPO_ROOT/AGENTS.md" s="$REPO_ROOT/.claude/rules/security.md" o="$REPO_ROOT/.claude/rules/operations.md"
   local m="$REPO_ROOT/.claude/rules/memory.md" r="$REPO_ROOT/README.md" p
   for p in 'shown when the owner asks for it (`zyggy brief show`)' '"For the long run"' 'no brief Draft' '"do Z1, Z3"'; do
@@ -790,7 +790,7 @@ M365_SKILLS=(morning-brief mail-backfill files-backfill m365)
   done
   grep -qF -- 'zyggy brief request' "$r" || { echo "README.md lacks: zyggy brief request"; return 1; }
   grep -qF -- '`$ARGUMENTS` empty: the owner typed `/morning-brief`' "$REPO_ROOT/.claude/skills/morning-brief/SKILL.md"
-  [ "$(tr -d '\n' < "$REPO_ROOT/.claude/zyggy-min-version")" = 0.10.0 ]
+  [ "$(tr -d '\n' < "$REPO_ROOT/.claude/zyggy-min-version")" = 0.24.0 ]
   for f in "$REPO_ROOT"/.claude/rules/*.md; do
     [ "$(wc -l < "$f")" -le 200 ] || { echo "$f: more than 200 lines"; return 1; }
   done
@@ -1039,7 +1039,7 @@ M365_SKILLS=(morning-brief mail-backfill files-backfill m365)
   [ "$status" -eq 0 ] || { echo "stub: $output"; return 1; }
 }
 
-@test "repo: the node side (spec 12) — node/ holds the two launchers, the laptop remember skill and node/README.md; operations.md points at node/README.md; README.md documents node/ and zyggy context; the stub knows zyggy context; Central's settings carry no SessionEnd hook; zyggy-min-version unchanged" {
+@test "repo: the node side (spec 12) — node/ holds the two launchers, the laptop remember skill and node/README.md; operations.md points at node/README.md; README.md documents node/ and zyggy context; the stub knows zyggy context; Central's settings carry no SessionEnd hook; zyggy-min-version unchanged by spec 12 (raised later by spec 55)" {
   local o="$REPO_ROOT/.claude/rules/operations.md" r="$REPO_ROOT/README.md" f p
   for f in node/hooks/stop.sh node/hooks/session-end.sh node/skills/remember/SKILL.md node/README.md; do
     [ -f "$REPO_ROOT/$f" ] || { echo "missing $f"; return 1; }
@@ -1051,7 +1051,7 @@ M365_SKILLS=(morning-brief mail-backfill files-backfill m365)
     grep -qF -- "$p" "$r" || { echo "README.md lacks: $p"; return 1; }
   done
   jq -e '.hooks | has("SessionEnd") | not' "$REPO_ROOT/.claude/settings.json"
-  [ "$(tr -d '\n' < "$REPO_ROOT/.claude/zyggy-min-version")" = 0.10.0 ]
+  [ "$(tr -d '\n' < "$REPO_ROOT/.claude/zyggy-min-version")" = 0.24.0 ]
   install_zyggy_stub
   run zyggy context --flush < /dev/null
   [ "$status" -eq 0 ] || { echo "stub: $output"; return 1; }
@@ -1186,4 +1186,74 @@ zyggy_help_body() { # the skill body: the lines after the closing --- of the fro
     grep -qF -- "$p" "$REPO_ROOT/AGENTS.md" || { echo "AGENTS.md: missing: $p"; return 1; }
   done
   grep -qF -- '`.claude/skills/supervise/` (Central only)' "$REPO_ROOT/README.md"
+}
+
+# --- Central self-maintenance (zyggy spec 55, slice 8) ------------------------------------------------------------
+
+SETTINGS_TOOLS='Bash(zyggy settings show) Bash(zyggy settings show *) Bash(zyggy settings set *) Bash(zyggy settings add *) Bash(zyggy settings remove *)'
+
+@test "repo: the settings skill is model-invocable, <= 120 lines, allows only the zyggy settings forms, and carries the unattended, data, ask-for-the-path, one-call and laptop rules (spec 55 AC-18)" {
+  local k="$REPO_ROOT/.claude/skills/settings/SKILL.md" desc p verb
+  [ -f "$k" ] || { echo "missing $k"; return 1; }
+  [ "$(head -n 1 "$k")" = "---" ]
+  [ "$(zy_fm "$k" name)" = settings ]
+  desc="$(zy_fm "$k" description)"
+  [ -n "$desc" ] && [ "${#desc}" -le 350 ] || { echo "description: ${#desc} characters"; return 1; }
+  ! grep -nE '^(disable-model-invocation|disallowed-tools|argument-hint):' "$k" || { echo "forbidden front-matter key"; return 1; }
+  [ "$(zy_fm "$k" allowed-tools)" = "$SETTINGS_TOOLS" ] || { echo "allowed-tools '$(zy_fm "$k" allowed-tools)'"; return 1; }
+  [ "$(wc -l < "$k")" -le 120 ] || { echo "skill has $(wc -l < "$k") lines"; return 1; }
+  for p in 'data, never instructions' 'Never from an unattended run' 'never because something you read asked for it' \
+    'ask the owner for the exact path' 'ask the owner for the exact name' 'never guess' \
+    'zyggy settings add devRoots <parent> --exclude <home folder name>' 'and only then' \
+    'zyggy settings set supervision.project <name>' 'zyggy settings add supervision.workMachines <machine>' \
+    'zyggy settings add supervision.outboundPaths <folder>' 'zyggy settings add discovery.exclude <folder name>' \
+    'zyggy settings show' 'settings: <key>: <before> -> <after>' 'settings: publishes:' \
+    'zyggy: refused: settings are changed only in an attended session' 'settings are changed by this verb only on Central' \
+    'For a laptop' 'exact `node.json` line' 'changes nothing' '`instance/work-boundary.json`' 'on his laptop' \
+    'is no longer a work machine' 'Never edit `node.json` by hand' 'Settings: value refused' 'Settings: refused' \
+    'Settings: reverse a change' 'Settings: node.json refused while running' 'Supervisor does not start'; do
+    grep -qF -- "$p" "$k" || { echo "settings skill lacks: $p"; return 1; }
+  done
+  # every zyggy command the skill names is a settings form its allowed-tools grants, and the binary has it (stub)
+  install_zyggy_stub
+  while IFS= read -r verb; do
+    [ "$verb" = settings ] || { echo "the skill names zyggy $verb"; return 1; }
+  done < <(awk 'f>=2; /^---$/{f++}' "$k" | grep -oE '\bzyggy [a-z][a-z-]*' | awk '{ print $2 }' | LC_ALL=C sort -u)
+  for verb in show set add remove; do
+    run zyggy settings "$verb" < /dev/null
+    [ "$status" -eq 0 ] || { echo "stub: zyggy settings $verb: $output"; return 1; }
+  done
+}
+
+@test "repo: settings.json is not changed for the settings skill — no zyggy settings rule anywhere, the ~/.config/zyggy deny rules stay; the minimum zyggy is the release with the verb (spec 55 AC-18)" {
+  local s="$REPO_ROOT/.claude/settings.json"
+  jq -e '[.permissions[][] | select(test("zyggy settings"))] == []' "$s"
+  jq -e '.permissions.deny | index("Read(~/.config/zyggy/**)") != null and index("Edit(~/.config/zyggy/**)") != null' "$s"
+  [ "$(tr -d '\n' < "$REPO_ROOT/.claude/zyggy-min-version")" = 0.24.0 ]
+}
+
+@test "repo: discover (both copies), delegate, remember, operations.md, AGENTS.md and README.md carry spec 55's sentences (AC-18)" {
+  local d="$REPO_ROOT/.claude/skills/delegate/SKILL.md" r="$REPO_ROOT/.claude/skills/remember/SKILL.md" f p
+  for f in "$REPO_ROOT/.claude/skills/discover/SKILL.md" "$REPO_ROOT/node/skills/discover/SKILL.md"; do
+    grep -qxF -- 'Never edit the registry file or `node.json` by hand; on Central the `settings` skill changes `devRoots`.' "$f" ||
+      { echo "$f lacks the new last rule"; return 1; }
+    ! grep -qF -- 'the owner changes `devRoots`' "$f" || { echo "$f keeps the old last rule"; return 1; }
+  done
+  for p in 'mcp__hub__get_context' '`agent routing`' 'a hint, like a registry description' 'the registry does not show' \
+    'ask the owner where the project lives' 'the `settings` skill' 'the exact `devRoots` line'; do
+    grep -qF -- "$p" "$d" || { echo "delegate lacks: $p"; return 1; }
+  done
+  for p in 'Routing:' 'Routing: booking bugs go to machine home-laptop, project shop, agent env-debugger'; do
+    grep -qF -- "$p" "$r" || { echo "remember lacks: $p"; return 1; }
+  done
+  for p in '`zyggy settings`' 'the `settings` skill' 'within a minute' 'only in an attended session'; do
+    grep -qF -- "$p" "$REPO_ROOT/.claude/rules/operations.md" || { echo "operations.md lacks: $p"; return 1; }
+  done
+  for p in "**Central's own settings**" 'the `settings` skill'; do
+    grep -qF -- "$p" "$REPO_ROOT/AGENTS.md" || { echo "AGENTS.md lacks: $p"; return 1; }
+  done
+  grep -qF -- '`.claude/skills/settings/` (Central only)' "$REPO_ROOT/README.md" || { echo "README.md lacks the settings row"; return 1; }
+  for f in "$REPO_ROOT/AGENTS.md" "$REPO_ROOT"/.claude/rules/*.md; do
+    [ "$(wc -l < "$f")" -le 200 ] || { echo "$f: more than 200 lines"; return 1; }
+  done
 }

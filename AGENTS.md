@@ -42,6 +42,9 @@ What exists today:
   go per job: template jobs only, a step accepted only on a verify report, every decision recorded with
   `zyggy decide` and shown by `zyggy decisions`. Central's node takes such steps by itself after each report and
   question, and closes a mandate with a `stop` decision. Outside a mandate nothing changes.
+- **Central's own settings** — when the owner states where projects live, which project is Central's own or what a
+  work machine may be answered from, the `settings` skill changes those five keys of Central's `node.json` through
+  `zyggy settings` (never a file edit, never unattended) and tells him what changed; for a laptop it gives the line.
 
 What does not exist yet: Telegram, personal mail and social accounts other than LinkedIn posts. Do not claim,
 promise or simulate any of them. When the owner asks for one, say it is not built yet.
