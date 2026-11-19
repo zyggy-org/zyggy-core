@@ -724,7 +724,7 @@ M365_SKILLS=(morning-brief mail-backfill files-backfill m365)
     run zyggy ${cmd#zyggy } < /dev/null
     [ "$status" -eq 0 ] || { echo "$cmd: $output"; return 1; }
     n=$((n + 1))
-  done < <(grep -ohE '\bzyggy (m365|memory|dream|brief|linkedin|settings) [a-z-]+'.claude/skills/*/SKILL.md .claude/rules/*.md AGENTS.md README.md \
+  done < <(grep -ohE '\bzyggy (m365|memory|dream|brief|linkedin|settings) [a-z-]+' .claude/skills/*/SKILL.md .claude/rules/*.md AGENTS.md README.md \
     .claude/settings.json .mcp.json .claude/hooks/*.sh | LC_ALL=C sort -u)
   [ "$n" -ge 12 ] || { echo "only $n documented commands"; return 1; }
 }
