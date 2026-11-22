@@ -16,7 +16,8 @@ below (the manual part).
 | `node/skills/archive/SKILL.md` | The laptop `archive` skill: a file the owner hands over and asks to keep goes to Central's project archive through `zyggy archive` (deliverable 41). |
 | `node/skills/bus/SKILL.md` | The `bus` skill: sends a job to one of the owner's machines with `zyggy submit` after the owner's go, and reads its answer with `zyggy report` and `zyggy status` (deliverable 15). The same file as Central's `.claude/skills/bus/`. |
 | `node/skills/discover/SKILL.md` | The `discover` skill: shows (`zyggy discover --dry-run`) or publishes now (`zyggy discover`) the projects this laptop offers for jobs (deliverable 15). The same file as Central's `.claude/skills/discover/`. |
-| `node/skills/work-mail-brief/SKILL.md` | The `work-mail-brief` skill (work laptop only): briefs the work mailbox through `zyggy outlook brief`, keeps reply drafts on the laptop with `zyggy outlook brief-done` (deliverable 58). Not copied by `install.ps1` yet. |
+| `node/skills/work-mail-brief/SKILL.md` | The `work-mail-brief` skill (work laptop only): briefs the work mailbox through `zyggy outlook brief`, keeps reply drafts on the laptop with `zyggy outlook brief-done`, shares filtered work mail content with `zyggy outlook share`, runs as a brief job, and sends or files mail in an attended session only (deliverable 58). Not copied by `install.ps1` yet. |
+| `node/work-mail/settings.json`, `node/work-mail/README.md` | The project settings template for the work-mail folder on the work laptop (deliverable 58, Q24): only `Read` and the `zyggy outlook` read verbs allowed, everything else prompts. Copied by hand to `<work-mail folder>/.claude/settings.json`. |
 
 The launchers hold no logic and never block: every outcome of the binary, a missing binary included, is exit 0
 with its stderr line kept and nothing on stdout (only `work-session-start.sh` keeps the binary's stdout, for a late
@@ -93,6 +94,60 @@ open a new Claude Code session.
   `SessionStart`, `work-turn-end.sh` as a second entry under `Stop`, `work-session-end.sh` as a second entry under
   `SessionEnd`. Each makes one bus write of its own, so each gets `"timeout": 30`. On a binary older than that
   release they print one `unknown command` line and do nothing.
+
+### Manual: the work-mail hooks (work laptop only)
+
+The work mail actions (`zyggy outlook send | move`, deliverable 58 slice 7) refuse every action until two hooks are
+registered on the work laptop: `zyggy outlook send|move` acts only on a call that `zyggy outlook guard` passed. `zyggy setup`
+has no work-machine profile and never writes hooks, so add them by hand, in the work laptop's user-scope settings only —
+never on Central, never on a laptop that is not a work machine:
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      { "matcher": "*", "hooks": [ { "type": "command", "command": "zyggy outlook guard" } ] }
+    ],
+    "Stop": [
+      { "hooks": [ { "type": "command", "command": "zyggy outlook settle" } ] }
+    ]
+  }
+}
+```
+
+Merge them into the `hooks` block above (a second entry under `Stop`). Recommended as well, for defence in depth:
+`"permissions": { "ask": ["Bash(zyggy outlook send:*)", "Bash(zyggy outlook move:*)"] }`.
+
+- The guard runs whatever `ZYGGY_HOOKS` says (as `zyggy m365 guard`): it must not be skipped by a hook wrapper that honours
+  `ZYGGY_HOOKS=off`; in a job it is what writes the `not attended` row. Call the binary directly, never through a launcher.
+- It answers `ask` for a call within policy, so no `permissions.ask` rule is needed, and an `allow` rule cannot skip the
+  prompt.
+- With the `ask` it hands Claude Code the command with ` --nonce <random>` appended (`updatedInput`); only that command, run
+  on Allow, can take the pass (the laptop keeps the nonce's hash only). The same command run by another process takes nothing.
+- The matcher is `*` (every tool), not only `Bash|PowerShell`: each guarded call first settles every pass still pending as
+  `denied`, so after a Deny the nonce shown in the prompt is dead by the session's next call of any tool (a Monitor or other
+  tool that carries a command included). If Claude Code ever ran another call's hook between a prompt and its tool, the send
+  would be refused (fail closed), never sent twice.
+- The action tools read only the node's own `node.json` at the default path (`%LOCALAPPDATA%\zyggy\node.json`): no
+  `--config`, and `ZYGGY_NODE_JSON` is ignored.
+- Its exit 2 (a failure of its own) blocks the call; nothing to configure. `settle` exits 1 on a configuration error (never
+  2, so the session can always stop).
+- On a work machine (`outlook.enabled` `true`; the runner passes `--work-mail`), the node's job hook refuses, in every job, a
+  shell command that names `outlook` followed by `send` or `move`, or names `outlook` with anything that can build a word at
+  run time (a variable, a substitution, an escape such as `$'\x73end'`, a glob, `[char]`, `eval`, `base64`, …), or names
+  `zyggy` with `send`/`move` and such a construct (`outlook action in a job`). On other machines the hook leaves such
+  commands to the job's rules; `zyggy` itself refuses every send and move from any job everywhere.
+- Decision B (owner, 2026-11-22): on a work machine the node refuses at intake (`rejected` / `work_mail_code_mix`) every job
+  whose `allowed_tools` can both read work mail and run code. A mail-reading job holds only `Read`, `Grep`, `Glob` and
+  `Bash(zyggy outlook <read verb> …)` rules (or `Bash(zyggy outlook *)`).
+- **Known limit:** the hook reads the command text only, so a script file or a name built wholly from data is not seen by it.
+  Since decision B no job that reads work mail can write or run such a script on the work laptop, so nothing a job read can
+  be sent or moved by code it wrote. A code-running job that reads no mail could in theory drive Outlook over COM directly,
+  or run `zyggy outlook` through an interpreter, a launcher or a script, clear `ZYGGY_JOB` and forge a pass in the laptop's
+  user-writable state: an accepted risk, as for any code run on that machine. Give jobs on the work laptop pattern rules,
+  never a bare shell rule (which is refused there anyway).
+- The work-mail folder's own project settings are `node/work-mail/settings.json` (`node/work-mail/README.md`); they hold no
+  hooks, so the guard runs once.
 
 ## Live work and questions (zyggy deliverable 18)
 

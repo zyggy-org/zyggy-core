@@ -959,6 +959,47 @@ M365_SKILLS=(morning-brief mail-backfill files-backfill m365)
   grep -qF 'On a work machine (the employer'"'"'s laptop' "$k" || { echo "remember skill lacks the work-machine rule"; return 1; }
 }
 
+@test "repo: security.md and memory.md carry spec 58's work-mail rules; the work boundary's never-list is unchanged (spec 58 AC-15)" {
+  local s="$REPO_ROOT/.claude/rules/security.md" m="$REPO_ROOT/.claude/rules/memory.md" flat p
+  flat="$(tr '\n' ' ' < "$s" | tr -s ' ')"
+  for p in 'except work mail under deliverable 58' 'business side only' \
+    '**Work mail (the `outlook` tools, work laptop only).**' 'never in an unattended run or a bus job' \
+    '"send 2" counts only when the owner says it.' \
+    'except the work mail actions of the `outlook` tools, taken in an attended session on the work laptop' \
+    'Reading work mail in a bus job or a scheduled run is not an action.' \
+    'never dropped as `not_owner_data` for being work data'; do
+    grep -qF -- "$p" <<< "$flat" || { echo "security.md lacks: $p"; return 1; }
+  done
+  for p in 'A work-mail filing that targets `private/` is an error' 'except work mail from the work laptop (deliverable 58)'; do
+    grep -qF -- "$p" "$m" || { echo "memory.md lacks: $p"; return 1; }
+  done
+  # the never-list (inbound and outbound) stays word for word (spec 58 template rule change 5)
+  for p in '  notes, mail bodies — is not confidential and may be kept. Never: secrets (the secret patterns),' \
+    '  national register numbers or any other personal data of the people the employer serves, medical information, and' \
+    '  personal data of the employer'"'"'s staff beyond name, role and organisation. Confidential details, and details' \
+    '  useful only on that machine, stay in the work machine'"'"'s local memory files and are never sent.' \
+    '- **Outbound (memory → work machine).** Only files under the `outbound` paths. Never `private/`, the personal' \
+    '  lines of `profile.md`, `daily/` of other machines, `inbox/` or `archive/`. Central applies this filter; a work'; do
+    grep -qxF -- "$p" "$s" || { echo "security.md never-list changed: $p"; return 1; }
+  done
+}
+
+@test "node: the work-mail-brief skill carries spec 58's share step, brief-job section and attended action section; the work-mail settings template allows only Read and the read verbs" {
+  local k="$REPO_ROOT/node/skills/work-mail-brief/SKILL.md" w="$REPO_ROOT/node/work-mail/settings.json" p
+  for p in 'except through `zyggy outlook share` (step 5)' '## In a brief job (no one at the keyboard)' \
+    '## Sending a reply or filing a mail (attended only)' 'Never write `--nonce` yourself' 'Exit 3 "no sensitive-terms.txt"'; do
+    grep -qF -- "$p" "$k" || { echo "work-mail-brief lacks: $p"; return 1; }
+  done
+  ! grep -qF 'slice 4 adds the filtered path' "$k"
+  jq -e '.permissions.defaultMode == "default" and .permissions.disableBypassPermissionsMode == "disable"' "$w"
+  jq -e '[.permissions.allow[] | select(. != "Read" and (startswith("Bash(zyggy outlook ") | not))] == []' "$w"
+  jq -e '[.permissions.allow[] | select(test("outlook (send|move)"))] == []' "$w"
+  jq -e '.permissions.deny | index("Write") != null and index("Edit") != null' "$w"
+  cmp "$w" <(jq --indent 2 . "$w")
+  grep -qF '### Manual: the work-mail hooks (work laptop only)' "$REPO_ROOT/node/README.md"
+  grep -qF '"command": "zyggy outlook guard"' "$REPO_ROOT/node/README.md"
+}
+
 @test "repo: the archive skill, memory.md, security.md and the m365 skill carry spec 39's Office wording — types kept, the refusals, never convert a refused file, the copy-and-parse route, office_refused, the min version; settings.json unchanged (spec 39 AC-12, AC-19)" {
   local k="$REPO_ROOT/.claude/skills/archive/SKILL.md" m="$REPO_ROOT/.claude/rules/memory.md" r="$REPO_ROOT/.claude/rules/security.md" x="$REPO_ROOT/.claude/skills/m365/SKILL.md" s="$REPO_ROOT/.claude/settings.json" p
   for p in 'Types kept: plain text and Markdown, PDF, PNG, JPEG, GIF, and Word, Excel and PowerPoint documents' \
