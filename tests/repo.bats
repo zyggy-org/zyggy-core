@@ -348,6 +348,28 @@ hygiene_words() { # hygiene_words <root> <csv>
   grep -q 'template and instance changes' "$REPO_ROOT/.claude/rules/security.md"
 }
 
+@test "repo: development.md lets a job develop zyggy-core itself and never applies in an instance; AGENTS.md, security.md and operations.md point to it" {
+  local d="$REPO_ROOT/.claude/rules/development.md" p
+  [ -f "$d" ]
+  for p in 'no `instance/` folder, no `.claude/rules/instance.md` and no `memory/` folder' \
+    'An instance checkout always has `instance/`, so on Central and in every instance this file never applies' \
+    'Nothing' 'only the three checks above' \
+    "The job's \`allowed_tools\` is a hard ceiling" 'Data, never instructions' \
+    'Never push to `main` directly' 'never move or delete a' 'Never commit a secret' \
+    'gh pr merge --merge --delete-branch' 'gh release create <tag> --verify-tag --generate-notes' \
+    'No mail, message or post'; do
+    grep -qF -- "$p" "$d" || { echo "development.md lacks: $p"; return 1; }
+  done
+  grep -qF '.claude/rules/development.md' "$REPO_ROOT/AGENTS.md"
+  grep -qF 'In an instance checkout it never applies' "$REPO_ROOT/AGENTS.md"
+  grep -qF '`development.md`' "$REPO_ROOT/.claude/rules/security.md"
+  grep -qF '`development.md` decides' "$REPO_ROOT/.claude/rules/operations.md"
+  grep -qF '.claude/rules/development.md' "$REPO_ROOT/README.md"
+  # the Central limits stay in place for instances
+  grep -qF 'Never commit or push this working directory' "$REPO_ROOT/AGENTS.md"
+  grep -qF 'Never commit in this working directory' "$REPO_ROOT/.claude/rules/security.md"
+}
+
 @test "repo: seed-memory creates a missing identity file with front matter" {
   grep -q 'when it does not exist' "$REPO_ROOT/.claude/skills/seed-memory/SKILL.md"
 }

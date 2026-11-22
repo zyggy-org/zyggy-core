@@ -10,7 +10,7 @@ instance's Claude Code sessions** (remote control or `claude -p` are started the
 | Path | What it is |
 |------|-----------|
 | `AGENTS.md` | The assistant's identity and rules (≤ 200 lines); the only instruction file |
-| `.claude/rules/memory.md`, `security.md`, `operations.md`, `supervision.md` | The detailed rules `AGENTS.md` summarises |
+| `.claude/rules/memory.md`, `security.md`, `operations.md`, `supervision.md`, `development.md` | The detailed rules `AGENTS.md` summarises; `development.md` applies only in a development checkout of this repository |
 | `.claude/settings.json` | Hook wiring (`SessionStart` × 3, `Stop`), `enabledPlugins` (project scope) and `env` for the browser plugin (headless, Chromium, in-memory profile), `permissions.allow` (`Bash(zyggy dream request)` and `Bash(zyggy dream status:*)` for the `dream` skill, `Bash(zyggy memory remember *)` for the `remember` skill, `Bash(zyggy memory archive add *)` and `Bash(zyggy memory archive list *)` for the `archive` skill — `remove` stays under the permission classifier) and `mcp__hub__get_context` for the Hub (its `remember` tool is left to the permission mode), `permissions.ask` (the three `m365` action tools of `tools/actions.txt`: each call is a permission prompt), `permissions.deny` (the credential, clone-cache and state-directory path rules, the seven `Bash(zyggy m365 <verb>*)` rules for `auth-header`, `token-test`, `cert-init`, `mcp-server`, `brief`, `mail-backfill`, `files-backfill`, and one `mcp__m365__<name>` rule per line of `tools/excluded.txt`), the `PreToolUse`/`PostToolUse` wiring of the `m365-guard.sh` and `m365-log.sh` launchers (no `PermissionRequest` hook); stored as `jq --indent 2` writes it, so Claude Code's own rewrites leave the tree clean |
 | `.claude/hooks/session-start.sh` | A thin launcher: `exec zyggy memory digest <identity|index|daily>` (the `zyggy` binary, deliverable 28); one stderr line and exit 0 when `zyggy` is missing |
 | `.claude/hooks/stop.sh` | Appends one `[observed]` line per turn to `daily/<date>.md` |
@@ -54,6 +54,10 @@ its item list `brief-<date>.json`, `last-shown`, `ideas.jsonl`, the ideas run's 
 
 ## Rules for this repository
 
+- Work on this repository itself — by the owner or by a Zyggy job — follows `.claude/rules/development.md`: in a
+  development checkout (origin `zyggy-core`, no `instance/`, no `memory/`, no `.claude/rules/instance.md`) the
+  session may edit every template file, commit, push branches, open and merge pull requests and release; the
+  Central limits of `AGENTS.md` describe the product and bind only instances. A test holds that condition.
 - No tenant, user or machine path in **any** template file: the principal comes from env
   (`ZYGGY_MEMORY_ROOT`, `ZYGGY_TENANT`, `ZYGGY_USER`, `ZYGGY_TIMEZONE`), machine facts live in the instance.
   The hygiene tests in `tests/repo.bats` enforce it.

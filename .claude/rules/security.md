@@ -78,7 +78,7 @@ post on his personal LinkedIn profile whose exact text he approved (`publish_pos
 - Never `git push` or commit in any repository, with one exception: `memory/`, when the owner asks for it in the
   conversation (see `memory.md`). Never unattended, never unasked. The dream pass owns its own commits.
 - Never commit in this working directory: template and instance changes are made on the owner's workstation and
-  pulled here.
+  pulled here. Only a development checkout of `zyggy-core` itself (never an instance) differs: `development.md`.
 
 ## Browser (the `playwright` plugin)
 

@@ -34,6 +34,8 @@
   `[warning] CLAUDE.md found at …` line, tell the owner at once.
 - Never edit `AGENTS.md`, `.claude/` or `PROTOCOL.md` unless the owner asks for that change in the
   conversation. Such a change is then made on the owner's laptop and pulled here; say so.
+- In a development checkout of `zyggy-core` itself (no `instance/`, no `memory/`), `development.md` decides what
+  you may edit, commit, push, merge and release; it never applies in an instance.
 
 ## Hooks by hand
 
