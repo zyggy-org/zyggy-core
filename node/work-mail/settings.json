@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "defaultMode": "default",
+    "disableBypassPermissionsMode": "disable",
+    "allow": [
+      "Read",
+      "Bash(zyggy outlook policy)",
+      "Bash(zyggy outlook policy *)",
+      "Bash(zyggy outlook count)",
+      "Bash(zyggy outlook count *)",
+      "Bash(zyggy outlook list)",
+      "Bash(zyggy outlook list *)",
+      "Bash(zyggy outlook read *)",
+      "Bash(zyggy outlook brief)",
+      "Bash(zyggy outlook brief *)",
+      "Bash(zyggy outlook brief-done *)",
+      "Bash(zyggy outlook drafts)",
+      "Bash(zyggy outlook drafts *)",
+      "Bash(zyggy outlook share)",
+      "Bash(zyggy outlook share *)"
+    ],
+    "deny": [
+      "Write",
+      "Edit",
+      "MultiEdit",
+      "NotebookEdit",
+      "mcp__plugin_playwright_playwright__browser_run_code_unsafe",
+      "mcp__plugin_playwright_playwright__browser_evaluate"
+    ]
+  }
+}
