@@ -16,6 +16,7 @@ below (the manual part).
 | `node/skills/archive/SKILL.md` | The laptop `archive` skill: a file the owner hands over and asks to keep goes to Central's project archive through `zyggy archive` (deliverable 41). |
 | `node/skills/bus/SKILL.md` | The `bus` skill: sends a job to one of the owner's machines with `zyggy submit` after the owner's go, and reads its answer with `zyggy report` and `zyggy status` (deliverable 15). The same file as Central's `.claude/skills/bus/`. |
 | `node/skills/discover/SKILL.md` | The `discover` skill: shows (`zyggy discover --dry-run`) or publishes now (`zyggy discover`) the projects this laptop offers for jobs (deliverable 15). The same file as Central's `.claude/skills/discover/`. |
+| `node/skills/work-mail-brief/SKILL.md` | The `work-mail-brief` skill (work laptop only): briefs the work mailbox through `zyggy outlook brief`, keeps reply drafts on the laptop with `zyggy outlook brief-done` (deliverable 58). Not copied by `install.ps1` yet. |
 
 The launchers hold no logic and never block: every outcome of the binary, a missing binary included, is exit 0
 with its stderr line kept and nothing on stdout (only `work-session-start.sh` keeps the binary's stdout, for a late
