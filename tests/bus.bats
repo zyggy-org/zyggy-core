@@ -142,8 +142,8 @@ skill_body() { # the lines after the closing --- of the front matter
 @test "skills: bus, delegate and discover exist with the contracted front matter, <= 120 lines" {
   local name k desc
   declare -A tools=(
-    [bus]='Bash(zyggy submit *) Bash(zyggy status) Bash(zyggy status *) Bash(zyggy report *) Bash(zyggy work) Bash(zyggy ask *) Bash(zyggy decide *) Bash(zyggy decisions) Bash(zyggy decisions *)'
-    [delegate]='Bash(zyggy registry) Bash(zyggy registry *) Bash(zyggy submit *) Bash(zyggy report *)'
+    [bus]='Bash(zyggy submit *) Bash(zyggy status) Bash(zyggy status *) Bash(zyggy report *) Bash(zyggy work) Bash(zyggy ask *) Bash(zyggy decide *) Bash(zyggy decisions) Bash(zyggy decisions *) Bash(zyggy models)'
+    [delegate]='Bash(zyggy registry) Bash(zyggy registry *) Bash(zyggy submit *) Bash(zyggy report *) Bash(zyggy models)'
     [discover]='Bash(zyggy discover) Bash(zyggy discover *)'
   )
   for name in bus delegate discover; do
@@ -203,6 +203,45 @@ skill_body() { # the lines after the closing --- of the front matter
   for p in '--to' '--project' '--agent' '--worktree' '--allowed-tools' '--timeout' '--priority' \
     'zyggy status --id' 'zyggy report <id>' 'TodoWrite' 'blocked:'; do
     grep -qF -- "$p" "$k" || { echo "bus lacks: $p"; return 1; }
+  done
+}
+
+# --- zyggy deliverable 50 AC-12: a model per job type -----------------------------------------------------------
+
+@test "skills: bus and delegate pick a job type, show its model from zyggy models, allow a --model override, submit with --type" {
+  local name k p
+  for name in bus delegate; do
+    k="$REPO_ROOT/.claude/skills/$name/SKILL.md"
+    for p in 'zyggy models' 'job type' '--type <type>' '--model <id>' 'for this one job' 'allowed id' \
+      'without a type runs as today' 'full id' 'never an alias' 'claude-opus-5-5'; do
+      grep -qF -- "$p" "$k" || { echo "$name lacks: $p"; return 1; }
+    done
+    grep -qF -- '[--type <type> | --model <id>]' "$k" ||
+      { echo "$name: the submit command lacks [--type <type> | --model <id>]"; return 1; }
+  done
+}
+
+@test "skills: bus and delegate name models by full id only, never by an alias" {
+  local name k hits
+  for name in bus delegate; do
+    k="$REPO_ROOT/.claude/skills/$name/SKILL.md"
+    hits="$(skill_body "$k" | grep -noiE '(^|[^-[:alnum:]])(opus|sonnet|haiku|fable)([^-[:alnum:]]|$)' || true)"
+    [ -z "$hits" ] || { echo "$name names a model alias: $hits"; return 1; }
+    ! skill_body "$k" | grep -nE 'claude-[a-z]+-[0-9]+(-[0-9]+)?\[' || { echo "$name: an id with a suffix"; return 1; }
+  done
+}
+
+@test "skills: zyggy models is known to the stub, so a skill may run it" {
+  install_zyggy_stub
+  run zyggy models < /dev/null
+  [ "$status" -eq 0 ] || { echo "$output"; return 1; }
+}
+
+@test "protocol: the preamble describes the envelope fields model and job_type and the report token fields, above the marker" {
+  local pre p
+  pre="$(sed '/^<!-- verbatim from here/q' "$REPO_ROOT/PROTOCOL.md")"
+  for p in '`model`' '`job_type`' '`max_turns`' '`cache_write_tokens`' '`cache_read_tokens`' 'not yet in a tag'; do
+    grep -qF -- "$p" <<< "$pre" || { echo "PROTOCOL.md preamble lacks: $p"; return 1; }
   done
 }
 

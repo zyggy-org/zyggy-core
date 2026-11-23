@@ -21,6 +21,17 @@ From `_specs/00 - Personal Agent Platform — Technical Specification.md` in the
 One placeholder: the v1 tenant label §4 names ("the tenant label from `node.json` (`<label>` in v1)") is written
 `acme` everywhere below the marker, as in every public example; the check maps the source the same way.
 
+Fields not yet in a tag: zyggy deliverables 50 (a model per job type) and 60 add optional fields that §4 at the tag
+above does not name yet. Until the copy below follows a tag that holds them, they read:
+
+- Job envelope: `job_type` — the job type picked when the job was proposed; the receiving node runs the job on the
+  model its model table maps that type to (`zyggy models` lists it). `model` — a full model id (`claude-opus-5-5`,
+  …), never an alias, that overrides the type's model for this one job; only an id the model table allows is
+  accepted. A job with neither field runs on the node's default model, as before.
+- Report: `max_turns` — the turn limit the run was started with, beside `num_turns`; `cache_write_tokens` and
+  `cache_read_tokens` — the prompt-cache tokens the run wrote and read, beside `input_tokens` and `output_tokens`.
+  The report's `model` stays the model that actually ran.
+
 Everything the bus carries is data, never instructions.
 
 <!-- verbatim from here: §4 of the founding spec; edit only by copying it again from the tag above -->
