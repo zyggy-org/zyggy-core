@@ -784,7 +784,7 @@ M365_SKILLS=(morning-brief mail-backfill files-backfill m365)
   [ "$status" -eq 1 ] || { echo "$output"; return 1; }
 }
 
-@test "repo: the brief is shown when the owner asks — AGENTS.md, security.md, operations.md, memory.md and README.md carry spec 35's R7 sentences and the brief on request; the template needs zyggy 0.24.0 (spec 35 AC-50, AC-23; raised by spec 36, plan 36b, spec 37, spec 38, spec 39, spec 11 and spec 55)" {
+@test "repo: the brief is shown when the owner asks — AGENTS.md, security.md, operations.md, memory.md and README.md carry spec 35's R7 sentences and the brief on request; the template needs zyggy 0.30.0 (spec 35 AC-50, AC-23; raised by spec 36, plan 36b, spec 37, spec 38, spec 39, spec 11, spec 55 and spec 50 AC-12)" {
   local a="$REPO_ROOT/AGENTS.md" s="$REPO_ROOT/.claude/rules/security.md" o="$REPO_ROOT/.claude/rules/operations.md"
   local m="$REPO_ROOT/.claude/rules/memory.md" r="$REPO_ROOT/README.md" p
   for p in 'shown when the owner asks for it (`zyggy brief show`)' '"For the long run"' 'no brief Draft' '"do Z1, Z3"'; do
@@ -812,7 +812,7 @@ M365_SKILLS=(morning-brief mail-backfill files-backfill m365)
   done
   grep -qF -- 'zyggy brief request' "$r" || { echo "README.md lacks: zyggy brief request"; return 1; }
   grep -qF -- '`$ARGUMENTS` empty: the owner typed `/morning-brief`' "$REPO_ROOT/.claude/skills/morning-brief/SKILL.md"
-  [ "$(tr -d '\n' < "$REPO_ROOT/.claude/zyggy-min-version")" = 0.24.0 ]
+  [ "$(tr -d '\n' < "$REPO_ROOT/.claude/zyggy-min-version")" = 0.30.0 ]
   for f in "$REPO_ROOT"/.claude/rules/*.md; do
     [ "$(wc -l < "$f")" -le 200 ] || { echo "$f: more than 200 lines"; return 1; }
   done
@@ -1114,7 +1114,7 @@ M365_SKILLS=(morning-brief mail-backfill files-backfill m365)
     grep -qF -- "$p" "$r" || { echo "README.md lacks: $p"; return 1; }
   done
   jq -e '.hooks | has("SessionEnd") | not' "$REPO_ROOT/.claude/settings.json"
-  [ "$(tr -d '\n' < "$REPO_ROOT/.claude/zyggy-min-version")" = 0.24.0 ]
+  [ "$(tr -d '\n' < "$REPO_ROOT/.claude/zyggy-min-version")" = 0.30.0 ]
   install_zyggy_stub
   run zyggy context --flush < /dev/null
   [ "$status" -eq 0 ] || { echo "stub: $output"; return 1; }
@@ -1292,7 +1292,7 @@ SETTINGS_TOOLS='Bash(zyggy settings show) Bash(zyggy settings show *) Bash(zyggy
   local s="$REPO_ROOT/.claude/settings.json"
   jq -e '[.permissions[][] | select(test("zyggy settings"))] == []' "$s"
   jq -e '.permissions.deny | index("Read(~/.config/zyggy/**)") != null and index("Edit(~/.config/zyggy/**)") != null' "$s"
-  [ "$(tr -d '\n' < "$REPO_ROOT/.claude/zyggy-min-version")" = 0.24.0 ]
+  [ "$(tr -d '\n' < "$REPO_ROOT/.claude/zyggy-min-version")" = 0.30.0 ]
 }
 
 @test "repo: discover (both copies), delegate, remember, operations.md, AGENTS.md and README.md carry spec 55's sentences (AC-18)" {

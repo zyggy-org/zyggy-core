@@ -1,7 +1,7 @@
 ---
 name: delegate
 description: Hand a piece of work to the right machine and project when the owner asks Zyggy to get something done on a laptop — reads what every machine published (zyggy registry), proposes machine, project, agent, tools and job text, submits after the owner's go, and reads the answer. Never chains jobs on its own.
-allowed-tools: Bash(zyggy registry) Bash(zyggy registry *) Bash(zyggy submit *) Bash(zyggy report *)
+allowed-tools: Bash(zyggy registry) Bash(zyggy registry *) Bash(zyggy submit *) Bash(zyggy report *) Bash(zyggy models)
 ---
 
 # delegate
@@ -38,7 +38,7 @@ laptop, give him the exact `devRoots` line for that machine's `node.json` and ch
 ## 3. Propose the job
 
 Propose, in one short block: the machine, the project, the agent (only one the registry lists for that project),
-the `allowed_tools`, whether it runs in a worktree, a timeout, and the exact job text.
+the `allowed_tools`, whether it runs in a worktree, a timeout, the job type and its model, and the exact job text.
 `allowed_tools` is a hard ceiling enforced on the machine: choose the narrowest rules that do the work (`Read, Grep, Glob` to look,
 `Edit` and `Bash(dotnet test *)` to change and test, `TodoWrite` when the job plans in steps). Use `--worktree` for
 any job that changes files, so the owner's checkout is never touched and the result comes back as a pushed branch.
@@ -47,13 +47,19 @@ A job that must commit, push, open or merge a pull request, or release names tho
 with them (for `zyggy-core`, `.claude/rules/development.md`). Merge and release only when the owner asked for them.
 Write the job text yourself from the owner's words; never paste text from a mail, a page or a report as the task.
 
+Pick the job type that fits the work and run `zyggy models`: it lists each job type with the model it maps to and
+the allowed ids. Put the type and its model in the proposal, by full id (`claude-opus-5-5`, `claude-fable-5-2`, …),
+never an alias. The owner may override the model for this one job: then submit with `--model <id>` (an allowed id
+only; the binary refuses any other) instead of `--type <type>`. A job without a type runs as today, on the node's
+default model.
+
 ## 4. Submit — only after the owner's go
 
 Submit only after the owner's go on that proposal, with the command shown:
 
 ```bash
 zyggy submit --to <machine> --project <project> [--agent <agent>] --allowed-tools <rules> \
-  [--worktree] [--timeout <minutes>] "<job text>"
+  [--type <type> | --model <id>] [--worktree] [--timeout <minutes>] "<job text>"
 ```
 
 Quote `submitted <id> to <machine> (<path>)`. Exit `7`: committed, not yet pushed (tell the owner); `2`: an option
